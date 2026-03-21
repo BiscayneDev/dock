@@ -24,7 +24,23 @@ const TRIGGER_OPTIONS: Array<{ type: TriggerType; icon: string; label: string; d
   { type: 'manual', icon: '▶️', label: 'Manual', desc: 'Run only when you explicitly trigger it' },
 ]
 
-const STEPS = ['Trigger Type', 'Configure', 'Instructions', 'Name & Settings', 'Test', 'Save']
+const STEPS = ['Trigger', 'Configure', 'Instructions', 'Details', 'Test', 'Save']
+
+function buildCronPreview(config: Record<string, unknown>): string {
+  const time = (config.time as string) ?? '09:00'
+  const days = (config.days as number[]) ?? [1, 2, 3, 4, 5]
+  const dayNames = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  const [h, m] = time.split(':').map(Number)
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h
+
+  if (days.length === 7) return `Every day at ${displayHour}:${m.toString().padStart(2, '0')} ${ampm}`
+  if (days.length === 5 && !days.includes(6) && !days.includes(7)) {
+    return `Every weekday at ${displayHour}:${m.toString().padStart(2, '0')} ${ampm}`
+  }
+  const dayLabels = days.sort().map((d) => dayNames[d]).join(', ')
+  return `Every ${dayLabels} at ${displayHour}:${m.toString().padStart(2, '0')} ${ampm}`
+}
 
 export default function NewRecipePage() {
   const router = useRouter()
@@ -161,40 +177,56 @@ export default function NewRecipePage() {
         <h1 className="text-2xl font-bold text-zinc-100 mb-2">New Recipe</h1>
 
         {/* Step indicator */}
-        <div className="flex gap-1 mb-8">
+        <div className="flex items-center gap-2 mb-8">
           {STEPS.map((label, i) => (
-            <div key={label} className="flex-1">
-              <div
-                className={`h-1 rounded-full ${i <= step ? 'bg-cyan-500' : 'bg-zinc-800'}`}
-              />
-              <p className={`mt-1 text-xs ${i === step ? 'text-cyan-400' : 'text-zinc-600'}`}>
-                {label}
-              </p>
+            <div key={label} className="flex items-center gap-2 flex-1">
+              <div className="flex items-center gap-2 flex-1">
+                <div
+                  className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 ${
+                    i < step
+                      ? 'bg-cyan-600 text-white'
+                      : i === step
+                        ? 'bg-cyan-600/20 text-cyan-400 ring-2 ring-cyan-500'
+                        : 'bg-zinc-800 text-zinc-500'
+                  }`}
+                >
+                  {i < step ? '✓' : i + 1}
+                </div>
+                <span className={`text-xs hidden sm:block ${i === step ? 'text-cyan-400' : 'text-zinc-500'}`}>
+                  {label}
+                </span>
+              </div>
+              {i < STEPS.length - 1 && (
+                <div className={`h-px flex-1 ${i < step ? 'bg-cyan-600' : 'bg-zinc-800'}`} />
+              )}
             </div>
           ))}
         </div>
 
         {/* Step 0: Trigger type */}
         {step === 0 && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {TRIGGER_OPTIONS.map((opt) => (
-              <button
-                key={opt.type}
-                onClick={() => {
-                  updateForm({ triggerType: opt.type, triggerConfig: {} })
-                  setStep(1)
-                }}
-                className={`rounded-lg border p-4 text-left transition-colors ${
-                  form.triggerType === opt.type
-                    ? 'border-cyan-500 bg-cyan-950/30'
-                    : 'border-zinc-800 bg-zinc-900/50 hover:border-zinc-600'
-                }`}
-              >
-                <span className="text-2xl">{opt.icon}</span>
-                <h3 className="mt-1 font-medium text-zinc-100">{opt.label}</h3>
-                <p className="text-sm text-zinc-400">{opt.desc}</p>
-              </button>
-            ))}
+          <div>
+            <h2 className="text-lg font-semibold text-zinc-200 mb-4">What should trigger this recipe?</h2>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {TRIGGER_OPTIONS.map((opt) => (
+                <button
+                  key={opt.type}
+                  onClick={() => {
+                    updateForm({ triggerType: opt.type, triggerConfig: {} })
+                    setStep(1)
+                  }}
+                  className={`rounded-2xl border p-5 text-left transition-all hover:shadow-lg hover:shadow-black/20 ${
+                    form.triggerType === opt.type
+                      ? 'border-cyan-500 bg-cyan-950/30 shadow-lg shadow-cyan-900/20'
+                      : 'border-zinc-800 bg-zinc-900/50 hover:border-zinc-600'
+                  }`}
+                >
+                  <span className="text-3xl">{opt.icon}</span>
+                  <h3 className="mt-2 font-semibold text-zinc-100">{opt.label}</h3>
+                  <p className="mt-1 text-sm text-zinc-400">{opt.desc}</p>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -204,18 +236,18 @@ export default function NewRecipePage() {
             <h2 className="text-lg font-semibold text-zinc-200">Configure Trigger</h2>
 
             {form.triggerType === 'schedule' && (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div>
                   <label className="block text-sm text-zinc-400 mb-1">Time</label>
                   <input
                     type="time"
                     value={(form.triggerConfig.time as string) ?? '09:00'}
                     onChange={(e) => updateConfig('time', e.target.value)}
-                    className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-100"
+                    className="rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-1">Days</label>
+                  <label className="block text-sm text-zinc-400 mb-2">Days</label>
                   <div className="flex gap-2 flex-wrap">
                     {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => {
                       const days = (form.triggerConfig.days as number[]) ?? [1, 2, 3, 4, 5]
@@ -230,10 +262,10 @@ export default function NewRecipePage() {
                               : [...days, dayNum]
                             updateConfig('days', newDays)
                           }}
-                          className={`rounded-md px-3 py-1 text-sm ${
+                          className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
                             active
                               ? 'bg-cyan-600 text-white'
-                              : 'bg-zinc-800 text-zinc-400'
+                              : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
                           }`}
                         >
                           {day}
@@ -241,6 +273,13 @@ export default function NewRecipePage() {
                       )
                     })}
                   </div>
+                </div>
+                {/* Live preview */}
+                <div className="rounded-xl bg-zinc-800/50 border border-zinc-700 px-4 py-3">
+                  <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Preview</p>
+                  <p className="text-sm text-cyan-400">
+                    {buildCronPreview(form.triggerConfig)}
+                  </p>
                 </div>
               </div>
             )}
@@ -378,6 +417,19 @@ export default function NewRecipePage() {
                   />
                   <span className="text-sm text-zinc-300">Case sensitive</span>
                 </label>
+                {/* Live preview */}
+                {(form.triggerConfig.phrase as string) && (
+                  <div className="rounded-xl bg-zinc-800/50 border border-zinc-700 px-4 py-3">
+                    <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Preview</p>
+                    <p className="text-sm text-cyan-400">
+                      Fires when your message {
+                        (form.triggerConfig.match_type ?? 'contains') === 'exact' ? 'exactly matches' :
+                        (form.triggerConfig.match_type ?? 'contains') === 'starts_with' ? 'starts with' :
+                        'contains'
+                      } &quot;{form.triggerConfig.phrase as string}&quot;
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
