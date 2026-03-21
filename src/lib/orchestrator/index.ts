@@ -48,9 +48,11 @@ async function handleMessage(message: TelegramMessage): Promise<void> {
     await handleMessageInner(chatId, telegramId, text, message)
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err)
+    const errorStack = err instanceof Error ? err.stack?.slice(0, 300) : ''
     logger.error('handleMessage failed', { chatId, error: errorMsg })
     try {
-      await sendMessage({ chatId, text: 'something went wrong. try again in a sec.' })
+      // Temporarily include error detail so we can debug
+      await sendMessage({ chatId, text: `something went wrong: ${errorMsg}\n\n${errorStack}` })
     } catch {
       // Can't send error message
     }

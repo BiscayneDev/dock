@@ -50,7 +50,7 @@ export default function LandingPage() {
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem 1.5rem', maxWidth: '56rem', margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 20h16M12 20v-8M7 8c2 0 5-3 5-3s3 3 5 3M12 5v3" />
+              <path d="M5 21h14M12 21v-12M8 6c1.5 0 4-3 4-3s2.5 3 4 3" />
             </svg>
             <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: '1.15rem', letterSpacing: '-0.02em' }}>Dock</span>
           </div>

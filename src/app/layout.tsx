@@ -16,6 +16,7 @@ export const metadata: Metadata = {
   title: "Harbor — Dock",
   description: "Your AI first mate, always on deck. Manage email, calendar, code, and notes through Telegram.",
   viewport: "width=device-width, initial-scale=1, viewport-fit=cover",
+  icons: { icon: "/logo.png", apple: "/logo.png" },
 }
 
 export default function RootLayout({
