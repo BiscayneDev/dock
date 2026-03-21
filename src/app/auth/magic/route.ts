@@ -38,5 +38,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   await setSession(user.id as string, user.telegram_id as number)
 
-  return NextResponse.redirect(`${appUrl}/harbor`)
+  // Check if user has any connected integrations
+  const { count: integrationCount } = await supabase
+    .from('oauth_tokens')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+
+  // First-time users go to onboarding to connect accounts
+  // Returning users with integrations go to Harbor
+  if ((integrationCount ?? 0) > 0) {
+    return NextResponse.redirect(`${appUrl}/harbor`)
+  }
+
+  return NextResponse.redirect(`${appUrl}/onboarding`)
 }

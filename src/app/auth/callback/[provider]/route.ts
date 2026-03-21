@@ -70,11 +70,11 @@ export async function GET(
         return NextResponse.redirect(`${appUrl}/dashboard?error=unknown_provider`)
     }
 
-    return NextResponse.redirect(`${appUrl}/dashboard?connected=${provider}`)
+    return NextResponse.redirect(`${appUrl}/onboarding?connected=${provider}`)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     const { logger } = await import('@/lib/logger')
     logger.error(`OAuth callback error for ${provider}`, { error: message })
-    return NextResponse.redirect(`${appUrl}/dashboard?error=oauth_failed`)
+    return NextResponse.redirect(`${appUrl}/onboarding?error=oauth_failed`)
   }
 }

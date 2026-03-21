@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useCallback, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { HarborShell } from '@/components/HarborShell'
 import { TelegramLoginButton } from '@/components/TelegramLoginButton'
 
@@ -18,8 +18,18 @@ const INTEGRATIONS = [
   { key: 'github', icon: 'ph-github-logo', label: 'GitHub', desc: 'Repos, issues, and PRs', authPath: '/api/integrations/github/auth' },
 ]
 
-export default function OnboardingPage() {
+export default function OnboardingPageWrapper() {
+  return (
+    <Suspense fallback={<HarborShell title="Welcome aboard" showBack><div className="pt-20 text-center text-slate-400">Loading...</div></HarborShell>}>
+      <OnboardingPage />
+    </Suspense>
+  )
+}
+
+function OnboardingPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const justConnected = searchParams.get('connected')
   const [authenticated, setAuthenticated] = useState(false)
   const [integrations, setIntegrations] = useState<ConnectedIntegrations>({
     google: false, notion: false, github: false, openwallet: false,
@@ -31,10 +41,19 @@ export default function OnboardingPage() {
 
   const checkIntegrations = useCallback(async () => {
     try {
-      const res = await fetch('/api/recipes', { credentials: 'include' })
-      if (res.ok) {
-        setAuthenticated(true)
-        setIntegrations({ google: false, notion: false, github: false, openwallet: false })
+      // Check auth status
+      const authRes = await fetch('/api/recipes', { credentials: 'include' })
+      if (!authRes.ok) {
+        setLoading(false)
+        return
+      }
+      setAuthenticated(true)
+
+      // Fetch real integration status
+      const statusRes = await fetch('/api/integrations/status', { credentials: 'include' })
+      if (statusRes.ok) {
+        const status = await statusRes.json()
+        setIntegrations(status)
       }
     } catch { /* Not authenticated */ } finally {
       setLoading(false)
@@ -100,9 +119,18 @@ export default function OnboardingPage() {
 
   return (
     <HarborShell title="Welcome aboard" showBack backHref="/harbor">
-      <p className="text-slate-500 text-[15px] mt-1 mb-6">
+      <p className="text-slate-500 text-[15px] mt-1 mb-4">
         Connect your services so Dock can manage them through Telegram.
       </p>
+
+      {justConnected && (
+        <div className="glass-card rounded-[16px] p-3 mb-4 flex items-center gap-2 border-emerald-200/50">
+          <i className="ph-fill ph-check-circle text-[18px] text-emerald-500" />
+          <span className="text-[14px] text-emerald-600 font-medium">
+            {justConnected.charAt(0).toUpperCase() + justConnected.slice(1)} connected!
+          </span>
+        </div>
+      )}
 
       {!authenticated ? (
         <div className="glass-card rounded-[24px] p-8 text-center">
