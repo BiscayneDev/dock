@@ -44,7 +44,7 @@ export default function HarborHome() {
   }, [router])
 
   if (authed === null) {
-    return <div style={{ minHeight: '100vh', backgroundColor: '#EAE6D7' }} />
+    return <div style={{ minHeight: '100vh', backgroundColor: '#d6dce8' }} />
   }
 
   return (
@@ -64,8 +64,8 @@ export default function HarborHome() {
           --mesh-peach: #E48D6C;
           --mesh-mint: #94C4A3;
         }
-        .harbor-body { font-family: 'Lora', serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
-        .harbor-body h1, .harbor-body h2, .harbor-body h3, .harbor-body .font-sans {
+        .harbor-page { font-family: 'Lora', serif; color: var(--ink); -webkit-font-smoothing: antialiased; background: #d6dce8; min-height: 100vh; }
+        .harbor-page h1, .harbor-page h2, .harbor-page h3, .harbor-page .font-sans {
           font-family: 'Outfit', sans-serif; color: var(--ink);
         }
         .meta-text {
@@ -84,8 +84,8 @@ export default function HarborHome() {
           z-index: 1; filter: blur(20px);
         }
         @keyframes breathe { 0% { transform: scale(1) rotate(0deg); } 100% { transform: scale(1.1) rotate(5deg); } }
-        .hero-scallop svg { display: block; width: 100%; height: auto; fill: var(--cream); }
-        .card-gradient { background: linear-gradient(135deg, var(--mesh-peach) 0%, var(--mesh-yellow) 100%); }
+        .hero-scallop svg { display: block; width: 100%; height: auto; fill: #d6dce8; }
+        .card-gradient { background: linear-gradient(135deg, var(--mesh-peach) 0%, var(--mesh-yellow) 100%) !important; }
         .illust-blob {
           position: absolute; right: -10%; top: 10%; width: 150px; height: 120px;
           background: radial-gradient(circle, var(--mesh-mint) 0%, transparent 70%);
@@ -95,6 +95,7 @@ export default function HarborHome() {
           border: var(--border-w) solid var(--ink); border-radius: var(--radius-lg);
           background-color: var(--cream); padding: 1.25rem; position: relative;
           display: flex; flex-direction: column; text-decoration: none; color: var(--ink); overflow: hidden;
+          transition: transform 0.1s;
         }
         .dock-card:active { transform: scale(0.98); }
         .badge-num {
@@ -113,50 +114,42 @@ export default function HarborHome() {
           stroke: var(--ink); stroke-width: var(--border-w); fill: none;
           stroke-linecap: round; stroke-linejoin: round;
         }
-        @media (min-width: 450px) {
-          .app-frame { height: 850px !important; max-height: 850px !important; border-radius: 2.5rem !important; border: 8px solid #2A3A35 !important; box-shadow: 0 20px 40px rgba(0,0,0,0.5) !important; }
-        }
       `}</style>
 
-      <div className="harbor-body" style={{ backgroundColor: '#1A1A1A', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-        <main className="app-frame" style={{
-          width: '100%', maxWidth: '400px', height: '100vh',
-          backgroundColor: 'var(--cream)', position: 'relative',
-          overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column',
-        }}>
+      <div className="harbor-page">
+        {/* Header */}
+        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem 1.5rem', maxWidth: '56rem', margin: '0 auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 21h14M12 21v-12M8 6c1.5 0 4-3 4-3s2.5 3 4 3" />
+            </svg>
+            <span className="font-sans" style={{ fontWeight: 800, fontSize: '1.1rem', letterSpacing: '-0.02em' }}>Dock</span>
+          </div>
+          <div style={{ fontStyle: 'italic', fontSize: '0.9rem', fontWeight: 500, opacity: 0.6 }}>{dateStr}</div>
+          <Link href="/dashboard" style={{
+            width: '32px', height: '32px', border: '1.5px solid var(--ink)', borderRadius: '50%',
+            display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: 'var(--cream)',
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round">
+              <circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 4-7 8-7s8 3 8 7" />
+            </svg>
+          </Link>
+        </header>
 
-          {/* Header */}
-          <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem', zIndex: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 21h14M12 21v-12M8 6c1.5 0 4-3 4-3s2.5 3 4 3" />
-              </svg>
-              <span className="font-sans" style={{ fontWeight: 800, fontSize: '1.1rem', letterSpacing: '-0.02em' }}>Dock</span>
-            </div>
-            <div style={{ fontStyle: 'italic', fontSize: '0.9rem', fontWeight: 500 }}>{dateStr}</div>
-            <Link href="/dashboard" style={{
-              width: '32px', height: '32px', border: '1.5px solid var(--ink)', borderRadius: '50%',
-              display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: 'var(--cream)',
-            }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round">
-                <circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 4-7 8-7s8 3 8 7" />
-              </svg>
-            </Link>
-          </header>
-
+        <div style={{ maxWidth: '56rem', margin: '0 auto', padding: '0 1rem' }}>
           {/* Hero */}
           <section style={{
-            position: 'relative', margin: '0 1rem 1rem 1rem', border: '1.5px solid var(--ink)',
+            position: 'relative', border: '1.5px solid var(--ink)',
             borderRadius: 'var(--radius-lg)', overflow: 'hidden', backgroundColor: 'var(--mesh-yellow)',
-            minHeight: '280px', display: 'flex', flexDirection: 'column',
+            minHeight: '280px', display: 'flex', flexDirection: 'column', marginBottom: '1rem',
           }}>
             <div className="hero-bg-mesh" />
-            <div style={{ position: 'relative', zIndex: 3, padding: '2rem 1.5rem', flexGrow: 1 }}>
+            <div style={{ position: 'relative', zIndex: 3, padding: '2.5rem 2rem', flexGrow: 1 }}>
               <span className="meta-text" style={{ display: 'block', marginBottom: '1rem' }}>Daily Brief</span>
-              <h1 style={{ fontSize: '2.2rem', fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.03em', marginBottom: '1rem' }}>
+              <h1 style={{ fontSize: 'clamp(2rem, 4vw, 2.5rem)', fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.03em', marginBottom: '1rem' }}>
                 {GREETINGS[timeOfDay]}<br />Captain.
               </h1>
-              <p style={{ fontSize: '1.1rem', lineHeight: 1.4, maxWidth: '80%' }}>{WEATHER_TEXT[timeOfDay]}</p>
+              <p style={{ fontSize: '1.1rem', lineHeight: 1.4, maxWidth: '24rem', opacity: 0.8 }}>{WEATHER_TEXT[timeOfDay]}</p>
             </div>
             <div className="hero-scallop" style={{ position: 'absolute', bottom: '-2px', left: 0, width: '100%', zIndex: 2 }}>
               <svg viewBox="0 0 400 60" preserveAspectRatio="none">
@@ -174,10 +167,10 @@ export default function HarborHome() {
             </Link>
           </section>
 
-          {/* Cards */}
-          <section style={{ padding: '0 1rem 2rem 1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-            {/* Automations — wide */}
-            <Link href="/dashboard/recipes" className="dock-card" style={{ gridColumn: 'span 2' }}>
+          {/* Cards — responsive grid */}
+          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem', paddingBottom: '2rem' }}>
+            {/* Automations — always spans full width */}
+            <Link href="/dashboard/recipes" className="dock-card" style={{ gridColumn: '1 / -1' }}>
               <div className="badge-num">1</div>
               <div style={{ position: 'absolute', top: 0, right: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1, overflow: 'hidden' }}>
                 <div className="illust-blob" />
@@ -200,7 +193,7 @@ export default function HarborHome() {
               <p className="card-desc">Connect tools</p>
             </Link>
 
-            {/* Recipes — gradient */}
+            {/* Recipes */}
             <Link href="/dashboard/recipes/gallery" className="dock-card card-gradient">
               <div className="badge-num">3</div>
               <svg className="card-icon" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
@@ -224,7 +217,7 @@ export default function HarborHome() {
               <p className="card-desc">Signals</p>
             </Link>
           </section>
-        </main>
+        </div>
       </div>
     </>
   )
