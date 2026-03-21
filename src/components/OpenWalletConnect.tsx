@@ -2,13 +2,19 @@
 
 import { useState } from 'react'
 
-interface OpenWalletConnectProps {
+interface WalletConnectProps {
   connected: boolean
+  walletAddress?: string | null
   onConnected: () => void
   onDisconnect: () => void
 }
 
-export function OpenWalletConnect({ connected, onConnected, onDisconnect }: OpenWalletConnectProps) {
+function truncateAddress(address: string): string {
+  if (address.length <= 12) return address
+  return `${address.slice(0, 6)}...${address.slice(-4)}`
+}
+
+export function OpenWalletConnect({ connected, walletAddress, onConnected, onDisconnect }: WalletConnectProps) {
   const [showForm, setShowForm] = useState(false)
   const [endpoint, setEndpoint] = useState('')
   const [apiKey, setApiKey] = useState('')
@@ -61,16 +67,21 @@ export function OpenWalletConnect({ connected, onConnected, onDisconnect }: Open
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🔐</span>
+          <span className="text-2xl">💰</span>
           <div>
-            <h3 className="font-medium text-zinc-100">OpenWallet</h3>
-            <p className="text-sm text-zinc-400">Crypto wallets &amp; transactions</p>
+            <h3 className="font-medium text-zinc-100">MoonPay Wallet</h3>
+            <p className="text-sm text-zinc-400">Agent wallet &amp; payments</p>
           </div>
         </div>
         <div>
           {connected ? (
             <div className="flex items-center gap-2">
-              <span className="text-sm text-emerald-400">✅ Connected</span>
+              <div className="text-right">
+                <span className="text-sm text-emerald-400">Connected</span>
+                {walletAddress && (
+                  <p className="text-xs text-zinc-500 font-mono">{truncateAddress(walletAddress)}</p>
+                )}
+              </div>
               <button
                 onClick={handleDisconnect}
                 className="text-sm text-zinc-500 hover:text-red-400 transition-colors"
@@ -92,11 +103,16 @@ export function OpenWalletConnect({ connected, onConnected, onDisconnect }: Open
       {showForm && !connected && (
         <div className="mt-4 space-y-3 border-t border-zinc-800 pt-4">
           <p className="text-xs text-zinc-500">
-            Enter your OpenWallet instance URL and API key.
+            Set up your agent wallet with the MoonPay CLI:
+          </p>
+          <div className="rounded-md bg-zinc-800/50 p-2 font-mono text-xs text-zinc-300 space-y-1">
+            <p>npm install -g @moonpay/cli</p>
+            <p>mp login</p>
+            <p>mp wallet create</p>
+          </div>
+          <p className="text-xs text-zinc-500">
+            Then enter your OWS endpoint and API key below.
             Your API key is encrypted before storage.
-            <a href="https://openwallet.sh" target="_blank" rel="noopener noreferrer" className="text-cyan-500 ml-1">
-              Learn more
-            </a>
           </p>
           <div>
             <label className="block text-sm text-zinc-400 mb-1">Endpoint URL</label>

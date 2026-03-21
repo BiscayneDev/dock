@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { HarborShell } from '@/components/HarborShell'
 
-interface Template { slug: string; name: string; description: string; category: string; requiredIntegrations: string[]; triggerType: string; previewOutput: string; icon: string }
+interface Template { slug: string; name: string; description: string; category: string; requiredIntegrations: string[]; triggerType: string; previewOutput: string; icon: string; feeAmount?: number; feeRequired?: boolean }
 
 export default function GalleryPage() {
   const router = useRouter()
@@ -51,6 +51,9 @@ export default function GalleryPage() {
               </div>
               <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.95rem', lineHeight: 1.2, marginTop: '0.5rem' }}>{t.name}</p>
               <p style={{ fontSize: '0.75rem', opacity: 0.5, marginTop: '0.25rem', flex: 1 }}>{t.description}</p>
+              {t.feeRequired && t.feeAmount && t.feeAmount > 0 && (
+                <span style={{ display: 'inline-block', marginTop: '0.25rem', fontSize: '0.7rem', fontFamily: "'Outfit', sans-serif", fontWeight: 700, color: 'var(--mesh-cyan)', border: '1px solid var(--mesh-cyan)', borderRadius: '1rem', padding: '0.1rem 0.5rem' }}>${t.feeAmount.toFixed(2)} USDC</span>
+              )}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginTop: '0.5rem' }}>
                 {t.requiredIntegrations.map((i) => <span key={i} className="meta-text" style={{ border: '1px solid var(--ink)', borderRadius: '1rem', padding: '0.1rem 0.4rem', opacity: 0.5 }}>{i}</span>)}
               </div>

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, use } from 'react'
 import Link from 'next/link'
 import { HarborShell } from '@/components/HarborShell'
 
-interface Recipe { id: string; name: string; instructions: string; trigger_type: string; trigger_config: Record<string, unknown>; enabled: boolean; run_count: number }
+interface Recipe { id: string; name: string; instructions: string; trigger_type: string; trigger_config: Record<string, unknown>; enabled: boolean; run_count: number; fee_amount: number; fee_required: boolean; is_public: boolean }
 interface RecipeRun { id: string; status: string; triggered_at: string; output: string | null; error: string | null; duration_ms: number | null }
 
 const STATUS_COLORS: Record<string, string> = { success: 'var(--mesh-mint)', failed: 'var(--mesh-peach)', skipped: 'var(--ink)', running: 'var(--mesh-cyan)', test: 'var(--mesh-yellow)' }
@@ -41,6 +41,12 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
           <div><span className="meta-text">Trigger</span><p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, marginTop: '0.15rem' }}>{recipe.trigger_type}</p></div>
           <div><span className="meta-text">Status</span><p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, marginTop: '0.15rem', color: recipe.enabled ? 'var(--mesh-mint)' : undefined }}>{recipe.enabled ? 'Active' : 'Disabled'}</p></div>
           <div><span className="meta-text">Runs</span><p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, marginTop: '0.15rem' }}>{recipe.run_count}</p></div>
+          {recipe.fee_required && recipe.fee_amount > 0 && (
+            <div><span className="meta-text">Fee</span><p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, marginTop: '0.15rem', color: 'var(--mesh-cyan)' }}>${recipe.fee_amount.toFixed(2)}</p></div>
+          )}
+          {recipe.is_public && (
+            <div><span className="meta-text">Visibility</span><p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, marginTop: '0.15rem' }}>Public</p></div>
+          )}
         </div>
         <span className="meta-text">Instructions</span>
         <p style={{ fontSize: '0.85rem', opacity: 0.7, marginTop: '0.25rem' }}>{recipe.instructions}</p>

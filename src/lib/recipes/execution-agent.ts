@@ -4,6 +4,7 @@ import { executionAgentTools } from '@/lib/tools/index'
 import { sendMessage } from '@/lib/telegram/client'
 import { getUserById, getDecryptedTokens } from '@/lib/orchestrator/index'
 import { logger } from '@/lib/logger'
+import { processRecipePayment, updatePaymentContext } from '@/lib/payments/process-payment'
 import type { UserContext, Tool, ToolResult, ChatMessage } from '@/lib/llm/types'
 
 const EXECUTION_TIMEOUT_MS = 90_000
@@ -37,6 +38,8 @@ interface Recipe {
   trigger_type: string
   notify_on_run: boolean
   run_count: number
+  fee_amount: number
+  fee_required: boolean
 }
 
 function buildExecutionAgentPrompt(
@@ -207,21 +210,74 @@ async function updateAgentState(
 export async function executeRecipe(
   recipe: Recipe,
   triggerContext: unknown,
-  statusOverride?: string
+  statusOverride?: string,
+  runnerId?: string
 ): Promise<void> {
   const supabase = createServerClient()
+  const effectiveRunnerId = runnerId ?? recipe.user_id
 
   // Rate limit check
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
   const { count: recentRuns } = await supabase
     .from('recipe_runs')
     .select('*', { count: 'exact', head: true })
-    .eq('user_id', recipe.user_id)
+    .eq('user_id', effectiveRunnerId)
     .gte('triggered_at', oneHourAgo)
 
   if ((recentRuns ?? 0) >= MAX_RUNS_PER_HOUR) {
-    logger.warn('Recipe rate limit exceeded', { recipeId: recipe.id, userId: recipe.user_id })
+    logger.warn('Recipe rate limit exceeded', { recipeId: recipe.id, userId: effectiveRunnerId })
     return
+  }
+
+  // Payment gate — charge fee before executing paid recipes
+  let paymentId: string | null = null
+  if (recipe.fee_required && recipe.fee_amount > 0 && effectiveRunnerId !== recipe.user_id) {
+    const recipient = await getUserById(recipe.user_id)
+    if (!recipient.wallet_address) {
+      logger.error('Recipe creator has no wallet address', { recipeId: recipe.id })
+
+      await supabase
+        .from('recipe_runs')
+        .insert({
+          recipe_id: recipe.id,
+          user_id: effectiveRunnerId,
+          trigger_context: triggerContext,
+          status: 'payment_failed',
+          error: 'Recipe creator has no wallet configured to receive payments',
+          completed_at: new Date().toISOString(),
+        })
+      return
+    }
+
+    const payment = await processRecipePayment(
+      effectiveRunnerId,
+      recipient.wallet_address,
+      recipe.fee_amount,
+      recipient.wallet_chain ?? 'eip155:8453'
+    )
+
+    if (!payment.success) {
+      logger.error('Recipe payment failed', { recipeId: recipe.id, error: payment.error })
+
+      await supabase
+        .from('recipe_runs')
+        .insert({
+          recipe_id: recipe.id,
+          user_id: effectiveRunnerId,
+          trigger_context: triggerContext,
+          status: 'payment_failed',
+          error: payment.error ?? 'Payment failed',
+          completed_at: new Date().toISOString(),
+        })
+      return
+    }
+
+    paymentId = payment.paymentId ?? null
+
+    // Update payment with recipe context
+    if (paymentId) {
+      await updatePaymentContext(paymentId, recipe.id, recipe.user_id)
+    }
   }
 
   // Create run record
@@ -229,15 +285,21 @@ export async function executeRecipe(
     .from('recipe_runs')
     .insert({
       recipe_id: recipe.id,
-      user_id: recipe.user_id,
+      user_id: effectiveRunnerId,
       trigger_context: triggerContext,
       status: statusOverride ?? 'running',
+      payment_id: paymentId,
     })
     .select('id')
     .single()
 
   if (runError || !run) {
     return
+  }
+
+  // Link payment to run record
+  if (paymentId) {
+    await updatePaymentContext(paymentId, recipe.id, recipe.user_id, run.id as string)
   }
 
   const startTime = Date.now()

@@ -11,6 +11,8 @@ const CreateInput = z.object({
   trigger_type: z.enum(['schedule', 'email_event', 'github_event', 'notion_event', 'keyword', 'manual']),
   trigger_config: z.record(z.string(), z.unknown()),
   notify_on_run: z.boolean().optional().default(true),
+  fee_amount: z.number().min(0).max(100).optional().default(0),
+  fee_required: z.boolean().optional().default(false),
 })
 
 export const recipeCreate: Tool = {
@@ -24,6 +26,8 @@ export const recipeCreate: Tool = {
       trigger_type: { type: 'string', enum: ['schedule', 'email_event', 'github_event', 'notion_event', 'keyword', 'manual'] },
       trigger_config: { type: 'object', description: 'Trigger-specific config' },
       notify_on_run: { type: 'boolean', description: 'Notify user after each run (default true)' },
+      fee_amount: { type: 'number', description: 'Fee in USDC to charge per run (0-100, default 0)' },
+      fee_required: { type: 'boolean', description: 'Whether to require payment to run this recipe (default false)' },
     },
     required: ['name', 'instructions', 'trigger_type', 'trigger_config'],
   },
@@ -41,9 +45,11 @@ export const recipeCreate: Tool = {
           trigger_type: parsed.trigger_type,
           trigger_config: parsed.trigger_config,
           notify_on_run: parsed.notify_on_run,
+          fee_amount: parsed.fee_amount,
+          fee_required: parsed.fee_required,
           enabled: false,
         })
-        .select('id, name, trigger_type, enabled')
+        .select('id, name, trigger_type, enabled, fee_amount, fee_required')
         .single()
 
       if (error) {
@@ -79,7 +85,7 @@ export const recipeList: Tool = {
 
       const { data, error } = await supabase
         .from('recipes')
-        .select('id, name, trigger_type, enabled, last_run_at, run_count')
+        .select('id, name, trigger_type, enabled, last_run_at, run_count, fee_amount, fee_required')
         .eq('user_id', ctx.userId)
         .order('created_at', { ascending: false })
 
@@ -217,8 +223,12 @@ export const recipeRun: Tool = {
           trigger_type: recipe.trigger_type as string,
           notify_on_run: recipe.notify_on_run as boolean,
           run_count: recipe.run_count as number,
+          fee_amount: (recipe.fee_amount as number) ?? 0,
+          fee_required: (recipe.fee_required as boolean) ?? false,
         },
-        { manual: true, triggered_by: ctx.name }
+        { manual: true, triggered_by: ctx.name },
+        undefined,
+        ctx.userId
       ).catch(() => {
         // Error handling is inside executeRecipe
       })

@@ -11,6 +11,9 @@ const CreateRecipeBody = z.object({
   trigger_config: z.record(z.string(), z.unknown()),
   enabled: z.boolean().optional().default(true),
   notify_on_run: z.boolean().optional().default(true),
+  fee_amount: z.number().min(0).max(100).optional().default(0),
+  fee_required: z.boolean().optional().default(false),
+  is_public: z.boolean().optional().default(false),
 })
 
 export async function GET(): Promise<NextResponse> {
@@ -52,6 +55,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const supabase = createServerClient()
+
+  // If setting a fee, verify the user has a wallet to receive payments
+  if (parsed.data.fee_required && parsed.data.fee_amount > 0) {
+    const { data: user } = await supabase
+      .from('users')
+      .select('wallet_address')
+      .eq('id', session.userId)
+      .single()
+
+    if (!user?.wallet_address) {
+      return NextResponse.json(
+        { error: 'Connect a wallet before creating paid recipes' },
+        { status: 400 }
+      )
+    }
+  }
+
   const { data, error } = await supabase
     .from('recipes')
     .insert({

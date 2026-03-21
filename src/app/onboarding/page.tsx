@@ -136,8 +136,8 @@ function OnboardingPage() {
                     </svg>
                   </div>
                   <div>
-                    <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.9rem' }}>OpenWallet</p>
-                    <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>Crypto wallets</p>
+                    <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.9rem' }}>MoonPay Wallet</p>
+                    <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>Agent wallet &amp; payments</p>
                   </div>
                 </div>
                 {integrations.openwallet ? (

@@ -51,6 +51,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 trigger_type: recipe.trigger_type as string,
                 notify_on_run: recipe.notify_on_run as boolean,
                 run_count: (recipe.run_count as number) ?? 0,
+                fee_amount: (recipe.fee_amount as number) ?? 0,
+                fee_required: (recipe.fee_required as boolean) ?? false,
               },
               { schedule: true, firedAt: new Date().toISOString() }
             )
@@ -98,6 +100,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 trigger_type: recipe.trigger_type as string,
                 notify_on_run: recipe.notify_on_run as boolean,
                 run_count: (recipe.run_count as number) ?? 0,
+                fee_amount: (recipe.fee_amount as number) ?? 0,
+                fee_required: (recipe.fee_required as boolean) ?? false,
               },
               { ...match.context, externalId: match.externalId }
             )

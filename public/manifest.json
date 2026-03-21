@@ -1,0 +1,17 @@
+{
+  "name": "Dock — Your AI First Mate",
+  "short_name": "Dock",
+  "description": "AI assistant that manages email, calendar, GitHub, Notion, and crypto through Telegram.",
+  "start_url": "/harbor",
+  "display": "standalone",
+  "background_color": "#d6dce8",
+  "theme_color": "#d6dce8",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -110,6 +110,8 @@ async function handleMessageInner(chatId: number, telegramId: number, initialTex
         trigger_type: 'keyword',
         notify_on_run: keywordRecipe.notify_on_run,
         run_count: keywordRecipe.run_count,
+        fee_amount: keywordRecipe.fee_amount,
+        fee_required: keywordRecipe.fee_required,
       },
       { keyword: true, message: text }
     )
@@ -402,6 +404,8 @@ interface DbUser {
   quiet_hours_start: string | null
   quiet_hours_end: string | null
   daily_briefing: boolean
+  wallet_address: string | null
+  wallet_chain: string
 }
 
 async function getOrCreateUser(
@@ -535,6 +539,8 @@ interface KeywordRecipeMatch {
   instructions: string
   notify_on_run: boolean
   run_count: number
+  fee_amount: number
+  fee_required: boolean
 }
 
 async function checkKeywordRecipes(
@@ -546,7 +552,7 @@ async function checkKeywordRecipes(
 
   const { data: recipes } = await supabase
     .from('recipes')
-    .select('id, user_id, name, instructions, trigger_config, notify_on_run, run_count')
+    .select('id, user_id, name, instructions, trigger_config, notify_on_run, run_count, fee_amount, fee_required')
     .eq('user_id', userId)
     .eq('trigger_type', 'keyword')
     .eq('enabled', true)
@@ -569,6 +575,8 @@ async function checkKeywordRecipes(
         instructions: recipe.instructions as string,
         notify_on_run: recipe.notify_on_run as boolean,
         run_count: (recipe.run_count as number) ?? 0,
+        fee_amount: (recipe.fee_amount as number) ?? 0,
+        fee_required: (recipe.fee_required as boolean) ?? false,
       }
     }
   }

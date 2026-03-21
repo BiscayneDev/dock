@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSession } from '@/lib/auth/session'
-import { storeOWSCredentials, removeOWSCredentials, OWSClient } from '@/lib/integrations/openwallet'
+import {
+  storeOWSCredentials,
+  removeOWSCredentials,
+  OWSClient,
+  extractWalletAddress,
+  storeWalletAddress,
+} from '@/lib/integrations/openwallet'
 
 const ConnectBody = z.object({
   endpoint: z.string().url().describe('OWS instance URL (e.g. http://localhost:8787)'),
   apiKey: z.string().min(1).describe('OWS API key'),
 })
 
-// Connect OpenWallet
+// Connect MoonPay Wallet (OWS-compatible)
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const session = await getSession()
   if (!session) {
@@ -36,21 +42,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const testResult = await client.listWallets()
   if (!testResult.ok) {
     return NextResponse.json(
-      { error: `Could not connect to OpenWallet: ${testResult.error}` },
+      { error: `Could not connect to wallet: ${testResult.error}` },
       { status: 400 }
     )
   }
 
   try {
     await storeOWSCredentials(session.userId, parsed.data.apiKey, parsed.data.endpoint)
-    return NextResponse.json({ success: true })
+
+    // Extract and store the wallet address for receiving payments
+    const walletInfo = await extractWalletAddress(client)
+    if (walletInfo) {
+      await storeWalletAddress(session.userId, walletInfo.address, walletInfo.chain)
+    }
+
+    return NextResponse.json({
+      success: true,
+      walletAddress: walletInfo?.address ?? null,
+      walletChain: walletInfo?.chain ?? null,
+    })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 
-// Disconnect OpenWallet
+// Disconnect wallet
 export async function DELETE(): Promise<NextResponse> {
   const session = await getSession()
   if (!session) {

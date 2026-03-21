@@ -194,4 +194,60 @@ export async function removeOWSCredentials(userId: string): Promise<void> {
     .delete()
     .eq('user_id', userId)
     .eq('provider', 'openwallet')
+
+  // Clear wallet address from user profile
+  await supabase
+    .from('users')
+    .update({ wallet_address: null, wallet_chain: 'eip155:8453' })
+    .eq('id', userId)
+}
+
+// Extract the primary wallet address after connecting
+export async function extractWalletAddress(
+  client: OWSClient
+): Promise<{ address: string; chain: string } | null> {
+  const walletsRes = await client.listWallets()
+  if (!walletsRes.ok || !walletsRes.data) {
+    return null
+  }
+
+  const wallets = walletsRes.data as Array<{ id: string }>
+  if (wallets.length === 0) {
+    return null
+  }
+
+  const accountsRes = await client.listAccounts(wallets[0].id)
+  if (!accountsRes.ok || !accountsRes.data) {
+    return null
+  }
+
+  const accounts = accountsRes.data as Array<{ address: string; chain?: string }>
+  if (accounts.length === 0) {
+    return null
+  }
+
+  const account = accounts[0]
+  const address = account.address
+
+  // Detect chain from address format
+  const isEVM = /^0x[a-fA-F0-9]{40}$/.test(address)
+  const isSolana = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)
+
+  const chain = account.chain
+    ?? (isEVM ? 'eip155:8453' : isSolana ? 'solana:mainnet' : 'eip155:8453')
+
+  return { address, chain }
+}
+
+export async function storeWalletAddress(
+  userId: string,
+  address: string,
+  chain: string
+): Promise<void> {
+  const supabase = createServerClient()
+
+  await supabase
+    .from('users')
+    .update({ wallet_address: address, wallet_chain: chain })
+    .eq('id', userId)
 }

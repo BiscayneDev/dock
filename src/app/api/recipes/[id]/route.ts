@@ -11,6 +11,9 @@ const UpdateRecipeBody = z.object({
   trigger_config: z.record(z.string(), z.unknown()).optional(),
   enabled: z.boolean().optional(),
   notify_on_run: z.boolean().optional(),
+  fee_amount: z.number().min(0).max(100).optional(),
+  fee_required: z.boolean().optional(),
+  is_public: z.boolean().optional(),
 })
 
 export async function GET(

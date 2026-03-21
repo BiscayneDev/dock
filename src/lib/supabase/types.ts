@@ -11,6 +11,8 @@ export interface Database {
           quiet_hours_start: string | null
           quiet_hours_end: string | null
           daily_briefing: boolean
+          wallet_address: string | null
+          wallet_chain: string
           created_at: string
         }
         Insert: {
@@ -22,6 +24,8 @@ export interface Database {
           quiet_hours_start?: string | null
           quiet_hours_end?: string | null
           daily_briefing?: boolean
+          wallet_address?: string | null
+          wallet_chain?: string
           created_at?: string
         }
         Update: {
@@ -33,6 +37,8 @@ export interface Database {
           quiet_hours_start?: string | null
           quiet_hours_end?: string | null
           daily_briefing?: boolean
+          wallet_address?: string | null
+          wallet_chain?: string
           created_at?: string
         }
       }
@@ -149,6 +155,9 @@ export interface Database {
           last_run_at: string | null
           last_checked_at: string | null
           run_count: number
+          fee_amount: number
+          fee_required: boolean
+          is_public: boolean
           created_at: string
           updated_at: string
         }
@@ -165,6 +174,9 @@ export interface Database {
           last_run_at?: string | null
           last_checked_at?: string | null
           run_count?: number
+          fee_amount?: number
+          fee_required?: boolean
+          is_public?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -181,6 +193,9 @@ export interface Database {
           last_run_at?: string | null
           last_checked_at?: string | null
           run_count?: number
+          fee_amount?: number
+          fee_required?: boolean
+          is_public?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -198,6 +213,7 @@ export interface Database {
           tool_calls: unknown | null
           error: string | null
           duration_ms: number | null
+          payment_id: string | null
         }
         Insert: {
           id?: string
@@ -211,6 +227,7 @@ export interface Database {
           tool_calls?: unknown | null
           error?: string | null
           duration_ms?: number | null
+          payment_id?: string | null
         }
         Update: {
           id?: string
@@ -224,6 +241,7 @@ export interface Database {
           tool_calls?: unknown | null
           error?: string | null
           duration_ms?: number | null
+          payment_id?: string | null
         }
       }
       recipe_templates: {
@@ -262,6 +280,50 @@ export interface Database {
           trigger_config?: unknown
           instructions?: string
           preview_output?: string | null
+        }
+      }
+      recipe_payments: {
+        Row: {
+          id: string
+          recipe_id: string
+          recipe_run_id: string | null
+          payer_id: string
+          recipient_id: string
+          amount: number
+          currency: string
+          chain: string
+          tx_hash: string | null
+          status: string
+          created_at: string
+          completed_at: string | null
+        }
+        Insert: {
+          id?: string
+          recipe_id: string
+          recipe_run_id?: string | null
+          payer_id: string
+          recipient_id: string
+          amount: number
+          currency?: string
+          chain?: string
+          tx_hash?: string | null
+          status?: string
+          created_at?: string
+          completed_at?: string | null
+        }
+        Update: {
+          id?: string
+          recipe_id?: string
+          recipe_run_id?: string | null
+          payer_id?: string
+          recipient_id?: string
+          amount?: number
+          currency?: string
+          chain?: string
+          tx_hash?: string | null
+          status?: string
+          created_at?: string
+          completed_at?: string | null
         }
       }
     }

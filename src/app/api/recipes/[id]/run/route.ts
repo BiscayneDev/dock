@@ -36,6 +36,8 @@ export async function POST(
       trigger_type: recipe.trigger_type as string,
       notify_on_run: recipe.notify_on_run as boolean,
       run_count: (recipe.run_count as number) ?? 0,
+      fee_amount: (recipe.fee_amount as number) ?? 0,
+      fee_required: (recipe.fee_required as boolean) ?? false,
     },
     { manual: true, source: 'harbor' }
   ).catch(() => {
