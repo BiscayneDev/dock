@@ -24,3 +24,95 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ── Harbor mobile home screen ── */
+
+.harbor-bg {
+  background: linear-gradient(
+    180deg,
+    #e0f4fc 0%,
+    #eef7fb 30%,
+    #f0f8ff 60%,
+    #f5f9fc 100%
+  );
+}
+
+.harbor-date {
+  color: #7b92a5;
+  letter-spacing: 0.02em;
+}
+
+.harbor-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: #5b7d95;
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(8px);
+  transition: background 0.2s;
+}
+
+.harbor-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.harbor-illustration-container {
+  border-radius: 20px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(186, 230, 253, 0.15) 0%, rgba(224, 242, 254, 0.05) 100%);
+}
+
+.harbor-greeting {
+  color: #1e3a50;
+  font-weight: 600;
+}
+
+.harbor-subtitle {
+  color: #7b92a5;
+}
+
+.harbor-action-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(200, 220, 235, 0.5);
+  border-radius: 16px;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+
+.harbor-action-card:hover {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(180, 210, 230, 0.7);
+  transform: translateY(-1px);
+}
+
+.harbor-action-card:active {
+  transform: scale(0.97);
+}
+
+.harbor-action-card-lg {
+  padding: 22px 16px;
+}
+
+.harbor-action-card-sm {
+  padding: 18px 8px;
+}
+
+.harbor-action-icon {
+  color: #5b7d95;
+}
+
+.harbor-action-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #4a6b80;
+  letter-spacing: 0.01em;
+}
