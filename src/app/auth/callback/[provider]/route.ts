@@ -1,0 +1,80 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getSession } from '@/lib/auth/session'
+import {
+  exchangeCode as exchangeGoogleCode,
+  storeGoogleTokens,
+} from '@/lib/integrations/google'
+import {
+  exchangeCode as exchangeNotionCode,
+  storeNotionTokens,
+} from '@/lib/integrations/notion'
+import {
+  exchangeCode as exchangeGithubCode,
+  storeGithubTokens,
+} from '@/lib/integrations/github'
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ provider: string }> }
+): Promise<NextResponse> {
+  const session = await getSession()
+  if (!session) {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+    return NextResponse.redirect(`${appUrl}/onboarding`)
+  }
+
+  const { provider } = await params
+  const code = request.nextUrl.searchParams.get('code')
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+
+  if (!code) {
+    return NextResponse.redirect(`${appUrl}/dashboard?error=no_code`)
+  }
+
+  try {
+    switch (provider) {
+      case 'google': {
+        const result = await exchangeGoogleCode(code)
+        await storeGoogleTokens(
+          session.userId,
+          result.accessToken,
+          result.refreshToken,
+          result.expiresAt,
+          ['gmail.readonly', 'gmail.send', 'gmail.modify', 'calendar.readonly', 'calendar.events'],
+          result.email
+        )
+        break
+      }
+
+      case 'notion': {
+        const result = await exchangeNotionCode(code)
+        await storeNotionTokens(
+          session.userId,
+          result.accessToken,
+          result.workspaceName
+        )
+        break
+      }
+
+      case 'github': {
+        const result = await exchangeGithubCode(code)
+        await storeGithubTokens(
+          session.userId,
+          result.accessToken,
+          result.username
+        )
+        break
+      }
+
+      default:
+        return NextResponse.redirect(`${appUrl}/dashboard?error=unknown_provider`)
+    }
+
+    return NextResponse.redirect(`${appUrl}/dashboard?connected=${provider}`)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    const { logger } = await import('@/lib/logger')
+    logger.error(`OAuth callback error for ${provider}`, { error: message })
+    return NextResponse.redirect(`${appUrl}/dashboard?error=oauth_failed`)
+  }
+}

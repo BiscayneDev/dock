@@ -1,103 +1,62 @@
-import Image from "next/image";
+import Link from 'next/link'
+import { NavBar } from '@/components/NavBar'
 
-export default function Home() {
+const CAPABILITIES = [
+  { icon: '📧', title: 'Email', desc: 'Search, read, draft, send, and archive emails' },
+  { icon: '📅', title: 'Calendar', desc: 'View, create, update events and find free time' },
+  { icon: '🐙', title: 'GitHub', desc: 'Track repos, issues, PRs, and notifications' },
+  { icon: '📝', title: 'Notion', desc: 'Search, read, create, and update pages' },
+  { icon: '🔐', title: 'Wallet', desc: 'Check balances, send crypto, sign messages via OpenWallet' },
+  { icon: '⏰', title: 'Reminders', desc: 'Set, list, and manage reminders' },
+  { icon: '🤖', title: 'Recipes', desc: 'Automate workflows with triggers and schedules' },
+]
+
+export default function LandingPage() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <>
+      <NavBar />
+      <main className="mx-auto max-w-3xl px-4 py-20 text-center">
+        <h1 className="text-5xl font-bold tracking-tight text-zinc-100">
+          Your AI first mate,
+          <br />
+          <span className="text-cyan-400">always on deck.</span>
+        </h1>
+        <p className="mt-6 text-lg text-zinc-400 max-w-xl mx-auto">
+          Dock manages your email, calendar, code, and notes through natural conversation in Telegram.
+          No app switching. No dashboard hopping. Just chat.
+        </p>
+        <div className="mt-10 flex items-center justify-center gap-4">
+          <Link
+            href="https://t.me/heydeckhandbot"
+            className="inline-flex items-center rounded-lg bg-cyan-600 px-6 py-3 text-lg font-medium text-white hover:bg-cyan-500 transition-colors"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            Open in Telegram
+          </Link>
+          <Link
+            href="/onboarding"
+            className="inline-flex items-center rounded-lg border border-zinc-700 px-6 py-3 text-lg font-medium text-zinc-300 hover:border-zinc-500 transition-colors"
           >
-            Read our docs
-          </a>
+            Set up integrations
+          </Link>
         </div>
+
+        <div className="mt-20 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {CAPABILITIES.map((cap) => (
+            <div
+              key={cap.title}
+              className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-5 text-left"
+            >
+              <span className="text-2xl">{cap.icon}</span>
+              <h3 className="mt-2 font-semibold text-zinc-100">{cap.title}</h3>
+              <p className="mt-1 text-sm text-zinc-400">{cap.desc}</p>
+            </div>
+          ))}
+        </div>
+
+        <footer className="mt-20 border-t border-zinc-800 pt-8 text-sm text-zinc-500">
+          Dock — AI-powered productivity through Telegram
+        </footer>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+    </>
+  )
 }
