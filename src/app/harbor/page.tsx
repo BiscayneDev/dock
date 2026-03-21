@@ -15,17 +15,17 @@ function getTimeOfDay(): TimeOfDay {
 }
 
 const GREETINGS: Record<TimeOfDay, string> = {
-  morning: 'Good morning',
-  afternoon: 'Good afternoon',
-  evening: 'Good evening',
-  night: 'Good night',
+  morning: 'Good morning,',
+  afternoon: 'Good afternoon,',
+  evening: 'Good evening,',
+  night: 'Good night,',
 }
 
-const SUBTEXTS: Record<TimeOfDay, string> = {
-  morning: 'ready to chart the course',
-  afternoon: 'smooth sailing so far',
-  evening: 'wrapping up the watch',
-  night: 'anchored for the night',
+const WEATHER_TEXT: Record<TimeOfDay, string> = {
+  morning: 'Fresh winds ahead. Let\'s chart the course for today.',
+  afternoon: 'Smooth sailing so far. Stay the course.',
+  evening: 'The watch is winding down. Time to drop anchor.',
+  night: 'All quiet in the harbor. Rest easy, Captain.',
 }
 
 export default function HarborHome() {
@@ -36,160 +36,194 @@ export default function HarborHome() {
 
   useEffect(() => {
     setTimeOfDay(getTimeOfDay())
-    setDateStr(new Date().toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    }))
+    setDateStr(new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
 
     fetch('/api/recipes', { credentials: 'include' })
-      .then((res) => {
-        if (res.ok) {
-          setAuthed(true)
-        } else {
-          router.replace('/')
-        }
-      })
+      .then((res) => { if (res.ok) setAuthed(true); else router.replace('/') })
       .catch(() => router.replace('/'))
   }, [router])
 
   if (authed === null) {
-    return <div className="min-h-screen bg-gradient-to-b from-[#dce4f0] via-[#c8d6e5] to-[#b8cce0]" />
+    return <div style={{ minHeight: '100vh', backgroundColor: '#EAE6D7' }} />
   }
 
   return (
     <>
-      {/* Fonts */}
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-      <link
-        href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Inter:wght@400;500&display=swap"
-        rel="stylesheet"
-      />
-      {/* Phosphor Icons */}
-      <script src="https://unpkg.com/@phosphor-icons/web" async />
+      <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=Outfit:wght@400;500;700;800&display=swap" rel="stylesheet" />
 
       <style>{`
-        .hero-mask {
-          -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 100%);
-          mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 100%);
+        :root {
+          --cream: #EAE6D7;
+          --ink: #102A22;
+          --border-w: 1.5px;
+          --radius-lg: 1.75rem;
+          --mesh-cyan: #5BA7CD;
+          --mesh-yellow: #E8D368;
+          --mesh-peach: #E48D6C;
+          --mesh-mint: #94C4A3;
         }
-        .glass-btn {
-          background: rgba(255, 255, 255, 0.45);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          border: 1px solid rgba(255, 255, 255, 0.6);
-          box-shadow: 0 4px 24px -6px rgba(0, 0, 0, 0.03), inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+        .harbor-body { font-family: 'Lora', serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+        .harbor-body h1, .harbor-body h2, .harbor-body h3, .harbor-body .font-sans {
+          font-family: 'Outfit', sans-serif; color: var(--ink);
         }
-        .glass-btn:hover {
-          background: rgba(255, 255, 255, 0.55);
+        .meta-text {
+          font-family: 'Outfit', sans-serif; font-size: 0.65rem; text-transform: uppercase;
+          letter-spacing: 0.05em; font-weight: 700; opacity: 0.8;
         }
-        .glass-btn:active {
-          transform: scale(0.98);
+        .hero-bg-mesh {
+          position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+          background:
+            radial-gradient(circle at 50% 0%, var(--mesh-cyan) 0%, transparent 40%),
+            radial-gradient(circle at 80% 40%, var(--mesh-peach) 0%, transparent 50%),
+            radial-gradient(circle at 20% 60%, var(--mesh-mint) 0%, transparent 50%),
+            radial-gradient(circle at 60% 80%, var(--mesh-yellow) 0%, transparent 40%);
+          background-color: var(--mesh-yellow);
+          animation: breathe 15s ease-in-out infinite alternate;
+          z-index: 1; filter: blur(20px);
+        }
+        @keyframes breathe { 0% { transform: scale(1) rotate(0deg); } 100% { transform: scale(1.1) rotate(5deg); } }
+        .hero-scallop svg { display: block; width: 100%; height: auto; fill: var(--cream); }
+        .card-gradient { background: linear-gradient(135deg, var(--mesh-peach) 0%, var(--mesh-yellow) 100%); }
+        .illust-blob {
+          position: absolute; right: -10%; top: 10%; width: 150px; height: 120px;
+          background: radial-gradient(circle, var(--mesh-mint) 0%, transparent 70%);
+          filter: blur(10px); opacity: 0.8; border-radius: 50%;
+        }
+        .dock-card {
+          border: var(--border-w) solid var(--ink); border-radius: var(--radius-lg);
+          background-color: var(--cream); padding: 1.25rem; position: relative;
+          display: flex; flex-direction: column; text-decoration: none; color: var(--ink); overflow: hidden;
+        }
+        .dock-card:active { transform: scale(0.98); }
+        .badge-num {
+          position: absolute; top: 1.25rem; left: 1.25rem; width: 24px; height: 24px;
+          border: var(--border-w) solid var(--ink); border-radius: 50%;
+          display: flex; justify-content: center; align-items: center;
+          font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.75rem; z-index: 2;
+        }
+        .card-title {
+          font-family: 'Outfit', sans-serif; font-size: 1.25rem; font-weight: 700;
+          line-height: 1.2; letter-spacing: -0.02em; margin-top: 2.5rem; margin-bottom: 0.5rem; z-index: 2;
+        }
+        .card-desc { font-size: 0.85rem; line-height: 1.4; opacity: 0.8; z-index: 2; margin-top: auto; }
+        .card-icon {
+          margin-top: 2rem; margin-bottom: auto; width: 28px; height: 28px;
+          stroke: var(--ink); stroke-width: var(--border-w); fill: none;
+          stroke-linecap: round; stroke-linejoin: round;
+        }
+        @media (min-width: 450px) {
+          .app-frame { height: 850px !important; max-height: 850px !important; border-radius: 2.5rem !important; border: 8px solid #2A3A35 !important; box-shadow: 0 20px 40px rgba(0,0,0,0.5) !important; }
         }
       `}</style>
 
-      <div className="bg-gray-100 flex items-center justify-center min-h-screen w-full antialiased text-slate-800" style={{ fontFamily: "'Inter', sans-serif" }}>
-        <main className="w-full h-full sm:w-[402px] sm:min-h-[874px] bg-gradient-to-b from-[#dce4f0] via-[#c8d6e5] to-[#b8cce0] relative overflow-hidden sm:rounded-[3rem] sm:shadow-2xl sm:border-[8px] sm:border-gray-900 flex flex-col">
-
-          {/* Hero background image */}
-          <div className="absolute top-0 left-0 w-full h-[55%] z-0">
-            <div
-              className="w-full h-full bg-cover bg-center opacity-40 mix-blend-multiply hero-mask"
-              style={{ backgroundImage: "url('https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=1000&auto=format&fit=crop')" }}
-            />
-            <div className="absolute inset-0 bg-[#d6ebfc]/20 hero-mask" />
-          </div>
+      <div className="harbor-body" style={{ backgroundColor: '#1A1A1A', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+        <main className="app-frame" style={{
+          width: '100%', maxWidth: '400px', height: '100vh',
+          backgroundColor: 'var(--cream)', position: 'relative',
+          overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column',
+        }}>
 
           {/* Header */}
-          <header className="flex justify-between items-center px-6 pt-14 pb-4 relative z-10">
-            <button className="w-10 h-10 flex items-center justify-start text-slate-700 hover:text-slate-900 transition-colors">
-              <i className="ph-fill ph-anchor text-[28px] text-slate-700" />
-            </button>
-
-            <div className="text-[15px] font-medium text-slate-500 tracking-wide">
-              {dateStr}
+          <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem', zIndex: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 20h16M12 20v-8M7 8c2 0 5-3 5-3s3 3 5 3M12 5v3" />
+              </svg>
+              <span className="font-sans" style={{ fontWeight: 800, fontSize: '1.1rem', letterSpacing: '-0.02em' }}>Dock</span>
             </div>
-
-            <Link
-              href="/dashboard"
-              className="w-[38px] h-[38px] rounded-full bg-white/60 backdrop-blur-sm border border-white/80 shadow-sm flex items-center justify-center text-slate-400 hover:bg-white/80 transition-colors"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
+            <div style={{ fontStyle: 'italic', fontSize: '0.9rem', fontWeight: 500 }}>{dateStr}</div>
+            <Link href="/dashboard" style={{
+              width: '32px', height: '32px', border: '1.5px solid var(--ink)', borderRadius: '50%',
+              display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: 'var(--cream)',
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round">
+                <circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 4-7 8-7s8 3 8 7" />
               </svg>
             </Link>
           </header>
 
-          {/* Content */}
-          <div className="flex-1 flex flex-col relative z-10 mt-32">
-
-            {/* Greeting */}
-            <div className="flex flex-col items-center mb-10 px-6">
-              <h1
-                className="text-[34px] text-slate-800 mb-1 tracking-tight"
-                style={{ fontFamily: "'Newsreader', serif" }}
-              >
-                {GREETINGS[timeOfDay]}
+          {/* Hero */}
+          <section style={{
+            position: 'relative', margin: '0 1rem 1rem 1rem', border: '1.5px solid var(--ink)',
+            borderRadius: 'var(--radius-lg)', overflow: 'hidden', backgroundColor: 'var(--mesh-yellow)',
+            minHeight: '280px', display: 'flex', flexDirection: 'column',
+          }}>
+            <div className="hero-bg-mesh" />
+            <div style={{ position: 'relative', zIndex: 3, padding: '2rem 1.5rem', flexGrow: 1 }}>
+              <span className="meta-text" style={{ display: 'block', marginBottom: '1rem' }}>Daily Brief</span>
+              <h1 style={{ fontSize: '2.2rem', fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.03em', marginBottom: '1rem' }}>
+                {GREETINGS[timeOfDay]}<br />Captain.
               </h1>
-              <p className="text-[15px] text-slate-500 font-medium">
-                {SUBTEXTS[timeOfDay]}
-              </p>
+              <p style={{ fontSize: '1.1rem', lineHeight: 1.4, maxWidth: '80%' }}>{WEATHER_TEXT[timeOfDay]}</p>
             </div>
-
-            {/* Action cards */}
-            <div className="px-5 flex flex-col gap-[14px] pb-10">
-
-              {/* Top row: 2 cards */}
-              <div className="flex gap-[14px]">
-                <Link
-                  href="/dashboard/recipes"
-                  className="glass-btn flex-1 rounded-[32px] pt-6 pb-5 px-4 flex flex-col items-center justify-center gap-3 transition-transform"
-                >
-                  <i className="ph-fill ph-lightning text-[28px] text-slate-600" />
-                  <span className="text-[14px] font-medium text-slate-500">Automations</span>
-                </Link>
-
-                <Link
-                  href="/onboarding"
-                  className="glass-btn flex-1 rounded-[32px] pt-6 pb-5 px-4 flex flex-col items-center justify-center gap-3 transition-transform"
-                >
-                  <i className="ph-fill ph-plugs-connected text-[28px] text-slate-600" />
-                  <span className="text-[14px] font-medium text-slate-500">Integrations</span>
-                </Link>
-              </div>
-
-              {/* Bottom row: 3 cards */}
-              <div className="flex gap-[14px]">
-                <Link
-                  href="/dashboard/recipes/gallery"
-                  className="glass-btn flex-1 rounded-[32px] pt-6 pb-5 px-2 flex flex-col items-center justify-center gap-3 transition-transform"
-                >
-                  <i className="ph-fill ph-circuitry text-[26px] text-slate-600" />
-                  <span className="text-[13px] font-medium text-slate-500">Recipes</span>
-                </Link>
-
-                <Link
-                  href="https://t.me/heydeckhandbot?text=/briefing"
-                  className="glass-btn flex-1 rounded-[32px] pt-6 pb-5 px-2 flex flex-col items-center justify-center gap-3 transition-transform"
-                >
-                  <i className="ph-fill ph-envelope text-[26px] text-slate-600" />
-                  <span className="text-[13px] font-medium text-slate-500">Mail</span>
-                </Link>
-
-                <Link
-                  href="https://t.me/heydeckhandbot"
-                  className="glass-btn flex-1 rounded-[32px] pt-6 pb-5 px-2 flex flex-col items-center justify-center gap-3 transition-transform"
-                >
-                  <i className="ph-fill ph-chat-teardrop-text text-[26px] text-slate-600" />
-                  <span className="text-[13px] font-medium text-slate-500 leading-tight text-center">Text Dock</span>
-                </Link>
-              </div>
-
+            <div className="hero-scallop" style={{ position: 'absolute', bottom: '-2px', left: 0, width: '100%', zIndex: 2 }}>
+              <svg viewBox="0 0 400 60" preserveAspectRatio="none">
+                <path d="M0,60 L400,60 L400,20 C370,20 350,45 320,45 C290,45 280,15 250,15 C220,15 200,40 170,40 C140,40 120,5 90,5 C60,5 30,35 0,35 Z" />
+              </svg>
             </div>
-          </div>
+            <Link href="/dashboard/recipes/new" style={{
+              position: 'absolute', bottom: '1.5rem', right: '1.5rem', width: '36px', height: '36px',
+              border: '1.5px solid var(--ink)', borderRadius: '50%', background: 'var(--cream)',
+              display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 4,
+            }}>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--ink)" strokeWidth="2" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </Link>
+          </section>
 
+          {/* Cards */}
+          <section style={{ padding: '0 1rem 2rem 1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            {/* Automations — wide */}
+            <Link href="/dashboard/recipes" className="dock-card" style={{ gridColumn: 'span 2' }}>
+              <div className="badge-num">1</div>
+              <div style={{ position: 'absolute', top: 0, right: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1, overflow: 'hidden' }}>
+                <div className="illust-blob" />
+                <svg style={{ position: 'absolute', right: 10, bottom: 10, width: 100, height: 80 }} viewBox="0 0 100 80" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 60 Q20 50 30 60 T50 60 T70 60 T90 60" opacity="0.5" />
+                  <path d="M0 70 Q15 65 30 70 T60 70 T90 70 T100 65" />
+                  <path d="M0 45 L60 45 L50 70 M20 45 L20 70 M40 45 L40 70" />
+                  <path d="M75 25 L80 15 L85 25 L95 30 L85 35 L80 45 L75 35 L65 30 Z" fill="var(--cream)" stroke="var(--ink)" />
+                </svg>
+              </div>
+              <h2 className="card-title">Automations</h2>
+              <p className="card-desc">Set your workflows adrift. Let the system handle the current.</p>
+            </Link>
+
+            {/* Integrate */}
+            <Link href="/onboarding" className="dock-card">
+              <div className="badge-num">2</div>
+              <svg className="card-icon" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><circle cx="17" cy="17" r="3" /></svg>
+              <h2 className="card-title">Integrate</h2>
+              <p className="card-desc">Connect tools</p>
+            </Link>
+
+            {/* Recipes — gradient */}
+            <Link href="/dashboard/recipes/gallery" className="dock-card card-gradient">
+              <div className="badge-num">3</div>
+              <svg className="card-icon" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
+              <h2 className="card-title">Recipes</h2>
+              <p className="card-desc">Proven logic</p>
+            </Link>
+
+            {/* Mail */}
+            <Link href="https://t.me/heydeckhandbot?text=/briefing" className="dock-card">
+              <div className="badge-num">4</div>
+              <svg className="card-icon" viewBox="0 0 24 24"><path d="M4 7.00005L10.2 11.65C11.2667 12.45 12.7333 12.45 13.8 11.65L20 7" /><rect x="3" y="5" width="18" height="14" rx="2" /></svg>
+              <h2 className="card-title">Mail</h2>
+              <p className="card-desc">Dispatches</p>
+            </Link>
+
+            {/* Texts */}
+            <Link href="https://t.me/heydeckhandbot" className="dock-card">
+              <div className="badge-num">5</div>
+              <svg className="card-icon" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
+              <h2 className="card-title">Texts</h2>
+              <p className="card-desc">Signals</p>
+            </Link>
+          </section>
         </main>
       </div>
     </>
