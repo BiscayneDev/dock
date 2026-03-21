@@ -40,9 +40,9 @@ export default function GalleryPage() {
       </div>
 
       {loading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>{[1, 2, 3, 4].map((i) => <div key={i} className="dock-card" style={{ height: '10rem', opacity: 0.3 }} />)}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>{[1, 2, 3, 4].map((i) => <div key={i} className="dock-card" style={{ height: '10rem', opacity: 0.3 }} />)}</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
           {filtered.map((t) => (
             <div key={t.slug} className="dock-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.25rem' }}>

@@ -30,7 +30,7 @@ export default function DashboardPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem' }}>
 
         {/* Quick links */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.75rem' }}>
           <Link href="/dashboard/recipes" className="dock-card" style={{ alignItems: 'center', padding: '1rem', gap: '0.25rem' }}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
             <span className="meta-text" style={{ marginTop: '0.25rem' }}>Recipes</span>

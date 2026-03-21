@@ -98,7 +98,7 @@ export function HarborShell({ children, title, showBack, backHref = '/harbor' }:
 
       <div className="harbor-shell" style={{ backgroundColor: '#d6dce8', minHeight: '100vh' }}>
         {/* Header */}
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem 1.25rem 0.5rem', maxWidth: '42rem', margin: '0 auto' }}>
+        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem 1.5rem 0.5rem', maxWidth: '56rem', margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             {showBack ? (
               <Link href={backHref} style={{
@@ -136,7 +136,7 @@ export function HarborShell({ children, title, showBack, backHref = '/harbor' }:
         </header>
 
         {/* Content */}
-        <div style={{ maxWidth: '42rem', margin: '0 auto', padding: '0.5rem 1.25rem 2.5rem' }}>
+        <div style={{ maxWidth: '56rem', margin: '0 auto', padding: '0.5rem 1.5rem 2.5rem' }}>
           {children}
         </div>
       </div>
