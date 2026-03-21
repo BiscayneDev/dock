@@ -21,105 +21,12 @@ const GREETINGS: Record<TimeOfDay, string> = {
   night: 'Good night',
 }
 
-const BG_GRADIENTS: Record<TimeOfDay, string> = {
-  morning: 'from-sky-100 via-amber-50 to-blue-50',
-  afternoon: 'from-sky-100 via-cyan-50 to-blue-100',
-  evening: 'from-orange-100 via-rose-50 to-indigo-100',
-  night: 'from-slate-800 via-indigo-900 to-slate-900',
+const SUBTEXTS: Record<TimeOfDay, string> = {
+  morning: 'ready to chart the course',
+  afternoon: 'smooth sailing so far',
+  evening: 'wrapping up the watch',
+  night: 'anchored for the night',
 }
-
-const TEXT_COLORS: Record<TimeOfDay, { primary: string; secondary: string; card: string; cardBorder: string; cardText: string; cardIcon: string }> = {
-  morning: { primary: 'text-slate-800', secondary: 'text-slate-500', card: 'bg-white/70', cardBorder: 'border-slate-200/60', cardText: 'text-slate-600', cardIcon: 'text-slate-700' },
-  afternoon: { primary: 'text-slate-800', secondary: 'text-slate-500', card: 'bg-white/70', cardBorder: 'border-slate-200/60', cardText: 'text-slate-600', cardIcon: 'text-slate-700' },
-  evening: { primary: 'text-slate-800', secondary: 'text-slate-500', card: 'bg-white/60', cardBorder: 'border-slate-200/50', cardText: 'text-slate-600', cardIcon: 'text-slate-700' },
-  night: { primary: 'text-white', secondary: 'text-slate-400', card: 'bg-white/10', cardBorder: 'border-white/10', cardText: 'text-slate-300', cardIcon: 'text-white' },
-}
-
-// SVG harbor illustration that renders inline (no external images needed)
-function HarborIllustration({ timeOfDay }: { timeOfDay: TimeOfDay }) {
-  const isNight = timeOfDay === 'night'
-  const skyColor = isNight ? '#1e293b' : timeOfDay === 'evening' ? '#fcd9b6' : '#c5e8f7'
-  const waterColor = isNight ? '#1e3a5f' : '#a8d8ea'
-  const sandColor = isNight ? '#4a5568' : '#f5e6d0'
-  const sunMoonColor = isNight ? '#e2e8f0' : timeOfDay === 'evening' ? '#f97316' : '#fbbf24'
-
-  return (
-    <svg viewBox="0 0 400 260" className="w-full max-w-sm mx-auto" aria-hidden="true">
-      {/* Sky */}
-      <rect width="400" height="260" fill={skyColor} rx="20" />
-
-      {/* Sun/Moon */}
-      <circle cx={isNight ? 320 : 300} cy={timeOfDay === 'evening' ? 80 : 60} r={isNight ? 20 : 30} fill={sunMoonColor} opacity={isNight ? 0.9 : 0.8} />
-      {isNight && (
-        <>
-          <circle cx="100" cy="40" r="1.5" fill="white" opacity="0.6" />
-          <circle cx="150" cy="25" r="1" fill="white" opacity="0.5" />
-          <circle cx="220" cy="35" r="1.5" fill="white" opacity="0.7" />
-          <circle cx="270" cy="50" r="1" fill="white" opacity="0.4" />
-          <circle cx="60" cy="55" r="1" fill="white" opacity="0.6" />
-        </>
-      )}
-
-      {/* Distant hills */}
-      <path d="M0 160 Q80 100 160 140 Q240 110 320 130 Q360 120 400 140 L400 260 L0 260 Z" fill={isNight ? '#2d3748' : '#b8d4e3'} opacity="0.5" />
-
-      {/* Water */}
-      <rect x="0" y="160" width="400" height="100" fill={waterColor} rx="0" />
-
-      {/* Water shimmer lines */}
-      <line x1="30" y1="180" x2="90" y2="180" stroke="white" strokeWidth="1" opacity="0.3" />
-      <line x1="150" y1="190" x2="220" y2="190" stroke="white" strokeWidth="1" opacity="0.2" />
-      <line x1="280" y1="175" x2="350" y2="175" stroke="white" strokeWidth="1" opacity="0.3" />
-      <line x1="80" y1="200" x2="140" y2="200" stroke="white" strokeWidth="1" opacity="0.2" />
-      <line x1="250" y1="210" x2="310" y2="210" stroke="white" strokeWidth="1" opacity="0.15" />
-
-      {/* Dock/pier */}
-      <rect x="160" y="148" width="80" height="8" fill={isNight ? '#4a5568' : '#c4a882'} rx="2" />
-      <rect x="165" y="156" width="6" height="20" fill={isNight ? '#4a5568' : '#b8956a'} />
-      <rect x="229" y="156" width="6" height="20" fill={isNight ? '#4a5568' : '#b8956a'} />
-
-      {/* Sailboat */}
-      <g transform="translate(200, 120)">
-        {/* Mast */}
-        <line x1="0" y1="-50" x2="0" y2="10" stroke={isNight ? '#a0aec0' : '#8B7355'} strokeWidth="2" />
-        {/* Sail */}
-        <path d="M2 -45 L2 5 L30 5 Z" fill="white" opacity={isNight ? 0.7 : 0.9} />
-        {/* Hull */}
-        <path d="M-20 10 Q-15 25 0 25 Q15 25 20 10 Z" fill={isNight ? '#4a5568' : '#2563eb'} />
-      </g>
-
-      {/* Lighthouse */}
-      <g transform="translate(340, 110)">
-        <rect x="-8" y="0" width="16" height="50" fill="white" rx="2" />
-        <rect x="-8" y="15" width="16" height="8" fill={isNight ? '#e53e3e' : '#ef4444'} />
-        <rect x="-8" y="33" width="16" height="8" fill={isNight ? '#e53e3e' : '#ef4444'} />
-        <path d="M-12 0 L0 -12 L12 0 Z" fill={isNight ? '#e53e3e' : '#ef4444'} />
-        {/* Light beam */}
-        {isNight && (
-          <path d="M0 -8 L-40 -30 L-30 -25 Z" fill="#fbbf24" opacity="0.3" />
-        )}
-      </g>
-
-      {/* Beach/sand */}
-      <path d="M0 220 Q100 210 200 215 Q300 210 400 220 L400 260 L0 260 Z" fill={sandColor} opacity="0.6" />
-
-      {/* Anchor icon in sand */}
-      <g transform="translate(60, 230)" opacity="0.3">
-        <circle cx="0" cy="-8" r="4" fill="none" stroke={isNight ? 'white' : '#64748b'} strokeWidth="1.5" />
-        <line x1="0" y1="-4" x2="0" y2="8" stroke={isNight ? 'white' : '#64748b'} strokeWidth="1.5" />
-        <path d="M-6 5 Q0 12 6 5" fill="none" stroke={isNight ? 'white' : '#64748b'} strokeWidth="1.5" />
-      </g>
-    </svg>
-  )
-}
-
-const QUICK_ACTIONS = [
-  { icon: '🤖', label: 'Automations', href: '/dashboard/recipes', span: 1 },
-  { icon: '🔌', label: 'Integrations', href: '/onboarding', span: 1 },
-  { icon: '📋', label: 'Recipes', href: '/dashboard/recipes/gallery', span: 1 },
-  { icon: '📧', label: 'Mail', href: 'https://t.me/heydeckhandbot?text=/briefing', span: 1 },
-  { icon: '💬', label: 'Text Dock', href: 'https://t.me/heydeckhandbot', span: 1 },
-]
 
 export default function HarborHome() {
   const router = useRouter()
@@ -135,7 +42,6 @@ export default function HarborHome() {
       day: 'numeric',
     }))
 
-    // Check if user is authenticated
     fetch('/api/recipes', { credentials: 'include' })
       .then((res) => {
         if (res.ok) {
@@ -148,76 +54,144 @@ export default function HarborHome() {
   }, [router])
 
   if (authed === null) {
-    return <div className="min-h-screen bg-gradient-to-b from-sky-100 to-blue-50" />
+    return <div className="min-h-screen bg-gradient-to-b from-[#dce4f0] via-[#c8d6e5] to-[#b8cce0]" />
   }
 
-  const colors = TEXT_COLORS[timeOfDay]
-
   return (
-    <div className={`min-h-screen bg-gradient-to-b ${BG_GRADIENTS[timeOfDay]} transition-colors duration-1000`}>
-      {/* Top bar */}
-      <header className="flex items-center justify-between px-5 pt-4 pb-2">
-        <span className={`text-lg ${colors.primary}`}>⚓</span>
-        <span className={`text-sm font-medium ${colors.secondary}`}>{dateStr}</span>
-        <Link href="/dashboard" className={`${colors.secondary} hover:opacity-70 transition-opacity`}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
-          </svg>
-        </Link>
-      </header>
+    <>
+      {/* Fonts */}
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link
+        href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Inter:wght@400;500&display=swap"
+        rel="stylesheet"
+      />
+      {/* Phosphor Icons */}
+      <script src="https://unpkg.com/@phosphor-icons/web" async />
 
-      {/* Hero illustration */}
-      <div className="px-6 py-4">
-        <HarborIllustration timeOfDay={timeOfDay} />
-      </div>
+      <style>{`
+        .hero-mask {
+          -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 100%);
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 100%);
+        }
+        .glass-btn {
+          background: rgba(255, 255, 255, 0.45);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border: 1px solid rgba(255, 255, 255, 0.6);
+          box-shadow: 0 4px 24px -6px rgba(0, 0, 0, 0.03), inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+        }
+        .glass-btn:hover {
+          background: rgba(255, 255, 255, 0.55);
+        }
+        .glass-btn:active {
+          transform: scale(0.98);
+        }
+      `}</style>
 
-      {/* Greeting */}
-      <div className="text-center px-6 pb-2">
-        <h1 className={`text-2xl font-semibold tracking-tight ${colors.primary}`}>
-          {GREETINGS[timeOfDay]}
-        </h1>
-        <p className={`mt-1 text-sm ${colors.secondary}`}>
-          {timeOfDay === 'morning' && 'ready to chart the course'}
-          {timeOfDay === 'afternoon' && 'smooth sailing so far'}
-          {timeOfDay === 'evening' && 'wrapping up the watch'}
-          {timeOfDay === 'night' && 'anchored for the night'}
-        </p>
-      </div>
+      <div className="bg-gray-100 flex items-center justify-center min-h-screen w-full antialiased text-slate-800" style={{ fontFamily: "'Inter', sans-serif" }}>
+        <main className="w-full h-full sm:w-[402px] sm:min-h-[874px] bg-gradient-to-b from-[#dce4f0] via-[#c8d6e5] to-[#b8cce0] relative overflow-hidden sm:rounded-[3rem] sm:shadow-2xl sm:border-[8px] sm:border-gray-900 flex flex-col">
 
-      {/* Quick action cards */}
-      <div className="px-5 pt-4 pb-8">
-        {/* Top row: 2 cards */}
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          {QUICK_ACTIONS.slice(0, 2).map((action) => (
+          {/* Hero background image */}
+          <div className="absolute top-0 left-0 w-full h-[55%] z-0">
+            <div
+              className="w-full h-full bg-cover bg-center opacity-40 mix-blend-multiply hero-mask"
+              style={{ backgroundImage: "url('https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=1000&auto=format&fit=crop')" }}
+            />
+            <div className="absolute inset-0 bg-[#d6ebfc]/20 hero-mask" />
+          </div>
+
+          {/* Header */}
+          <header className="flex justify-between items-center px-6 pt-14 pb-4 relative z-10">
+            <button className="w-10 h-10 flex items-center justify-start text-slate-700 hover:text-slate-900 transition-colors">
+              <i className="ph-fill ph-anchor text-[28px] text-slate-700" />
+            </button>
+
+            <div className="text-[15px] font-medium text-slate-500 tracking-wide">
+              {dateStr}
+            </div>
+
             <Link
-              key={action.label}
-              href={action.href}
-              className={`flex flex-col items-center justify-center rounded-2xl border ${colors.card} ${colors.cardBorder} backdrop-blur-sm p-5 transition-all active:scale-95 hover:shadow-md`}
+              href="/dashboard"
+              className="w-[38px] h-[38px] rounded-full bg-white/60 backdrop-blur-sm border border-white/80 shadow-sm flex items-center justify-center text-slate-400 hover:bg-white/80 transition-colors"
             >
-              <span className={`text-2xl mb-1.5 ${colors.cardIcon}`}>{action.icon}</span>
-              <span className={`text-sm font-medium ${colors.cardText}`}>{action.label}</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
             </Link>
-          ))}
-        </div>
+          </header>
 
-        {/* Bottom row: 3 cards */}
-        <div className="grid grid-cols-3 gap-3">
-          {QUICK_ACTIONS.slice(2).map((action) => (
-            <Link
-              key={action.label}
-              href={action.href}
-              className={`flex flex-col items-center justify-center rounded-2xl border ${colors.card} ${colors.card} ${colors.cardBorder} backdrop-blur-sm p-4 transition-all active:scale-95 hover:shadow-md`}
-            >
-              <span className={`text-xl mb-1 ${colors.cardIcon}`}>{action.icon}</span>
-              <span className={`text-xs font-medium ${colors.cardText}`}>{action.label}</span>
-            </Link>
-          ))}
-        </div>
+          {/* Content */}
+          <div className="flex-1 flex flex-col relative z-10 mt-32">
+
+            {/* Greeting */}
+            <div className="flex flex-col items-center mb-10 px-6">
+              <h1
+                className="text-[34px] text-slate-800 mb-1 tracking-tight"
+                style={{ fontFamily: "'Newsreader', serif" }}
+              >
+                {GREETINGS[timeOfDay]}
+              </h1>
+              <p className="text-[15px] text-slate-500 font-medium">
+                {SUBTEXTS[timeOfDay]}
+              </p>
+            </div>
+
+            {/* Action cards */}
+            <div className="px-5 flex flex-col gap-[14px] pb-10">
+
+              {/* Top row: 2 cards */}
+              <div className="flex gap-[14px]">
+                <Link
+                  href="/dashboard/recipes"
+                  className="glass-btn flex-1 rounded-[32px] pt-6 pb-5 px-4 flex flex-col items-center justify-center gap-3 transition-transform"
+                >
+                  <i className="ph-fill ph-lightning text-[28px] text-slate-600" />
+                  <span className="text-[14px] font-medium text-slate-500">Automations</span>
+                </Link>
+
+                <Link
+                  href="/onboarding"
+                  className="glass-btn flex-1 rounded-[32px] pt-6 pb-5 px-4 flex flex-col items-center justify-center gap-3 transition-transform"
+                >
+                  <i className="ph-fill ph-plugs-connected text-[28px] text-slate-600" />
+                  <span className="text-[14px] font-medium text-slate-500">Integrations</span>
+                </Link>
+              </div>
+
+              {/* Bottom row: 3 cards */}
+              <div className="flex gap-[14px]">
+                <Link
+                  href="/dashboard/recipes/gallery"
+                  className="glass-btn flex-1 rounded-[32px] pt-6 pb-5 px-2 flex flex-col items-center justify-center gap-3 transition-transform"
+                >
+                  <i className="ph-fill ph-circuitry text-[26px] text-slate-600" />
+                  <span className="text-[13px] font-medium text-slate-500">Recipes</span>
+                </Link>
+
+                <Link
+                  href="https://t.me/heydeckhandbot?text=/briefing"
+                  className="glass-btn flex-1 rounded-[32px] pt-6 pb-5 px-2 flex flex-col items-center justify-center gap-3 transition-transform"
+                >
+                  <i className="ph-fill ph-envelope text-[26px] text-slate-600" />
+                  <span className="text-[13px] font-medium text-slate-500">Mail</span>
+                </Link>
+
+                <Link
+                  href="https://t.me/heydeckhandbot"
+                  className="glass-btn flex-1 rounded-[32px] pt-6 pb-5 px-2 flex flex-col items-center justify-center gap-3 transition-transform"
+                >
+                  <i className="ph-fill ph-chat-teardrop-text text-[26px] text-slate-600" />
+                  <span className="text-[13px] font-medium text-slate-500 leading-tight text-center">Text Dock</span>
+                </Link>
+              </div>
+
+            </div>
+          </div>
+
+        </main>
       </div>
-
-      {/* Bottom spacer for mobile browsers */}
-      <div className="h-8" />
-    </div>
+    </>
   )
 }
