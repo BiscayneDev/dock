@@ -38,5 +38,5 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   await setSession(user.id as string, user.telegram_id as number)
 
-  return NextResponse.redirect(`${appUrl}/onboarding`)
+  return NextResponse.redirect(`${appUrl}/harbor`)
 }
