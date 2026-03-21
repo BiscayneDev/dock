@@ -1,4 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server'
+import { logger } from '@/lib/logger'
 import { runAgentLoop } from '@/lib/llm/agent-loop'
 import { buildSystemPrompt } from './system-prompt'
 import { fetchConversationHistory, persistMessage } from './memory'
@@ -41,10 +42,26 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
 async function handleMessage(message: TelegramMessage): Promise<void> {
   const chatId = message.chat.id
   const telegramId = message.from?.id ?? chatId
-  let text = message.text ?? ''
+  const text = message.text ?? ''
 
+  try {
+    await handleMessageInner(chatId, telegramId, text, message)
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err)
+    logger.error('handleMessage failed', { chatId, error: errorMsg })
+    try {
+      await sendMessage({ chatId, text: 'something went wrong. try again in a sec.' })
+    } catch {
+      // Can't send error message
+    }
+  }
+}
+
+async function handleMessageInner(chatId: number, telegramId: number, initialText: string, message: TelegramMessage): Promise<void> {
   // Send typing indicator
   await sendChatAction(chatId)
+
+  let text = initialText
 
   // Handle voice messages — transcribe before processing
   if (message.voice && !text) {

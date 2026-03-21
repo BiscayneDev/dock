@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { after } from 'next/server'
 import { TelegramUpdateSchema } from '@/lib/telegram/types'
 import { handleTelegramUpdate } from '@/lib/orchestrator/index'
 import { isRateLimited } from '@/lib/rate-limit'
@@ -36,19 +37,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Rate limited' }, { status: 429 })
   }
 
-  // Process update asynchronously to respond within 5s
-  const processing = handleTelegramUpdate(parsed.data).catch((err) => {
-    const message = err instanceof Error ? err.message : String(err)
-    logger.error('Webhook processing error', { error: message })
-  })
+  // Use Next.js after() to process in the background after response is sent
+  const update = parsed.data
+  after(async () => {
+    try {
+      await handleTelegramUpdate(update)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      logger.error('Webhook processing error', { error: message })
 
-  // If running on Vercel with waitUntil support, use it
-  const waitUntil = (request as unknown as { waitUntil?: (p: Promise<unknown>) => void }).waitUntil
-  if (waitUntil) {
-    waitUntil(processing)
-  } else {
-    await processing
-  }
+      // Try to notify the user of the error
+      const chatId = update.message?.chat.id ?? update.callback_query?.message?.chat.id
+      if (chatId) {
+        try {
+          const { sendMessage } = await import('@/lib/telegram/client')
+          await sendMessage({ chatId, text: 'something went wrong on my end. try again in a sec.' })
+        } catch {
+          // Can't even send error message — silently fail
+        }
+      }
+    }
+  })
 
   return NextResponse.json({ ok: true })
 }
