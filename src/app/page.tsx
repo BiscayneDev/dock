@@ -105,7 +105,7 @@ export default function LandingPage() {
                 fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.9rem',
                 textDecoration: 'none',
               }}>
-                Set up integrations
+                Sign in
               </Link>
             </div>
           </div>

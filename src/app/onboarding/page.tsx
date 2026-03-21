@@ -3,7 +3,6 @@
 import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { HarborShell } from '@/components/HarborShell'
-import { TelegramLoginButton } from '@/components/TelegramLoginButton'
 
 interface ConnectedIntegrations { google: boolean; notion: boolean; github: boolean; openwallet: boolean }
 
@@ -45,13 +44,6 @@ function OnboardingPage() {
 
   useEffect(() => { checkIntegrations() }, [checkIntegrations])
 
-  const handleTelegramAuth = async (data: { id: number; first_name: string; last_name?: string; username?: string; photo_url?: string; auth_date: number; hash: string }) => {
-    try {
-      const res = await fetch('/api/auth/telegram', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), credentials: 'include' })
-      if (res.ok) { setAuthenticated(true); await checkIntegrations() }
-    } catch { /* Failed */ }
-  }
-
   const connectOWS = async () => {
     setOwsSaving(true); setOwsError(null)
     try {
@@ -68,8 +60,6 @@ function OnboardingPage() {
 
   return (
     <HarborShell title="Welcome aboard" showBack backHref="/harbor">
-      <p style={{ opacity: 0.6, marginBottom: '1.25rem', fontSize: '0.9rem' }}>Connect your services so Dock can manage them.</p>
-
       {justConnected && (
         <div className="dock-card" style={{ padding: '0.75rem 1rem', marginBottom: '0.75rem', flexDirection: 'row', alignItems: 'center', gap: '0.5rem' }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--mesh-mint)" strokeWidth="2.5" strokeLinecap="round"><path d="M20 6L9 17l-5-5" /></svg>
@@ -80,15 +70,39 @@ function OnboardingPage() {
       )}
 
       {!authenticated ? (
-        <div className="dock-card" style={{ padding: '2rem', alignItems: 'center' }}>
-          <p style={{ marginBottom: '1rem' }}>Sign in with Telegram to get started</p>
-          <TelegramLoginButton botName="heydeckhandbot" onAuth={handleTelegramAuth} />
-          <p style={{ marginTop: '1.5rem', fontSize: '0.8rem', opacity: 0.5 }}>
-            Or send <strong>/start</strong> to <a href="https://t.me/heydeckhandbot" style={{ fontWeight: 700 }}>@heydeckhandbot</a>
-          </p>
+        <div className="dock-card" style={{ padding: '2rem 1.5rem', alignItems: 'center', textAlign: 'center' }}>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '1.25rem', opacity: 0.6 }}>
+            <path d="M5 21h14M12 21v-12M8 6c1.5 0 4-3 4-3s2.5 3 4 3" />
+          </svg>
+
+          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: '1.3rem', marginBottom: '0.75rem', letterSpacing: '-0.02em' }}>
+            Get started with Dock
+          </h2>
+
+          <div style={{ textAlign: 'left', margin: '0.75rem 0 1.5rem', fontSize: '0.9rem', lineHeight: 1.7, opacity: 0.7 }}>
+            <p style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.5rem' }}>
+              <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, opacity: 1 }}>1.</span>
+              Open <strong>@heydeckhandbot</strong> in Telegram
+            </p>
+            <p style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.5rem' }}>
+              <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, opacity: 1 }}>2.</span>
+              Send <strong>/start</strong>
+            </p>
+            <p style={{ display: 'flex', gap: '0.75rem' }}>
+              <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, opacity: 1 }}>3.</span>
+              Click the sign-in link you receive
+            </p>
+          </div>
+
+          <a href="https://t.me/heydeckhandbot" className="dock-btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem', fontSize: '0.9rem' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--cream)" stroke="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8l-1.72 8.13c-.13.58-.47.72-.95.45l-2.62-1.93-1.27 1.22c-.14.14-.26.26-.52.26l.18-2.65 4.77-4.31c.21-.18-.04-.29-.32-.1l-5.9 3.71-2.53-.79c-.55-.17-.56-.55.12-.82l9.9-3.82c.46-.17.86.11.7.81z" /></svg>
+            Open in Telegram
+          </a>
         </div>
       ) : (
         <>
+          <p style={{ opacity: 0.6, marginBottom: '1rem', fontSize: '0.9rem' }}>Connect your services so Dock can manage them.</p>
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {INTEGRATIONS.map((int) => {
               const connected = integrations[int.key as keyof ConnectedIntegrations]
