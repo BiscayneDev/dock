@@ -2,16 +2,12 @@
 
 import { useCallback, useEffect, useState, use } from 'react'
 import { useRouter } from 'next/navigation'
-import { NavBar } from '@/components/NavBar'
+import { HarborShell } from '@/components/HarborShell'
 
 interface RecipeData {
-  name: string
-  description: string
-  instructions: string
-  trigger_type: string
-  trigger_config: Record<string, unknown>
-  enabled: boolean
-  notify_on_run: boolean
+  name: string; description: string; instructions: string
+  trigger_type: string; trigger_config: Record<string, unknown>
+  enabled: boolean; notify_on_run: boolean
 }
 
 export default function EditRecipePage({ params }: { params: Promise<{ id: string }> }) {
@@ -27,197 +23,87 @@ export default function EditRecipePage({ params }: { params: Promise<{ id: strin
       if (res.ok) {
         const data = await res.json()
         setForm({
-          name: data.recipe.name,
-          description: data.recipe.description ?? '',
-          instructions: data.recipe.instructions,
-          trigger_type: data.recipe.trigger_type,
-          trigger_config: data.recipe.trigger_config,
-          enabled: data.recipe.enabled,
+          name: data.recipe.name, description: data.recipe.description ?? '',
+          instructions: data.recipe.instructions, trigger_type: data.recipe.trigger_type,
+          trigger_config: data.recipe.trigger_config, enabled: data.recipe.enabled,
           notify_on_run: data.recipe.notify_on_run,
         })
       }
-    } catch {
-      // Failed
-    } finally {
-      setLoading(false)
-    }
+    } catch { /* Failed */ } finally { setLoading(false) }
   }, [id])
 
-  useEffect(() => {
-    loadRecipe()
-  }, [loadRecipe])
+  useEffect(() => { loadRecipe() }, [loadRecipe])
 
-  const updateForm = (updates: Partial<RecipeData>) => {
-    if (!form) return
-    setForm({ ...form, ...updates })
-  }
-
-  const updateConfig = (key: string, value: unknown) => {
-    if (!form) return
-    setForm({
-      ...form,
-      trigger_config: { ...form.trigger_config, [key]: value },
-    })
-  }
+  const updateForm = (updates: Partial<RecipeData>) => { if (form) setForm({ ...form, ...updates }) }
 
   const saveRecipe = async () => {
     if (!form) return
     setSaving(true)
     try {
       const res = await fetch(`/api/recipes/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-        credentials: 'include',
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form), credentials: 'include',
       })
-      if (res.ok) {
-        router.push(`/dashboard/recipes/${id}`)
-      }
-    } catch {
-      // Failed
-    } finally {
-      setSaving(false)
-    }
+      if (res.ok) router.push(`/dashboard/recipes/${id}`)
+    } catch { /* Failed */ } finally { setSaving(false) }
   }
 
   if (loading || !form) {
-    return (
-      <>
-        <NavBar showDashboard />
-        <main className="mx-auto max-w-2xl px-4 py-20 text-center">
-          <p className="text-zinc-400">Loading...</p>
-        </main>
-      </>
-    )
+    return <HarborShell title="Edit Recipe" showBack backHref={`/dashboard/recipes/${id}`}><div className="pt-20 text-center text-slate-400">Loading...</div></HarborShell>
   }
 
   return (
-    <>
-      <NavBar showDashboard />
-      <main className="mx-auto max-w-2xl px-4 py-8">
-        <h1 className="text-2xl font-bold text-zinc-100 mb-6">Edit Recipe</h1>
-
-        <div className="space-y-6">
-          {/* Name */}
+    <HarborShell title="Edit Recipe" showBack backHref={`/dashboard/recipes/${id}`}>
+      <div className="space-y-4 mt-4">
+        <div className="glass-card rounded-[20px] p-5 space-y-4">
           <div>
-            <label className="block text-sm text-zinc-400 mb-1">Name</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => updateForm({ name: e.target.value })}
-              className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-100"
-            />
+            <label className="text-[12px] text-slate-400 uppercase tracking-wide">Name</label>
+            <input type="text" value={form.name} onChange={(e) => updateForm({ name: e.target.value })}
+              className="glass-input w-full rounded-xl px-3 py-2.5 text-[14px] text-slate-700 mt-1" />
           </div>
-
-          {/* Description */}
           <div>
-            <label className="block text-sm text-zinc-400 mb-1">Description</label>
-            <input
-              type="text"
-              value={form.description}
-              onChange={(e) => updateForm({ description: e.target.value })}
-              className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-100"
-            />
+            <label className="text-[12px] text-slate-400 uppercase tracking-wide">Description</label>
+            <input type="text" value={form.description} onChange={(e) => updateForm({ description: e.target.value })}
+              className="glass-input w-full rounded-xl px-3 py-2.5 text-[14px] text-slate-700 mt-1" />
           </div>
-
-          {/* Trigger type (read-only) */}
           <div>
-            <label className="block text-sm text-zinc-400 mb-1">Trigger type</label>
-            <p className="text-zinc-200">{form.trigger_type}</p>
+            <label className="text-[12px] text-slate-400 uppercase tracking-wide">Instructions</label>
+            <textarea value={form.instructions} onChange={(e) => updateForm({ instructions: e.target.value })} rows={5}
+              className="glass-input w-full rounded-xl px-3 py-2.5 text-[14px] text-slate-700 mt-1 resize-y" />
           </div>
-
-          {/* Trigger config */}
           <div>
-            <label className="block text-sm text-zinc-400 mb-1">Trigger configuration</label>
-            {form.trigger_type === 'schedule' && (
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  value={(form.trigger_config.cron as string) ?? ''}
-                  onChange={(e) => updateConfig('cron', e.target.value)}
-                  placeholder="0 9 * * 1-5"
-                  className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-100 font-mono text-sm"
-                />
-                <p className="text-xs text-zinc-500">Standard 5-part cron expression</p>
-              </div>
-            )}
-            {form.trigger_type === 'keyword' && (
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  value={(form.trigger_config.phrase as string) ?? ''}
-                  onChange={(e) => updateConfig('phrase', e.target.value)}
-                  className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-100"
-                />
-              </div>
-            )}
-            {!['schedule', 'keyword', 'manual'].includes(form.trigger_type) && (
-              <textarea
-                value={JSON.stringify(form.trigger_config, null, 2)}
-                onChange={(e) => {
-                  try {
-                    updateForm({ trigger_config: JSON.parse(e.target.value) })
-                  } catch {
-                    // Invalid JSON — ignore
-                  }
-                }}
-                rows={4}
-                className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-100 font-mono text-sm"
-              />
-            )}
-          </div>
-
-          {/* Instructions */}
-          <div>
-            <label className="block text-sm text-zinc-400 mb-1">Instructions</label>
-            <textarea
-              value={form.instructions}
-              onChange={(e) => updateForm({ instructions: e.target.value })}
-              rows={6}
-              className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-100 resize-y"
-            />
-          </div>
-
-          {/* Settings */}
-          <div className="space-y-3">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.enabled}
-                onChange={(e) => updateForm({ enabled: e.target.checked })}
-                className="rounded border-zinc-600"
-              />
-              <span className="text-zinc-300">Enabled</span>
-            </label>
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.notify_on_run}
-                onChange={(e) => updateForm({ notify_on_run: e.target.checked })}
-                className="rounded border-zinc-600"
-              />
-              <span className="text-zinc-300">Notify after each run</span>
-            </label>
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-2 pt-4">
-            <button
-              onClick={() => router.back()}
-              className="rounded-md border border-zinc-700 px-4 py-2 text-sm text-zinc-300"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={saveRecipe}
-              disabled={saving}
-              className="rounded-md bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-500 disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
+            <label className="text-[12px] text-slate-400 uppercase tracking-wide">Trigger Type</label>
+            <p className="text-[14px] text-slate-600 mt-1">{form.trigger_type}</p>
           </div>
         </div>
-      </main>
-    </>
+
+        <div className="glass-card rounded-[20px] p-5 space-y-4">
+          <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-[14px] text-slate-600">Enabled</span>
+            <button onClick={() => updateForm({ enabled: !form.enabled })}
+              className={`relative w-11 h-6 rounded-full transition-colors ${form.enabled ? 'bg-emerald-400' : 'bg-slate-300'}`}>
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.enabled ? 'translate-x-5' : ''}`} />
+            </button>
+          </label>
+          <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-[14px] text-slate-600">Notify after each run</span>
+            <button onClick={() => updateForm({ notify_on_run: !form.notify_on_run })}
+              className={`relative w-11 h-6 rounded-full transition-colors ${form.notify_on_run ? 'bg-emerald-400' : 'bg-slate-300'}`}>
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.notify_on_run ? 'translate-x-5' : ''}`} />
+            </button>
+          </label>
+        </div>
+
+        <div className="flex gap-2">
+          <button onClick={() => router.back()} className="flex-1 py-2.5 rounded-full bg-white/50 border border-white/70 text-[13px] font-medium text-slate-500">
+            Cancel
+          </button>
+          <button onClick={saveRecipe} disabled={saving}
+            className="flex-1 py-2.5 rounded-full bg-slate-800 text-white text-[13px] font-medium hover:bg-slate-700 disabled:opacity-50 transition-colors">
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </HarborShell>
   )
 }

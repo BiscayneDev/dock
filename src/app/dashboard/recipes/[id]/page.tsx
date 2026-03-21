@@ -2,38 +2,26 @@
 
 import { useCallback, useEffect, useState, use } from 'react'
 import Link from 'next/link'
-import { NavBar } from '@/components/NavBar'
+import { HarborShell } from '@/components/HarborShell'
 
 interface Recipe {
-  id: string
-  name: string
-  description: string | null
-  instructions: string
-  trigger_type: string
-  trigger_config: Record<string, unknown>
-  enabled: boolean
-  notify_on_run: boolean
-  last_run_at: string | null
-  run_count: number
-  created_at: string
+  id: string; name: string; description: string | null; instructions: string
+  trigger_type: string; trigger_config: Record<string, unknown>
+  enabled: boolean; notify_on_run: boolean; last_run_at: string | null
+  run_count: number; created_at: string
 }
 
 interface RecipeRun {
-  id: string
-  status: string
-  triggered_at: string
-  completed_at: string | null
-  output: string | null
-  error: string | null
-  duration_ms: number | null
+  id: string; status: string; triggered_at: string; completed_at: string | null
+  output: string | null; error: string | null; duration_ms: number | null
 }
 
-const STATUS_ICONS: Record<string, string> = {
-  success: '✅',
-  failed: '❌',
-  skipped: '⏭️',
-  running: '⏳',
-  test: '🧪',
+const STATUS_STYLES: Record<string, { icon: string; color: string }> = {
+  success: { icon: 'ph-check-circle', color: 'text-emerald-500' },
+  failed: { icon: 'ph-x-circle', color: 'text-red-500' },
+  skipped: { icon: 'ph-skip-forward', color: 'text-slate-400' },
+  running: { icon: 'ph-spinner', color: 'text-blue-500' },
+  test: { icon: 'ph-flask', color: 'text-purple-500' },
 }
 
 export default function RecipeDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -49,155 +37,80 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
         fetch(`/api/recipes/${id}`, { credentials: 'include' }),
         fetch(`/api/recipes/${id}/runs`, { credentials: 'include' }),
       ])
-
-      if (recipeRes.ok) {
-        const data = await recipeRes.json()
-        setRecipe(data.recipe)
-      }
-      if (runsRes.ok) {
-        const data = await runsRes.json()
-        setRuns(data.runs ?? [])
-      }
-    } catch {
-      // Failed
-    } finally {
-      setLoading(false)
-    }
+      if (recipeRes.ok) { setRecipe((await recipeRes.json()).recipe) }
+      if (runsRes.ok) { setRuns((await runsRes.json()).runs ?? []) }
+    } catch { /* Failed */ } finally { setLoading(false) }
   }, [id])
 
-  useEffect(() => {
-    loadData()
-  }, [loadData])
+  useEffect(() => { loadData() }, [loadData])
 
   const runNow = async () => {
-    await fetch(`/api/recipes/${id}/run`, {
-      method: 'POST',
-      credentials: 'include',
-    })
-    // Reload after a brief delay
+    await fetch(`/api/recipes/${id}/run`, { method: 'POST', credentials: 'include' })
     setTimeout(() => loadData(), 2000)
   }
 
-  if (loading) {
-    return (
-      <>
-        <NavBar showDashboard />
-        <main className="mx-auto max-w-3xl px-4 py-20 text-center">
-          <p className="text-zinc-400">Loading...</p>
-        </main>
-      </>
-    )
-  }
-
-  if (!recipe) {
-    return (
-      <>
-        <NavBar showDashboard />
-        <main className="mx-auto max-w-3xl px-4 py-20 text-center">
-          <p className="text-zinc-400">Recipe not found.</p>
-        </main>
-      </>
-    )
+  if (loading || !recipe) {
+    return <HarborShell title="Recipe" showBack backHref="/dashboard/recipes"><div className="pt-20 text-center text-slate-400">{loading ? 'Loading...' : 'Not found.'}</div></HarborShell>
   }
 
   return (
-    <>
-      <NavBar showDashboard />
-      <main className="mx-auto max-w-3xl px-4 py-8">
-        <div className="flex items-start justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-100">{recipe.name}</h1>
-            {recipe.description && (
-              <p className="mt-1 text-zinc-400">{recipe.description}</p>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={runNow}
-              className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:border-zinc-500"
-            >
-              ▶️ Run Now
-            </button>
-            <Link
-              href={`/dashboard/recipes/${id}/edit`}
-              className="rounded-md bg-cyan-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-cyan-500"
-            >
-              Edit
-            </Link>
-          </div>
-        </div>
+    <HarborShell title={recipe.name} showBack backHref="/dashboard/recipes">
+      <div className="flex gap-2 mt-2 mb-5">
+        <button onClick={runNow} className="flex-1 py-2.5 rounded-full bg-white/50 border border-white/70 text-[13px] font-medium text-slate-500 hover:bg-white/70 transition-colors">
+          <i className="ph-fill ph-play text-[14px] mr-1" />Run Now
+        </button>
+        <Link href={`/dashboard/recipes/${id}/edit`} className="flex-1 py-2.5 rounded-full bg-slate-800 text-center text-[13px] font-medium text-white hover:bg-slate-700 transition-colors">
+          Edit
+        </Link>
+      </div>
 
-        {/* Config */}
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 space-y-3 mb-8">
-          <div className="flex gap-8">
-            <div>
-              <p className="text-xs text-zinc-500">Trigger</p>
-              <p className="text-zinc-200">{recipe.trigger_type}</p>
-            </div>
-            <div>
-              <p className="text-xs text-zinc-500">Status</p>
-              <p className={recipe.enabled ? 'text-emerald-400' : 'text-zinc-500'}>
-                {recipe.enabled ? 'Active' : 'Disabled'}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-zinc-500">Total runs</p>
-              <p className="text-zinc-200">{recipe.run_count}</p>
-            </div>
-          </div>
-          <div>
-            <p className="text-xs text-zinc-500">Instructions</p>
-            <p className="text-sm text-zinc-300 mt-1">{recipe.instructions}</p>
-          </div>
-          <div>
-            <p className="text-xs text-zinc-500">Config</p>
-            <pre className="text-xs text-zinc-400 mt-1">
-              {JSON.stringify(recipe.trigger_config, null, 2)}
-            </pre>
-          </div>
+      {/* Config card */}
+      <div className="glass-card rounded-[20px] p-5 mb-5 space-y-3">
+        <div className="flex gap-6">
+          <div><p className="text-[11px] text-slate-400 uppercase tracking-wide">Trigger</p><p className="text-[14px] text-slate-700">{recipe.trigger_type}</p></div>
+          <div><p className="text-[11px] text-slate-400 uppercase tracking-wide">Status</p><p className={`text-[14px] ${recipe.enabled ? 'text-emerald-500' : 'text-slate-400'}`}>{recipe.enabled ? 'Active' : 'Disabled'}</p></div>
+          <div><p className="text-[11px] text-slate-400 uppercase tracking-wide">Runs</p><p className="text-[14px] text-slate-700">{recipe.run_count}</p></div>
         </div>
+        <div>
+          <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1">Instructions</p>
+          <p className="text-[13px] text-slate-600">{recipe.instructions}</p>
+        </div>
+      </div>
 
-        {/* Run history */}
-        <h2 className="text-lg font-semibold text-zinc-200 mb-3">Run History</h2>
-        {runs.length === 0 ? (
-          <p className="text-zinc-500 text-sm">No runs yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {runs.map((run) => (
-              <div
-                key={run.id}
-                className="rounded-lg border border-zinc-800 bg-zinc-900/50"
-              >
+      {/* Run history */}
+      <h2 style={{ fontFamily: "'Newsreader', serif", fontSize: '18px' }} className="text-slate-700 mb-3">Run History</h2>
+      {runs.length === 0 ? (
+        <p className="text-[13px] text-slate-400">No runs yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {runs.map((run) => {
+            const style = STATUS_STYLES[run.status] ?? { icon: 'ph-question', color: 'text-slate-400' }
+            return (
+              <div key={run.id} className="glass-card rounded-[16px]">
                 <button
                   onClick={() => setExpandedRun(expandedRun === run.id ? null : run.id)}
                   className="w-full flex items-center justify-between p-3 text-left"
                 >
-                  <div className="flex items-center gap-3">
-                    <span>{STATUS_ICONS[run.status] ?? '❓'}</span>
-                    <span className="text-sm text-zinc-300">
-                      {new Date(run.triggered_at).toLocaleString()}
-                    </span>
+                  <div className="flex items-center gap-2">
+                    <i className={`ph-fill ${style.icon} text-[18px] ${style.color}`} />
+                    <span className="text-[13px] text-slate-600">{new Date(run.triggered_at).toLocaleString()}</span>
                   </div>
-                  <div className="flex items-center gap-3 text-sm text-zinc-500">
+                  <div className="flex items-center gap-2 text-[12px] text-slate-400">
                     {run.duration_ms && <span>{(run.duration_ms / 1000).toFixed(1)}s</span>}
-                    <span>{expandedRun === run.id ? '▲' : '▼'}</span>
+                    <i className={`ph ph-caret-${expandedRun === run.id ? 'up' : 'down'} text-[14px]`} />
                   </div>
                 </button>
                 {expandedRun === run.id && (
-                  <div className="border-t border-zinc-800 p-3">
-                    {run.output && (
-                      <pre className="text-sm text-zinc-300 whitespace-pre-wrap">{run.output}</pre>
-                    )}
-                    {run.error && (
-                      <pre className="text-sm text-red-400 whitespace-pre-wrap">{run.error}</pre>
-                    )}
+                  <div className="border-t border-white/30 p-3">
+                    {run.output && <pre className="text-[12px] text-slate-600 whitespace-pre-wrap" style={{ fontFamily: "'Inter', sans-serif" }}>{run.output}</pre>}
+                    {run.error && <pre className="text-[12px] text-red-500 whitespace-pre-wrap" style={{ fontFamily: "'Inter', sans-serif" }}>{run.error}</pre>}
                   </div>
                 )}
               </div>
-            ))}
-          </div>
-        )}
-      </main>
-    </>
+            )
+          })}
+        </div>
+      )}
+    </HarborShell>
   )
 }
