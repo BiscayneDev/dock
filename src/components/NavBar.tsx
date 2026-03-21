@@ -12,6 +12,12 @@ export function NavBar({ showDashboard = false }: NavBarProps) {
           ⚓ Dock
         </Link>
         <div className="flex items-center gap-4">
+          <Link
+            href="/harbor"
+            className="text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
+          >
+            Harbor
+          </Link>
           {showDashboard && (
             <>
               <Link

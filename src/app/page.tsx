@@ -25,10 +25,16 @@ export default function LandingPage() {
           Dock manages your email, calendar, code, and notes through natural conversation in Telegram.
           No app switching. No dashboard hopping. Just chat.
         </p>
-        <div className="mt-10 flex items-center justify-center gap-4">
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+          <Link
+            href="/harbor"
+            className="inline-flex items-center rounded-lg bg-cyan-600 px-6 py-3 text-lg font-medium text-white hover:bg-cyan-500 transition-colors"
+          >
+            Open Harbor
+          </Link>
           <Link
             href="https://t.me/heydeckhandbot"
-            className="inline-flex items-center rounded-lg bg-cyan-600 px-6 py-3 text-lg font-medium text-white hover:bg-cyan-500 transition-colors"
+            className="inline-flex items-center rounded-lg border border-zinc-700 px-6 py-3 text-lg font-medium text-zinc-300 hover:border-zinc-500 transition-colors"
           >
             Open in Telegram
           </Link>
