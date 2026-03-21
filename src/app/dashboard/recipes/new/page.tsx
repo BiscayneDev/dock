@@ -5,243 +5,111 @@ import { useRouter } from 'next/navigation'
 import { HarborShell } from '@/components/HarborShell'
 
 type TriggerType = 'schedule' | 'email_event' | 'github_event' | 'notion_event' | 'keyword' | 'manual'
+interface RecipeForm { triggerType: TriggerType | null; triggerConfig: Record<string, unknown>; instructions: string; name: string; notifyOnRun: boolean; enableImmediately: boolean }
 
-interface RecipeForm {
-  triggerType: TriggerType | null; triggerConfig: Record<string, unknown>
-  instructions: string; name: string; notifyOnRun: boolean; enableImmediately: boolean
-}
-
-const TRIGGERS: Array<{ type: TriggerType; icon: string; label: string; desc: string }> = [
-  { type: 'schedule', icon: 'ph-clock', label: 'Schedule', desc: 'Run at a specific time' },
-  { type: 'email_event', icon: 'ph-envelope', label: 'Email', desc: 'When an email matches' },
-  { type: 'github_event', icon: 'ph-github-logo', label: 'GitHub', desc: 'On GitHub activity' },
-  { type: 'notion_event', icon: 'ph-notepad', label: 'Notion', desc: 'On database changes' },
-  { type: 'keyword', icon: 'ph-chat-teardrop-text', label: 'Keyword', desc: 'When you say a phrase' },
-  { type: 'manual', icon: 'ph-play', label: 'Manual', desc: 'Only when triggered' },
+const TRIGGERS: Array<{ type: TriggerType; label: string; desc: string; icon: string }> = [
+  { type: 'schedule', label: 'Schedule', desc: 'Run at a specific time', icon: 'M12 2v10l4.5 4.5M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z' },
+  { type: 'email_event', label: 'Email', desc: 'When an email matches', icon: 'M4 7L10.2 11.65C11.27 12.45 12.73 12.45 13.8 11.65L20 7M3 5h18v14H3z' },
+  { type: 'github_event', label: 'GitHub', desc: 'On GitHub activity', icon: 'M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65S8.93 17.38 9 18v4' },
+  { type: 'keyword', label: 'Keyword', desc: 'When you say a phrase', icon: 'M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z' },
+  { type: 'manual', label: 'Manual', desc: 'Only when triggered', icon: 'M5 3l14 9-14 9V3z' },
 ]
 
 const STEPS = ['Trigger', 'Configure', 'Instructions', 'Details', 'Save']
 
-function buildCronPreview(config: Record<string, unknown>): string {
-  const time = (config.time as string) ?? '09:00'
-  const days = (config.days as number[]) ?? [1, 2, 3, 4, 5]
-  const [h, m] = time.split(':').map(Number)
-  const ampm = h >= 12 ? 'PM' : 'AM'
-  const dh = h === 0 ? 12 : h > 12 ? h - 12 : h
-  const dayNames = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-  if (days.length === 7) return `Every day at ${dh}:${m.toString().padStart(2, '0')} ${ampm}`
-  if (days.length === 5 && !days.includes(6) && !days.includes(7)) return `Weekdays at ${dh}:${m.toString().padStart(2, '0')} ${ampm}`
-  return `${days.sort().map((d) => dayNames[d]).join(', ')} at ${dh}:${m.toString().padStart(2, '0')} ${ampm}`
+function cronPreview(c: Record<string, unknown>): string {
+  const t = (c.time as string) ?? '09:00'; const d = (c.days as number[]) ?? [1,2,3,4,5]
+  const [h, m] = t.split(':').map(Number); const ap = h >= 12 ? 'PM' : 'AM'; const dh = h===0?12:h>12?h-12:h
+  const dn = ['','Mo','Tu','We','Th','Fr','Sa','Su']
+  if (d.length===7) return `Daily at ${dh}:${m.toString().padStart(2,'0')} ${ap}`
+  if (d.length===5&&!d.includes(6)&&!d.includes(7)) return `Weekdays at ${dh}:${m.toString().padStart(2,'0')} ${ap}`
+  return `${d.sort().map(x=>dn[x]).join(', ')} at ${dh}:${m.toString().padStart(2,'0')} ${ap}`
 }
 
 export default function NewRecipePage() {
   const router = useRouter()
   const [step, setStep] = useState(0)
-  const [form, setForm] = useState<RecipeForm>({
-    triggerType: null, triggerConfig: {}, instructions: '', name: '', notifyOnRun: true, enableImmediately: true,
-  })
+  const [form, setForm] = useState<RecipeForm>({ triggerType: null, triggerConfig: {}, instructions: '', name: '', notifyOnRun: true, enableImmediately: true })
   const [saving, setSaving] = useState(false)
+  const u = (up: Partial<RecipeForm>) => setForm({ ...form, ...up })
+  const uc = (k: string, v: unknown) => setForm({ ...form, triggerConfig: { ...form.triggerConfig, [k]: v } })
 
-  const updateForm = (u: Partial<RecipeForm>) => setForm({ ...form, ...u })
-  const updateConfig = (k: string, v: unknown) => setForm({ ...form, triggerConfig: { ...form.triggerConfig, [k]: v } })
-
-  const suggestInstructions = async () => {
-    const res = await fetch('/api/recipes/suggest-instructions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ trigger_type: form.triggerType, trigger_config: form.triggerConfig, name: form.name }),
-      credentials: 'include',
-    })
-    if (res.ok) { const data = await res.json(); updateForm({ instructions: data.instructions }) }
+  const suggest = async () => {
+    const res = await fetch('/api/recipes/suggest-instructions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trigger_type: form.triggerType, trigger_config: form.triggerConfig, name: form.name }), credentials: 'include' })
+    if (res.ok) u({ instructions: (await res.json()).instructions })
   }
 
-  const saveRecipe = async () => {
+  const save = async () => {
     setSaving(true)
-    try {
-      const res = await fetch('/api/recipes', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: form.name, instructions: form.instructions, trigger_type: form.triggerType,
-          trigger_config: form.triggerConfig, enabled: form.enableImmediately, notify_on_run: form.notifyOnRun,
-        }),
-        credentials: 'include',
-      })
-      if (res.ok) { const data = await res.json(); router.push(`/dashboard/recipes/${data.recipe.id}`) }
-    } catch { /* Failed */ } finally { setSaving(false) }
+    try { const res = await fetch('/api/recipes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.name, instructions: form.instructions, trigger_type: form.triggerType, trigger_config: form.triggerConfig, enabled: form.enableImmediately, notify_on_run: form.notifyOnRun }), credentials: 'include' }); if (res.ok) router.push(`/dashboard/recipes/${(await res.json()).recipe.id}`) } catch {} finally { setSaving(false) }
   }
 
   return (
     <HarborShell title="New Recipe" showBack backHref="/dashboard/recipes">
       {/* Step dots */}
-      <div className="flex items-center justify-center gap-2 my-4">
-        {STEPS.map((_, i) => (
-          <div key={i} className={`w-2 h-2 rounded-full transition-colors ${i === step ? 'bg-slate-700' : i < step ? 'bg-slate-400' : 'bg-slate-300/50'}`} />
-        ))}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', margin: '0.75rem 0 1.25rem' }}>
+        {STEPS.map((_, i) => <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', border: '1.5px solid var(--ink)', backgroundColor: i <= step ? 'var(--ink)' : 'var(--cream)' }} />)}
       </div>
 
-      {/* Step 0: Trigger type */}
       {step === 0 && (
-        <div className="space-y-2">
-          <p className="text-[15px] text-slate-500 mb-3" style={{ fontFamily: "'Newsreader', serif", fontSize: '18px' }}>What triggers this recipe?</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <p className="section-title">What triggers this recipe?</p>
           {TRIGGERS.map((t) => (
-            <button key={t.type} onClick={() => { updateForm({ triggerType: t.type, triggerConfig: {} }); setStep(1) }}
-              className="glass-card glass-card-hover w-full rounded-[20px] p-4 flex items-center gap-3 text-left transition-transform">
-              <div className="w-10 h-10 rounded-full bg-white/50 flex items-center justify-center flex-shrink-0">
-                <i className={`ph-fill ${t.icon} text-[20px] text-slate-600`} />
-              </div>
-              <div>
-                <p className="font-medium text-slate-700 text-[15px]">{t.label}</p>
-                <p className="text-[13px] text-slate-400">{t.desc}</p>
-              </div>
+            <button key={t.type} onClick={() => { u({ triggerType: t.type, triggerConfig: {} }); setStep(1) }} className="dock-card" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', textAlign: 'left' }}>
+              <div className="badge-num"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d={t.icon} /></svg></div>
+              <div><p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.95rem' }}>{t.label}</p><p style={{ fontSize: '0.8rem', opacity: 0.5 }}>{t.desc}</p></div>
             </button>
           ))}
         </div>
       )}
 
-      {/* Step 1: Configure trigger */}
       {step === 1 && (
-        <div className="glass-card rounded-[20px] p-5 space-y-4">
-          <p style={{ fontFamily: "'Newsreader', serif", fontSize: '18px' }} className="text-slate-700">Configure</p>
-
-          {form.triggerType === 'schedule' && (
-            <>
-              <div>
-                <label className="text-[12px] text-slate-400 uppercase tracking-wide">Time</label>
-                <input type="time" value={(form.triggerConfig.time as string) ?? '09:00'}
-                  onChange={(e) => updateConfig('time', e.target.value)}
-                  className="glass-input w-full rounded-xl px-3 py-2.5 text-[14px] text-slate-700 mt-1" />
-              </div>
-              <div>
-                <label className="text-[12px] text-slate-400 uppercase tracking-wide mb-2 block">Days</label>
-                <div className="flex gap-1.5 flex-wrap">
-                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => {
-                    const days = (form.triggerConfig.days as number[]) ?? [1, 2, 3, 4, 5]
-                    const n = i + 1; const active = days.includes(n)
-                    return (
-                      <button key={day} onClick={() => updateConfig('days', active ? days.filter((d) => d !== n) : [...days, n])}
-                        className={`w-10 h-10 rounded-full text-[12px] font-medium transition-colors ${active ? 'bg-slate-800 text-white' : 'bg-white/50 text-slate-400'}`}>
-                        {day.slice(0, 2)}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-              <div className="bg-white/40 rounded-xl px-3 py-2 mt-1">
-                <p className="text-[12px] text-blue-500">{buildCronPreview(form.triggerConfig)}</p>
-              </div>
-            </>
-          )}
-          {form.triggerType === 'email_event' && (
-            <>
-              <div><label className="text-[12px] text-slate-400 uppercase tracking-wide">From</label>
-                <input type="text" placeholder="boss@company.com" value={(form.triggerConfig.from as string) ?? ''}
-                  onChange={(e) => updateConfig('from', e.target.value)}
-                  className="glass-input w-full rounded-xl px-3 py-2.5 text-[14px] text-slate-700 mt-1" /></div>
-              <div><label className="text-[12px] text-slate-400 uppercase tracking-wide">Subject contains</label>
-                <input type="text" value={(form.triggerConfig.subject_contains as string) ?? ''}
-                  onChange={(e) => updateConfig('subject_contains', e.target.value)}
-                  className="glass-input w-full rounded-xl px-3 py-2.5 text-[14px] text-slate-700 mt-1" /></div>
-            </>
-          )}
-          {form.triggerType === 'github_event' && (
-            <div><label className="text-[12px] text-slate-400 uppercase tracking-wide">Event</label>
-              <select value={(form.triggerConfig.event_type as string) ?? ''} onChange={(e) => updateConfig('event_type', e.target.value)}
-                className="glass-input w-full rounded-xl px-3 py-2.5 text-[14px] text-slate-700 mt-1">
-                <option value="">Select...</option>
-                <option value="issue_assigned">Issue assigned</option>
-                <option value="pr_review_requested">PR review requested</option>
-                <option value="new_notification">New notification</option>
-              </select></div>
-          )}
-          {form.triggerType === 'keyword' && (
-            <>
-              <div><label className="text-[12px] text-slate-400 uppercase tracking-wide">Phrase</label>
-                <input type="text" placeholder="ship it" value={(form.triggerConfig.phrase as string) ?? ''}
-                  onChange={(e) => updateConfig('phrase', e.target.value)}
-                  className="glass-input w-full rounded-xl px-3 py-2.5 text-[14px] text-slate-700 mt-1" /></div>
-              {(form.triggerConfig.phrase as string) && (
-                <div className="bg-white/40 rounded-xl px-3 py-2">
-                  <p className="text-[12px] text-blue-500">Fires when message contains &quot;{form.triggerConfig.phrase as string}&quot;</p>
-                </div>
-              )}
-            </>
-          )}
-          {form.triggerType === 'manual' && <p className="text-[13px] text-slate-400">Only runs when you manually trigger it.</p>}
-
-          <div className="flex gap-2 pt-2">
-            <button onClick={() => setStep(0)} className="flex-1 py-2.5 rounded-full bg-white/50 border border-white/70 text-[13px] font-medium text-slate-500">Back</button>
-            <button onClick={() => setStep(2)} className="flex-1 py-2.5 rounded-full bg-slate-800 text-white text-[13px] font-medium">Next</button>
-          </div>
+        <div className="dock-card">
+          <p className="section-title">Configure</p>
+          {form.triggerType === 'schedule' && (<div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div><span className="meta-text">Time</span><input type="time" value={(form.triggerConfig.time as string) ?? '09:00'} onChange={(e) => uc('time', e.target.value)} className="dock-input" style={{ marginTop: '0.25rem' }} /></div>
+            <div><span className="meta-text">Days</span><div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.4rem', flexWrap: 'wrap' }}>
+              {['Mo','Tu','We','Th','Fr','Sa','Su'].map((d, i) => { const ds = (form.triggerConfig.days as number[]) ?? [1,2,3,4,5]; const n = i+1; const on = ds.includes(n); return <button key={d} onClick={() => uc('days', on ? ds.filter(x=>x!==n) : [...ds,n])} style={{ width: 36, height: 36, borderRadius: '50%', border: '1.5px solid var(--ink)', background: on ? 'var(--ink)' : 'var(--cream)', color: on ? 'var(--cream)' : 'var(--ink)', fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer' }}>{d}</button> })}
+            </div></div>
+            <div style={{ border: '1.5px solid var(--ink)', borderRadius: 'var(--radius-md)', padding: '0.5rem 0.75rem', backgroundColor: 'rgba(91,167,205,0.1)' }}><p style={{ fontSize: '0.85rem', color: 'var(--mesh-cyan)', fontFamily: "'Outfit', sans-serif", fontWeight: 500 }}>{cronPreview(form.triggerConfig)}</p></div>
+          </div>)}
+          {form.triggerType === 'email_event' && (<div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}><span className="meta-text">From</span><input type="text" placeholder="boss@company.com" value={(form.triggerConfig.from as string) ?? ''} onChange={(e) => uc('from', e.target.value)} className="dock-input" /><span className="meta-text">Subject contains</span><input type="text" value={(form.triggerConfig.subject_contains as string) ?? ''} onChange={(e) => uc('subject_contains', e.target.value)} className="dock-input" /></div>)}
+          {form.triggerType === 'github_event' && (<div><span className="meta-text">Event</span><select value={(form.triggerConfig.event_type as string) ?? ''} onChange={(e) => uc('event_type', e.target.value)} className="dock-input" style={{ marginTop: '0.25rem' }}><option value="">Select...</option><option value="issue_assigned">Issue assigned</option><option value="pr_review_requested">PR review requested</option><option value="new_notification">New notification</option></select></div>)}
+          {form.triggerType === 'keyword' && (<div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}><span className="meta-text">Phrase</span><input type="text" placeholder="ship it" value={(form.triggerConfig.phrase as string) ?? ''} onChange={(e) => uc('phrase', e.target.value)} className="dock-input" />{(form.triggerConfig.phrase as string) && <div style={{ border: '1.5px solid var(--ink)', borderRadius: 'var(--radius-md)', padding: '0.5rem 0.75rem', backgroundColor: 'rgba(91,167,205,0.1)' }}><p style={{ fontSize: '0.85rem', color: 'var(--mesh-cyan)', fontFamily: "'Outfit', sans-serif", fontWeight: 500 }}>Fires when message contains &quot;{form.triggerConfig.phrase as string}&quot;</p></div>}</div>)}
+          {form.triggerType === 'manual' && <p style={{ opacity: 0.5, fontSize: '0.9rem' }}>Only runs when you manually trigger it.</p>}
+          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}><button onClick={() => setStep(0)} className="dock-btn-secondary" style={{ flex: 1 }}>Back</button><button onClick={() => setStep(2)} className="dock-btn-primary" style={{ flex: 1 }}>Next</button></div>
         </div>
       )}
 
-      {/* Step 2: Instructions */}
       {step === 2 && (
-        <div className="glass-card rounded-[20px] p-5 space-y-4">
-          <p style={{ fontFamily: "'Newsreader', serif", fontSize: '18px' }} className="text-slate-700">What should Dock do?</p>
-          <textarea value={form.instructions} onChange={(e) => updateForm({ instructions: e.target.value })} rows={5}
-            placeholder="Describe in plain English..."
-            className="glass-input w-full rounded-xl px-3 py-2.5 text-[14px] text-slate-700 resize-y" />
-          <button onClick={suggestInstructions}
-            className="w-full py-2 rounded-xl bg-white/50 border border-white/70 text-[13px] font-medium text-slate-500 hover:bg-white/70 transition-colors">
-            ✨ Suggest instructions
-          </button>
-          <div className="flex gap-2">
-            <button onClick={() => setStep(1)} className="flex-1 py-2.5 rounded-full bg-white/50 border border-white/70 text-[13px] font-medium text-slate-500">Back</button>
-            <button onClick={() => setStep(3)} className="flex-1 py-2.5 rounded-full bg-slate-800 text-white text-[13px] font-medium">Next</button>
-          </div>
+        <div className="dock-card">
+          <p className="section-title">What should Dock do?</p>
+          <textarea value={form.instructions} onChange={(e) => u({ instructions: e.target.value })} rows={5} placeholder="Describe in plain English..." className="dock-input" style={{ resize: 'vertical' }} />
+          <button onClick={suggest} className="dock-btn-secondary" style={{ marginTop: '0.75rem' }}>✨ Suggest instructions</button>
+          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}><button onClick={() => setStep(1)} className="dock-btn-secondary" style={{ flex: 1 }}>Back</button><button onClick={() => setStep(3)} className="dock-btn-primary" style={{ flex: 1 }}>Next</button></div>
         </div>
       )}
 
-      {/* Step 3: Details */}
       {step === 3 && (
-        <div className="glass-card rounded-[20px] p-5 space-y-4">
-          <p style={{ fontFamily: "'Newsreader', serif", fontSize: '18px' }} className="text-slate-700">Details</p>
-          <div>
-            <label className="text-[12px] text-slate-400 uppercase tracking-wide">Recipe name</label>
-            <input type="text" value={form.name} onChange={(e) => updateForm({ name: e.target.value })} placeholder="Morning Briefing"
-              className="glass-input w-full rounded-xl px-3 py-2.5 text-[14px] text-slate-700 mt-1" />
-          </div>
-          <label className="flex items-center justify-between cursor-pointer">
-            <span className="text-[14px] text-slate-600">Notify after each run</span>
-            <button onClick={() => updateForm({ notifyOnRun: !form.notifyOnRun })}
-              className={`relative w-11 h-6 rounded-full transition-colors ${form.notifyOnRun ? 'bg-emerald-400' : 'bg-slate-300'}`}>
-              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.notifyOnRun ? 'translate-x-5' : ''}`} />
-            </button>
-          </label>
-          <label className="flex items-center justify-between cursor-pointer">
-            <span className="text-[14px] text-slate-600">Enable immediately</span>
-            <button onClick={() => updateForm({ enableImmediately: !form.enableImmediately })}
-              className={`relative w-11 h-6 rounded-full transition-colors ${form.enableImmediately ? 'bg-emerald-400' : 'bg-slate-300'}`}>
-              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.enableImmediately ? 'translate-x-5' : ''}`} />
-            </button>
-          </label>
-          <div className="flex gap-2 pt-2">
-            <button onClick={() => setStep(2)} className="flex-1 py-2.5 rounded-full bg-white/50 border border-white/70 text-[13px] font-medium text-slate-500">Back</button>
-            <button onClick={() => setStep(4)} className="flex-1 py-2.5 rounded-full bg-slate-800 text-white text-[13px] font-medium">Next</button>
-          </div>
+        <div className="dock-card">
+          <p className="section-title">Details</p>
+          <span className="meta-text">Recipe name</span>
+          <input type="text" value={form.name} onChange={(e) => u({ name: e.target.value })} placeholder="Morning Briefing" className="dock-input" style={{ marginTop: '0.25rem', marginBottom: '0.75rem' }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}><span style={{ fontSize: '0.9rem' }}>Notify after each run</span><button className="dock-toggle" data-on={String(form.notifyOnRun)} onClick={() => u({ notifyOnRun: !form.notifyOnRun })}><span className="dock-toggle-knob" style={{ left: form.notifyOnRun ? undefined : '2px', right: form.notifyOnRun ? '2px' : undefined }} /></button></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '0.9rem' }}>Enable immediately</span><button className="dock-toggle" data-on={String(form.enableImmediately)} onClick={() => u({ enableImmediately: !form.enableImmediately })}><span className="dock-toggle-knob" style={{ left: form.enableImmediately ? undefined : '2px', right: form.enableImmediately ? '2px' : undefined }} /></button></div>
+          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}><button onClick={() => setStep(2)} className="dock-btn-secondary" style={{ flex: 1 }}>Back</button><button onClick={() => setStep(4)} className="dock-btn-primary" style={{ flex: 1 }}>Next</button></div>
         </div>
       )}
 
-      {/* Step 4: Save */}
       {step === 4 && (
-        <div className="glass-card rounded-[20px] p-5 space-y-3">
-          <p style={{ fontFamily: "'Newsreader', serif", fontSize: '18px' }} className="text-slate-700">Review</p>
-          <div className="space-y-2 text-[13px]">
-            <p><span className="text-slate-400">Name:</span> <span className="text-slate-700">{form.name || '(unnamed)'}</span></p>
-            <p><span className="text-slate-400">Trigger:</span> <span className="text-slate-700">{form.triggerType}</span></p>
-            <p><span className="text-slate-400">Notify:</span> <span className="text-slate-700">{form.notifyOnRun ? 'Yes' : 'No'}</span></p>
-            <div>
-              <p className="text-slate-400">Instructions:</p>
-              <p className="text-slate-600 mt-1">{form.instructions}</p>
-            </div>
+        <div className="dock-card">
+          <p className="section-title">Review</p>
+          <div style={{ fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            <p><span style={{ opacity: 0.5 }}>Name:</span> <strong style={{ fontFamily: "'Outfit', sans-serif" }}>{form.name || '(unnamed)'}</strong></p>
+            <p><span style={{ opacity: 0.5 }}>Trigger:</span> {form.triggerType}</p>
+            <div><span style={{ opacity: 0.5 }}>Instructions:</span><p style={{ marginTop: '0.25rem', opacity: 0.7 }}>{form.instructions}</p></div>
           </div>
-          <div className="flex gap-2 pt-2">
-            <button onClick={() => setStep(3)} className="flex-1 py-2.5 rounded-full bg-white/50 border border-white/70 text-[13px] font-medium text-slate-500">Back</button>
-            <button onClick={saveRecipe} disabled={saving || !form.name || !form.instructions}
-              className="flex-1 py-2.5 rounded-full bg-slate-800 text-white text-[13px] font-medium hover:bg-slate-700 disabled:opacity-50 transition-colors">
-              {saving ? 'Saving...' : 'Create Recipe'}
-            </button>
-          </div>
+          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}><button onClick={() => setStep(3)} className="dock-btn-secondary" style={{ flex: 1 }}>Back</button><button onClick={save} disabled={saving || !form.name || !form.instructions} className="dock-btn-primary" style={{ flex: 1 }}>{saving ? 'Saving...' : 'Create Recipe'}</button></div>
         </div>
       )}
     </HarborShell>

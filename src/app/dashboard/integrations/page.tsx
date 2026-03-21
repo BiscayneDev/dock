@@ -3,11 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { HarborShell } from '@/components/HarborShell'
 
-interface MCPConnection {
-  id: string; name: string; serverUrl: string; authType: string
-  enabled: boolean; toolCount: number
-  tools: Array<{ name: string; description: string }>
-}
+interface MCPConnection { id: string; name: string; serverUrl: string; authType: string; enabled: boolean; toolCount: number; tools: Array<{ name: string }> }
 
 export default function IntegrationsPage() {
   const [connections, setConnections] = useState<MCPConnection[]>([])
@@ -18,107 +14,61 @@ export default function IntegrationsPage() {
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    try {
-      const res = await fetch('/api/mcp', { credentials: 'include' })
-      if (res.ok) { const d = await res.json(); setConnections(d.connections ?? []) }
-    } catch { /* Failed */ } finally { setLoading(false) }
+    try { const res = await fetch('/api/mcp', { credentials: 'include' }); if (res.ok) setConnections((await res.json()).connections ?? []) } catch {} finally { setLoading(false) }
   }, [])
-
   useEffect(() => { load() }, [load])
 
-  const addConnection = async () => {
+  const add = async () => {
     setAdding(true); setError(null)
-    try {
-      const res = await fetch('/api/mcp', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: form.name, serverUrl: form.serverUrl, authType: form.authType, authConfig: form.authType === 'api_key' ? { apiKey: form.apiKey } : undefined }),
-        credentials: 'include',
-      })
-      const d = await res.json()
-      if (!res.ok) { setError(d.error ?? 'Failed'); return }
-      setShowAdd(false); setForm({ name: '', serverUrl: '', authType: 'none', apiKey: '' }); await load()
-    } catch { setError('Connection failed') } finally { setAdding(false) }
+    try { const res = await fetch('/api/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.name, serverUrl: form.serverUrl, authType: form.authType, authConfig: form.authType === 'api_key' ? { apiKey: form.apiKey } : undefined }), credentials: 'include' }); const d = await res.json(); if (!res.ok) { setError(d.error); return }; setShowAdd(false); setForm({ name: '', serverUrl: '', authType: 'none', apiKey: '' }); await load() } catch { setError('Failed') } finally { setAdding(false) }
   }
-
-  const toggle = async (id: string, enabled: boolean) => {
-    await fetch(`/api/mcp/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }), credentials: 'include' })
-    setConnections(connections.map((c) => c.id === id ? { ...c, enabled } : c))
-  }
-
-  const remove = async (id: string) => {
-    if (!confirm('Remove this MCP server?')) return
-    await fetch(`/api/mcp/${id}`, { method: 'DELETE', credentials: 'include' })
-    setConnections(connections.filter((c) => c.id !== id))
-  }
+  const toggle = async (id: string, enabled: boolean) => { await fetch(`/api/mcp/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }), credentials: 'include' }); setConnections(connections.map((c) => c.id === id ? { ...c, enabled } : c)) }
+  const remove = async (id: string) => { if (!confirm('Remove?')) return; await fetch(`/api/mcp/${id}`, { method: 'DELETE', credentials: 'include' }); setConnections(connections.filter((c) => c.id !== id)) }
 
   return (
     <HarborShell title="MCP Servers" showBack>
-      <p className="text-[15px] text-slate-500 mt-1 mb-4">Connect custom tool servers via Model Context Protocol.</p>
+      <p style={{ opacity: 0.5, fontSize: '0.9rem', marginBottom: '1rem' }}>Extend Dock with custom tool servers.</p>
 
-      <button onClick={() => setShowAdd(!showAdd)}
-        className="w-full py-2.5 rounded-full bg-slate-800 text-white text-[13px] font-medium hover:bg-slate-700 transition-colors mb-5">
-        + Add Server
-      </button>
+      <button onClick={() => setShowAdd(!showAdd)} className="dock-btn-primary" style={{ width: '100%', marginBottom: '1rem' }}>+ Add Server</button>
 
       {showAdd && (
-        <div className="glass-card rounded-[20px] p-5 mb-5 space-y-3">
-          <input type="text" placeholder="Server name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className="glass-input w-full rounded-xl px-3 py-2.5 text-[14px] text-slate-700" />
-          <input type="url" placeholder="https://my-server.example.com/mcp" value={form.serverUrl} onChange={(e) => setForm({ ...form, serverUrl: e.target.value })}
-            className="glass-input w-full rounded-xl px-3 py-2.5 text-[14px] text-slate-700" />
-          <select value={form.authType} onChange={(e) => setForm({ ...form, authType: e.target.value as typeof form.authType })}
-            className="glass-input w-full rounded-xl px-3 py-2.5 text-[14px] text-slate-700">
-            <option value="none">No auth</option>
-            <option value="api_key">API Key</option>
-          </select>
-          {form.authType === 'api_key' && (
-            <input type="password" placeholder="API Key" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
-              className="glass-input w-full rounded-xl px-3 py-2.5 text-[14px] text-slate-700" />
-          )}
-          {error && <p className="text-[13px] text-red-500">{error}</p>}
-          <div className="flex gap-2">
-            <button onClick={() => setShowAdd(false)} className="flex-1 py-2.5 rounded-full bg-white/50 border border-white/70 text-[13px] font-medium text-slate-500">Cancel</button>
-            <button onClick={addConnection} disabled={adding || !form.name || !form.serverUrl}
-              className="flex-1 py-2.5 rounded-full bg-slate-800 text-white text-[13px] font-medium disabled:opacity-50">
-              {adding ? 'Connecting...' : 'Connect'}
-            </button>
+        <div className="dock-card" style={{ marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <input type="text" placeholder="Server name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="dock-input" />
+            <input type="url" placeholder="https://server.example.com/mcp" value={form.serverUrl} onChange={(e) => setForm({ ...form, serverUrl: e.target.value })} className="dock-input" />
+            <select value={form.authType} onChange={(e) => setForm({ ...form, authType: e.target.value as typeof form.authType })} className="dock-input"><option value="none">No auth</option><option value="api_key">API Key</option></select>
+            {form.authType === 'api_key' && <input type="password" placeholder="API Key" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} className="dock-input" />}
+            {error && <p style={{ fontSize: '0.8rem', color: 'var(--mesh-peach)' }}>{error}</p>}
+            <div style={{ display: 'flex', gap: '0.75rem' }}><button onClick={() => setShowAdd(false)} className="dock-btn-secondary" style={{ flex: 1 }}>Cancel</button><button onClick={add} disabled={adding || !form.name || !form.serverUrl} className="dock-btn-primary" style={{ flex: 1 }}>{adding ? 'Connecting...' : 'Connect'}</button></div>
           </div>
         </div>
       )}
 
-      {loading ? (
-        <div className="space-y-3">{[1, 2].map((i) => <div key={i} className="glass-card rounded-[20px] h-20 animate-pulse" />)}</div>
-      ) : connections.length === 0 ? (
-        <div className="glass-card rounded-[24px] p-10 text-center">
-          <i className="ph-fill ph-plugs-connected text-[40px] text-slate-400 mb-3" />
-          <p className="text-[15px] text-slate-600">No MCP servers connected</p>
-          <p className="text-[13px] text-slate-400 mt-1">Add a server to extend Dock with custom tools.</p>
+      {loading ? <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>{[1, 2].map((i) => <div key={i} className="dock-card" style={{ height: '5rem', opacity: 0.3 }} />)}</div>
+      : connections.length === 0 ? (
+        <div className="dock-card" style={{ padding: '3rem', alignItems: 'center', textAlign: 'center' }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3, marginBottom: '1rem' }}><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><circle cx="17" cy="17" r="3" /></svg>
+          <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700 }}>No servers connected</p>
+          <p style={{ fontSize: '0.85rem', opacity: 0.5, marginTop: '0.25rem' }}>Add an MCP server to extend Dock with custom tools.</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {connections.map((conn) => (
-            <div key={conn.id} className="glass-card rounded-[20px] p-4">
-              <div className="flex items-center justify-between">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {connections.map((c) => (
+            <div key={c.id} className="dock-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <p className="font-medium text-slate-700 text-[15px]">{conn.name}</p>
-                  <p className="text-[12px] text-slate-400 font-mono">{conn.serverUrl}</p>
-                  <p className="text-[12px] text-slate-400 mt-0.5">{conn.toolCount} tool{conn.toolCount !== 1 ? 's' : ''}</p>
+                  <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.95rem' }}>{c.name}</p>
+                  <p style={{ fontSize: '0.75rem', opacity: 0.4, fontFamily: 'monospace' }}>{c.serverUrl}</p>
+                  <p style={{ fontSize: '0.75rem', opacity: 0.5, marginTop: '0.15rem' }}>{c.toolCount} tool{c.toolCount !== 1 ? 's' : ''}</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => toggle(conn.id, !conn.enabled)}
-                    className={`relative w-11 h-6 rounded-full transition-colors ${conn.enabled ? 'bg-emerald-400' : 'bg-slate-300'}`}>
-                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${conn.enabled ? 'translate-x-5' : ''}`} />
-                  </button>
-                  <button onClick={() => remove(conn.id)} className="text-slate-400 hover:text-red-500 transition-colors">
-                    <i className="ph ph-trash text-[16px]" />
-                  </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <button className="dock-toggle" data-on={String(c.enabled)} onClick={() => toggle(c.id, !c.enabled)}><span className="dock-toggle-knob" style={{ left: c.enabled ? undefined : '2px', right: c.enabled ? '2px' : undefined }} /></button>
+                  <button onClick={() => remove(c.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.4 }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg></button>
                 </div>
               </div>
-              {conn.tools.length > 0 && (
-                <div className="mt-3 pt-2 border-t border-white/30 flex flex-wrap gap-1">
-                  {conn.tools.map((t) => (
-                    <span key={t.name} className="text-[10px] text-slate-400 bg-white/40 px-1.5 py-0.5 rounded-full">{t.name}</span>
-                  ))}
+              {c.tools.length > 0 && (
+                <div style={{ marginTop: '0.5rem', borderTop: '1.5px solid var(--ink)', paddingTop: '0.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                  {c.tools.map((t) => <span key={t.name} className="meta-text" style={{ border: '1px solid var(--ink)', borderRadius: '1rem', padding: '0.1rem 0.4rem', opacity: 0.5 }}>{t.name}</span>)}
                 </div>
               )}
             </div>

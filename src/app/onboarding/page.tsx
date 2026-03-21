@@ -5,22 +5,17 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { HarborShell } from '@/components/HarborShell'
 import { TelegramLoginButton } from '@/components/TelegramLoginButton'
 
-interface ConnectedIntegrations {
-  google: boolean
-  notion: boolean
-  github: boolean
-  openwallet: boolean
-}
+interface ConnectedIntegrations { google: boolean; notion: boolean; github: boolean; openwallet: boolean }
 
 const INTEGRATIONS = [
-  { key: 'google', icon: 'ph-google-logo', label: 'Google', desc: 'Gmail and Google Calendar', authPath: '/api/integrations/google/auth' },
-  { key: 'notion', icon: 'ph-notepad', label: 'Notion', desc: 'Pages and databases', authPath: '/api/integrations/notion/auth' },
-  { key: 'github', icon: 'ph-github-logo', label: 'GitHub', desc: 'Repos, issues, and PRs', authPath: '/api/integrations/github/auth' },
+  { key: 'google', label: 'Google', desc: 'Gmail and Google Calendar', authPath: '/api/integrations/google/auth', icon: 'M4 7L10.2 11.65C11.27 12.45 12.73 12.45 13.8 11.65L20 7M3 5h18v14H3z' },
+  { key: 'notion', label: 'Notion', desc: 'Pages and databases', authPath: '/api/integrations/notion/auth', icon: 'M4 4h16v16H4zM8 4v16M4 8h4M4 12h4' },
+  { key: 'github', label: 'GitHub', desc: 'Repos, issues, and PRs', authPath: '/api/integrations/github/auth', icon: 'M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65S8.93 17.38 9 18v4' },
 ]
 
 export default function OnboardingPageWrapper() {
   return (
-    <Suspense fallback={<HarborShell title="Welcome aboard" showBack><div className="pt-20 text-center text-slate-400">Loading...</div></HarborShell>}>
+    <Suspense fallback={<HarborShell title="Welcome aboard" showBack><div style={{ paddingTop: '5rem', textAlign: 'center', opacity: 0.5 }}>Loading...</div></HarborShell>}>
       <OnboardingPage />
     </Suspense>
   )
@@ -31,211 +26,129 @@ function OnboardingPage() {
   const searchParams = useSearchParams()
   const justConnected = searchParams.get('connected')
   const [authenticated, setAuthenticated] = useState(false)
-  const [integrations, setIntegrations] = useState<ConnectedIntegrations>({
-    google: false, notion: false, github: false, openwallet: false,
-  })
+  const [integrations, setIntegrations] = useState<ConnectedIntegrations>({ google: false, notion: false, github: false, openwallet: false })
   const [loading, setLoading] = useState(true)
   const [owsForm, setOwsForm] = useState({ endpoint: '', apiKey: '' })
   const [owsSaving, setOwsSaving] = useState(false)
   const [owsError, setOwsError] = useState<string | null>(null)
+  const [showOws, setShowOws] = useState(false)
 
   const checkIntegrations = useCallback(async () => {
     try {
-      // Check auth status
       const authRes = await fetch('/api/recipes', { credentials: 'include' })
-      if (!authRes.ok) {
-        setLoading(false)
-        return
-      }
+      if (!authRes.ok) { setLoading(false); return }
       setAuthenticated(true)
-
-      // Fetch real integration status
       const statusRes = await fetch('/api/integrations/status', { credentials: 'include' })
-      if (statusRes.ok) {
-        const status = await statusRes.json()
-        setIntegrations(status)
-      }
-    } catch { /* Not authenticated */ } finally {
-      setLoading(false)
-    }
+      if (statusRes.ok) setIntegrations(await statusRes.json())
+    } catch { /* Not authenticated */ } finally { setLoading(false) }
   }, [])
 
   useEffect(() => { checkIntegrations() }, [checkIntegrations])
 
-  const handleTelegramAuth = async (data: {
-    id: number; first_name: string; last_name?: string; username?: string;
-    photo_url?: string; auth_date: number; hash: string
-  }) => {
+  const handleTelegramAuth = async (data: { id: number; first_name: string; last_name?: string; username?: string; photo_url?: string; auth_date: number; hash: string }) => {
     try {
-      const res = await fetch('/api/auth/telegram', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-        credentials: 'include',
-      })
-      if (res.ok) {
-        setAuthenticated(true)
-        await checkIntegrations()
-      }
+      const res = await fetch('/api/auth/telegram', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), credentials: 'include' })
+      if (res.ok) { setAuthenticated(true); await checkIntegrations() }
     } catch { /* Failed */ }
   }
 
   const connectOWS = async () => {
-    setOwsSaving(true)
-    setOwsError(null)
+    setOwsSaving(true); setOwsError(null)
     try {
-      const res = await fetch('/api/integrations/openwallet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(owsForm),
-        credentials: 'include',
-      })
+      const res = await fetch('/api/integrations/openwallet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(owsForm), credentials: 'include' })
       const data = await res.json()
-      if (res.ok) {
-        setIntegrations({ ...integrations, openwallet: true })
-        setOwsForm({ endpoint: '', apiKey: '' })
-      } else {
-        setOwsError(data.error ?? 'Connection failed')
-      }
-    } catch {
-      setOwsError('Connection failed')
-    } finally {
-      setOwsSaving(false)
-    }
+      if (res.ok) { setIntegrations({ ...integrations, openwallet: true }); setShowOws(false) }
+      else setOwsError(data.error ?? 'Connection failed')
+    } catch { setOwsError('Connection failed') } finally { setOwsSaving(false) }
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
   const anyConnected = Object.values(integrations).some(Boolean)
 
-  if (loading) {
-    return (
-      <HarborShell title="Integrations" showBack>
-        <div className="pt-20 text-center">
-          <p className="text-slate-400">Loading...</p>
-        </div>
-      </HarborShell>
-    )
-  }
+  if (loading) return <HarborShell title="Welcome aboard" showBack><div style={{ paddingTop: '5rem', textAlign: 'center', opacity: 0.5 }}>Loading...</div></HarborShell>
 
   return (
     <HarborShell title="Welcome aboard" showBack backHref="/harbor">
-      <p className="text-slate-500 text-[15px] mt-1 mb-4">
-        Connect your services so Dock can manage them through Telegram.
-      </p>
+      <p style={{ opacity: 0.6, marginBottom: '1.25rem', fontSize: '0.9rem' }}>Connect your services so Dock can manage them.</p>
 
       {justConnected && (
-        <div className="glass-card rounded-[16px] p-3 mb-4 flex items-center gap-2 border-emerald-200/50">
-          <i className="ph-fill ph-check-circle text-[18px] text-emerald-500" />
-          <span className="text-[14px] text-emerald-600 font-medium">
-            {justConnected.charAt(0).toUpperCase() + justConnected.slice(1)} connected!
+        <div className="dock-card" style={{ padding: '0.75rem 1rem', marginBottom: '0.75rem', flexDirection: 'row', alignItems: 'center', gap: '0.5rem' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--mesh-mint)" strokeWidth="2.5" strokeLinecap="round"><path d="M20 6L9 17l-5-5" /></svg>
+          <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.85rem' }}>
+            {justConnected.charAt(0).toUpperCase() + justConnected.slice(1)} connected
           </span>
         </div>
       )}
 
       {!authenticated ? (
-        <div className="glass-card rounded-[24px] p-8 text-center">
-          <p className="mb-4 text-slate-600">Sign in with Telegram to get started</p>
+        <div className="dock-card" style={{ padding: '2rem', alignItems: 'center' }}>
+          <p style={{ marginBottom: '1rem' }}>Sign in with Telegram to get started</p>
           <TelegramLoginButton botName="heydeckhandbot" onAuth={handleTelegramAuth} />
-          <div className="mt-6 border-t border-white/30 pt-4">
-            <p className="text-sm text-slate-400">
-              Widget not working? Send <code className="text-blue-500 bg-white/40 px-1 rounded">/start</code> to{' '}
-              <a href="https://t.me/heydeckhandbot" className="text-blue-500 hover:underline" target="_blank" rel="noopener noreferrer">
-                @heydeckhandbot
-              </a>{' '}
-              for a magic sign-in link.
-            </p>
-          </div>
+          <p style={{ marginTop: '1.5rem', fontSize: '0.8rem', opacity: 0.5 }}>
+            Or send <strong>/start</strong> to <a href="https://t.me/heydeckhandbot" style={{ fontWeight: 700 }}>@heydeckhandbot</a>
+          </p>
         </div>
       ) : (
         <>
-          <div className="space-y-3">
-            {INTEGRATIONS.map((int) => (
-              <div key={int.key} className="glass-card rounded-[20px] p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white/50 flex items-center justify-center">
-                    <i className={`ph-fill ${int.icon} text-[20px] text-slate-600`} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {INTEGRATIONS.map((int) => {
+              const connected = integrations[int.key as keyof ConnectedIntegrations]
+              return (
+                <div key={int.key} className="dock-card" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div className="badge-num">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d={int.icon} /></svg>
+                    </div>
+                    <div>
+                      <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.9rem' }}>{int.label}</p>
+                      <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>{int.desc}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium text-slate-700 text-[15px]">{int.label}</p>
-                    <p className="text-[13px] text-slate-400">{int.desc}</p>
-                  </div>
+                  {connected ? (
+                    <span className="meta-text" style={{ color: 'var(--mesh-mint)' }}>Connected</span>
+                  ) : (
+                    <a href={int.authPath} className="dock-btn-primary" style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }}>Connect</a>
+                  )}
                 </div>
-                {integrations[int.key as keyof ConnectedIntegrations] ? (
-                  <span className="text-[13px] text-emerald-600 font-medium">Connected</span>
-                ) : (
-                  <a
-                    href={`${appUrl}${int.authPath}`}
-                    className="px-4 py-2 rounded-full bg-white/60 border border-white/80 text-[13px] font-medium text-slate-600 hover:bg-white/80 transition-colors"
-                  >
-                    Connect
-                  </a>
-                )}
-              </div>
-            ))}
+              )
+            })}
 
             {/* OpenWallet */}
-            <div className="glass-card rounded-[20px] p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white/50 flex items-center justify-center">
-                    <i className="ph-fill ph-lock-key text-[20px] text-slate-600" />
+            <div className="dock-card" style={{ padding: '1rem 1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div className="badge-num">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
                   </div>
                   <div>
-                    <p className="font-medium text-slate-700 text-[15px]">OpenWallet</p>
-                    <p className="text-[13px] text-slate-400">Crypto wallets & transactions</p>
+                    <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.9rem' }}>OpenWallet</p>
+                    <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>Crypto wallets</p>
                   </div>
                 </div>
                 {integrations.openwallet ? (
-                  <span className="text-[13px] text-emerald-600 font-medium">Connected</span>
+                  <span className="meta-text" style={{ color: 'var(--mesh-mint)' }}>Connected</span>
                 ) : (
-                  <button
-                    onClick={() => setOwsForm({ ...owsForm, endpoint: owsForm.endpoint || '' })}
-                    className="px-4 py-2 rounded-full bg-white/60 border border-white/80 text-[13px] font-medium text-slate-600 hover:bg-white/80 transition-colors"
-                  >
-                    Connect
-                  </button>
+                  <button onClick={() => setShowOws(!showOws)} className="dock-btn-primary" style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }}>Connect</button>
                 )}
               </div>
-              {!integrations.openwallet && owsForm.endpoint !== undefined && (
-                <div className="mt-4 pt-3 border-t border-white/30 space-y-2">
-                  <input
-                    type="url" placeholder="Endpoint URL" value={owsForm.endpoint}
-                    onChange={(e) => setOwsForm({ ...owsForm, endpoint: e.target.value })}
-                    className="glass-input w-full rounded-xl px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400"
-                  />
-                  <input
-                    type="password" placeholder="API Key" value={owsForm.apiKey}
-                    onChange={(e) => setOwsForm({ ...owsForm, apiKey: e.target.value })}
-                    className="glass-input w-full rounded-xl px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400"
-                  />
-                  {owsError && <p className="text-sm text-red-500">{owsError}</p>}
-                  <button
-                    onClick={connectOWS} disabled={owsSaving || !owsForm.endpoint || !owsForm.apiKey}
-                    className="w-full py-2 rounded-xl bg-white/60 border border-white/80 text-[13px] font-medium text-slate-600 hover:bg-white/80 transition-colors disabled:opacity-50"
-                  >
-                    {owsSaving ? 'Connecting...' : 'Connect'}
-                  </button>
+              {showOws && !integrations.openwallet && (
+                <div style={{ marginTop: '1rem', borderTop: '1.5px solid var(--ink)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <input type="url" placeholder="Endpoint URL" value={owsForm.endpoint} onChange={(e) => setOwsForm({ ...owsForm, endpoint: e.target.value })} className="dock-input" />
+                  <input type="password" placeholder="API Key" value={owsForm.apiKey} onChange={(e) => setOwsForm({ ...owsForm, apiKey: e.target.value })} className="dock-input" />
+                  {owsError && <p style={{ fontSize: '0.8rem', color: 'var(--mesh-peach)' }}>{owsError}</p>}
+                  <button onClick={connectOWS} disabled={owsSaving || !owsForm.endpoint || !owsForm.apiKey} className="dock-btn-primary">{owsSaving ? 'Connecting...' : 'Connect'}</button>
                 </div>
               )}
             </div>
           </div>
 
           {anyConnected && (
-            <div className="mt-8 text-center space-y-3">
-              <p className="text-emerald-600 font-medium text-[15px]">All set! Head back to Telegram.</p>
-              <div className="flex justify-center gap-3">
-                <a
-                  href="https://t.me/heydeckhandbot"
-                  className="px-5 py-2.5 rounded-full bg-slate-800 text-white text-[14px] font-medium hover:bg-slate-700 transition-colors"
-                >
-                  Back to Telegram
-                </a>
-                <button
-                  onClick={() => router.push('/harbor')}
-                  className="px-5 py-2.5 rounded-full bg-white/60 border border-white/80 text-[14px] font-medium text-slate-600 hover:bg-white/80 transition-colors"
-                >
-                  Go to Harbor
-                </button>
+            <div style={{ marginTop: '2rem', textAlign: 'center' }}>
+              <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, color: 'var(--mesh-mint)', marginBottom: '0.75rem' }}>All set!</p>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem' }}>
+                <a href="https://t.me/heydeckhandbot" className="dock-btn-primary">Back to Telegram</a>
+                <button onClick={() => router.push('/harbor')} className="dock-btn-secondary">Go to Harbor</button>
               </div>
             </div>
           )}
