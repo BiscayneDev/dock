@@ -22,23 +22,6 @@ async function getRecipeTools(): Promise<typeof import('@/lib/tools/recipes')> {
   return recipeToolsLoaded
 }
 
-// --- Confirmation flow ---
-
-// Tools requiring user confirmation before execution
-// TODO: Wire into agent loop to intercept these tool calls
-// const CONFIRM_TOOLS = new Set(['gmail_send', 'gmail_reply', 'gcal_delete_event', 'recipe_delete'])
-
-interface PendingAction {
-  toolName: string
-  toolInput: Record<string, unknown>
-  userId: string
-  chatId: number
-}
-
-// In-memory store for pending confirmations (keyed by callback_data)
-// TODO: Move to Redis or DB for multi-instance deployments
-const pendingActions = new Map<string, PendingAction>()
-
 // --- Main orchestrator entry ---
 
 export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void> {
@@ -132,13 +115,26 @@ async function handleMessage(message: TelegramMessage): Promise<void> {
     { role: 'user', content: text },
   ]
 
-  // Build system prompt
+  // Check message count for first-message detection and preference extraction
+  const supabaseForCount = createServerClient()
+  const { count: messageCount } = await supabaseForCount
+    .from('messages')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+
+  const isFirstMessage = (messageCount ?? 0) <= 1
+
+  // Build system prompt with personality and context
   const connectedIntegrations = Object.keys(ctx.tokens)
+  const userPrefs = (user as unknown as Record<string, unknown>).preferences as Record<string, unknown> | undefined
   const systemPrompt = buildSystemPrompt({
     datetime: new Date().toISOString(),
     timezone: user.timezone ?? 'UTC',
     name: user.name ?? 'there',
     integrations: connectedIntegrations,
+    userPreferences: userPrefs ?? undefined,
+    isFirstMessage: isFirstMessage && connectedIntegrations.length > 0,
+    messageCount: messageCount ?? 0,
   })
 
   // Get tools (including recipe tools + user's MCP tools)
@@ -148,7 +144,8 @@ async function handleMessage(message: TelegramMessage): Promise<void> {
   const mcpTools = await loadMCPToolsForUser(user.id).catch(() => [])
   const tools = [...getOrchestratorTools(recipeTools), ...mcpTools]
 
-  // Run agent loop
+  // Run agent loop with confirmation support
+  const { requestConfirmation } = await import('@/lib/orchestrator/confirmation')
   const response = await runAgentLoop(
     systemPrompt,
     messages,
@@ -157,6 +154,9 @@ async function handleMessage(message: TelegramMessage): Promise<void> {
     async (intermediateMsg: string) => {
       await sendChatAction(chatId)
       await sendMessage({ chatId, text: intermediateMsg })
+    },
+    async (toolName: string, toolInput: Record<string, unknown>) => {
+      return requestConfirmation(chatId, toolName, toolInput)
     }
   )
 
@@ -166,8 +166,18 @@ async function handleMessage(message: TelegramMessage): Promise<void> {
     content: response,
   })
 
-  // Split and send response (Telegram max 4096 chars)
-  await sendLongMessage(chatId, response)
+  // Send response as rapid-fire chunks (human-like texting)
+  const { sendRapidFire } = await import('@/lib/telegram/message-splitter')
+  await sendRapidFire(chatId, response)
+
+  // Background: extract user preferences every ~10 messages
+  if ((messageCount ?? 0) > 0 && (messageCount ?? 0) % 10 === 0) {
+    import('@/lib/orchestrator/preference-extractor')
+      .then((mod) => mod.extractPreferences(user.id))
+      .catch(() => {
+        // Non-critical — silently ignore
+      })
+  }
 }
 
 async function handleCallbackQuery(query: TelegramCallbackQuery): Promise<void> {
@@ -181,42 +191,20 @@ async function handleCallbackQuery(query: TelegramCallbackQuery): Promise<void> 
 
   if (data.startsWith('confirm:')) {
     const actionId = data.replace('confirm:', '')
-    const pending = pendingActions.get(actionId)
+    const { resolveConfirmation } = await import('@/lib/orchestrator/confirmation')
+    const resolved = resolveConfirmation(actionId, true)
 
-    if (!pending) {
+    if (!resolved) {
       await answerCallbackQuery(query.id, 'This action has expired.')
       return
     }
 
-    pendingActions.delete(actionId)
-
-    // Execute the confirmed tool
-    const tool = integrationTools.find((t) => t.name === pending.toolName)
-    if (!tool) {
-      await answerCallbackQuery(query.id, 'Tool no longer available.')
-      return
-    }
-
-    await answerCallbackQuery(query.id, 'Confirmed!')
-    await sendChatAction(chatId)
-
-    const ctx = await buildUserContext(
-      await getUserById(pending.userId),
-      chatId
-    )
-    const result = await tool.execute(pending.toolInput, ctx)
-
-    if (result.success) {
+    await answerCallbackQuery(query.id, '✅')
+    if (query.message) {
       await editMessage({
         chatId,
-        messageId: query.message!.message_id,
-        text: '✅ Done!',
-      })
-    } else {
-      await editMessage({
-        chatId,
-        messageId: query.message!.message_id,
-        text: `❌ Failed: ${result.error ?? 'Unknown error'}`,
+        messageId: query.message.message_id,
+        text: `${query.message.text ?? ''}\n\n✅ confirmed`,
       })
     }
     return
@@ -224,14 +212,15 @@ async function handleCallbackQuery(query: TelegramCallbackQuery): Promise<void> 
 
   if (data.startsWith('cancel:')) {
     const actionId = data.replace('cancel:', '')
-    pendingActions.delete(actionId)
-    await answerCallbackQuery(query.id, 'Cancelled.')
+    const { resolveConfirmation } = await import('@/lib/orchestrator/confirmation')
+    resolveConfirmation(actionId, false)
+    await answerCallbackQuery(query.id, 'cancelled')
 
     if (query.message) {
       await editMessage({
         chatId,
         messageId: query.message.message_id,
-        text: '❌ Cancelled.',
+        text: '❌ cancelled',
       })
     }
     return
@@ -294,9 +283,10 @@ async function handleBotCommand(text: string, user: DbUser, chatId: number): Pro
         username: user.telegram_username,
         ts: Date.now(),
       })
+      const firstName = (user.name ?? '').split(' ')[0].toLowerCase()
       await sendMessage({
         chatId,
-        text: `Welcome aboard! I'm Dock, your AI first mate. ⚓\n\nTo get started, connect your integrations:\n${magicLink}\n\nThis link will sign you in automatically. Once you've connected at least one service, come back here and we'll get to work.`,
+        text: `hey${firstName ? ` ${firstName}` : ''}! i'm dock ⚓\n\nconnect your stuff and i'll take it from there:\n${magicLink}`,
       })
       break
     }

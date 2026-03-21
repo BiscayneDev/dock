@@ -67,27 +67,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       // Only run briefing if Google is connected
       if (!tokens.google) continue
 
-      const briefingPrompt = `You are generating a daily morning briefing.
-Current datetime: ${now.toISOString()}
-User timezone: ${timezone}
+      const userName = ((user.name as string) ?? '').split(' ')[0].toLowerCase()
+      const briefingPrompt = `you're dock, sending ${userName || 'the user'} their morning snapshot.
+current datetime: ${now.toISOString()}
+user timezone: ${timezone}
 
-Generate a concise daily briefing with:
-1. Today's calendar events
-2. Summary of unread emails from the last 12 hours
-
-Format it nicely for Telegram. Start with "☀️ Daily Briefing".`
+check their calendar for today and summarize any unread emails from the last 12 hours.
+write it like you're texting a friend their day. casual, no headers, just the highlights.
+keep it short — a few sentences per section. use lowercase.
+start with something like "morning ${userName}" or "hey, here's your day"`
 
       const briefing = await runAgentLoop(
         briefingPrompt,
-        [{ role: 'user', content: 'Generate my daily briefing' }],
+        [{ role: 'user', content: 'morning briefing' }],
         integrationTools,
         ctx
       )
 
-      await sendMessage({
-        chatId: user.telegram_id as number,
-        text: briefing,
-      })
+      const { sendRapidFire } = await import('@/lib/telegram/message-splitter')
+      await sendRapidFire(user.telegram_id as number, briefing)
 
       // Persist as a message for history
       await supabase.from('messages').insert({

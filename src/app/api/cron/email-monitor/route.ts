@@ -103,17 +103,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           snippet: email.snippet,
         })
 
+        const userName = (user.name as string) ?? ''
+        const fromShort = email.from.split('<')[0].trim() || email.from
+
         if (classification.isOTP) {
+          // Try to extract the actual code from the snippet
+          const codeMatch = (email.snippet as string).match(/\b(\d{4,8})\b/)
+          const codeStr = codeMatch ? ` — code: ${codeMatch[1]}` : ''
           await sendMessage({
             chatId: user.telegram_id as number,
-            text: `🔑 OTP detected from ${email.from}\n\n${classification.summary}`,
+            text: `hey${userName ? ` ${userName.split(' ')[0].toLowerCase()}` : ''}, got a verification code from ${fromShort}${codeStr}`,
           })
           notifiedCount++
-        } else if (classification.urgency === 'critical' || classification.urgency === 'high') {
-          const icon = classification.urgency === 'critical' ? '🚨' : '📬'
+        } else if (classification.urgency === 'critical') {
           await sendMessage({
             chatId: user.telegram_id as number,
-            text: `${icon} ${classification.summary}\nFrom: ${email.from}\nSubject: ${email.subject}`,
+            text: `🚨 ${userName ? `${userName.split(' ')[0].toLowerCase()}, ` : ''}${classification.summary}. probably want to look at this`,
+          })
+          notifiedCount++
+        } else if (classification.urgency === 'high') {
+          await sendMessage({
+            chatId: user.telegram_id as number,
+            text: `heads up — ${fromShort} just emailed about "${email.subject}". looks important`,
           })
           notifiedCount++
         }

@@ -14,7 +14,8 @@ export async function runAgentLoop(
   messages: ChatMessage[],
   tools: Tool[],
   ctx: UserContext,
-  onIntermediateMessage?: (msg: string) => Promise<void>
+  onIntermediateMessage?: (msg: string) => Promise<void>,
+  onConfirmationRequired?: (toolName: string, toolInput: Record<string, unknown>) => Promise<boolean>
 ): Promise<string> {
   const llm = getLLMProvider()
   const history: ChatMessage[] = [...messages]
@@ -50,6 +51,26 @@ export async function runAgentLoop(
         const tool = tools.find((t) => t.name === call.name)
         if (!tool) {
           return { id: call.id, error: `Tool not found: ${call.name}` }
+        }
+
+        // Check if this tool requires user confirmation
+        if (onConfirmationRequired) {
+          const { CONFIRM_TOOLS } = await import('@/lib/orchestrator/confirmation')
+          if (CONFIRM_TOOLS.has(call.name)) {
+            const confirmed = await onConfirmationRequired(
+              call.name,
+              call.input
+            )
+            if (!confirmed) {
+              return {
+                id: call.id,
+                result: {
+                  success: false,
+                  error: 'User cancelled this action.',
+                },
+              }
+            }
+          }
         }
 
         try {

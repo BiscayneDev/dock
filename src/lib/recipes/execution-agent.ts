@@ -336,10 +336,8 @@ export async function executeRecipe(
 
     const isTest = statusOverride === 'test'
     if (recipe.notify_on_run && !noNotify && !isTest) {
-      await sendMessage({
-        chatId: ctx.telegramChatId,
-        text: `⚡ *${recipe.name}*\n\n${output}`,
-      })
+      const { sendRapidFire } = await import('@/lib/telegram/message-splitter')
+      await sendRapidFire(ctx.telegramChatId, `⚡ *${recipe.name}*\n\n${output}`)
     }
 
     await supabase

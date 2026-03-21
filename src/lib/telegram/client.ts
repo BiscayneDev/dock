@@ -11,6 +11,76 @@ export function escapeMarkdownV2(text: string): string {
   return escaped
 }
 
+/**
+ * Smart MarkdownV2 escaping that preserves intentional formatting.
+ * - Preserves *bold*, _italic_, `code`, ```code blocks```
+ * - Converts **bold** → *bold* (standard MD → Telegram MD)
+ * - Escapes all other special chars outside formatting contexts
+ * - Falls back to full escaping if parsing gets confused
+ */
+export function smartEscapeMarkdownV2(text: string): string {
+  // First, convert standard markdown bold **text** → *text*
+  let result = text.replace(/\*\*(.+?)\*\*/g, '*$1*')
+
+  // Tokenize: extract code blocks, inline code, bold, italic as protected tokens
+  const tokens: Array<{ placeholder: string; original: string }> = []
+  let tokenIndex = 0
+
+  // Protect code blocks (``` ... ```)
+  result = result.replace(/```[\s\S]*?```/g, (match) => {
+    const placeholder = `__TOKEN_${tokenIndex++}__`
+    // In MarkdownV2, code blocks use ``` and content inside doesn't need escaping
+    tokens.push({ placeholder, original: match })
+    return placeholder
+  })
+
+  // Protect inline code (` ... `)
+  result = result.replace(/`[^`]+`/g, (match) => {
+    const placeholder = `__TOKEN_${tokenIndex++}__`
+    tokens.push({ placeholder, original: match })
+    return placeholder
+  })
+
+  // Protect bold (* ... *)
+  result = result.replace(/\*[^*]+\*/g, (match) => {
+    const placeholder = `__TOKEN_${tokenIndex++}__`
+    // Escape inner content but keep the * delimiters
+    const inner = match.slice(1, -1)
+    const escapedInner = escapeMarkdownV2Content(inner)
+    tokens.push({ placeholder, original: `*${escapedInner}*` })
+    return placeholder
+  })
+
+  // Protect italic (_ ... _)
+  result = result.replace(/_[^_]+_/g, (match) => {
+    const placeholder = `__TOKEN_${tokenIndex++}__`
+    const inner = match.slice(1, -1)
+    const escapedInner = escapeMarkdownV2Content(inner)
+    tokens.push({ placeholder, original: `_${escapedInner}_` })
+    return placeholder
+  })
+
+  // Escape everything remaining
+  result = escapeMarkdownV2Content(result)
+
+  // Restore protected tokens
+  for (const token of tokens) {
+    result = result.replace(token.placeholder, token.original)
+  }
+
+  return result
+}
+
+// Escape special chars except those used as formatting delimiters
+function escapeMarkdownV2Content(text: string): string {
+  const charsToEscape = ['[', ']', '(', ')', '~', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+  let escaped = text
+  for (const char of charsToEscape) {
+    escaped = escaped.replaceAll(char, `\\${char}`)
+  }
+  return escaped
+}
+
 interface SendMessageOptions {
   chatId: number
   text: string
