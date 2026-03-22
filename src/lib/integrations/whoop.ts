@@ -12,8 +12,8 @@ export function getWhoopAuthUrl(): string {
     client_id: process.env.WHOOP_CLIENT_ID ?? '',
     redirect_uri: process.env.WHOOP_REDIRECT_URI ?? '',
     response_type: 'code',
-    scope: 'read:recovery read:cycles read:sleep read:workout read:profile read:body_measurement',
-    state: 'whoop',
+    scope: 'read:recovery read:cycles read:sleep read:workout read:profile read:body_measurement offline',
+    state: 'whoop_dock_auth',
   })
 
   return `${WHOOP_AUTH_URL}?${params.toString()}`
