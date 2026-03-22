@@ -5,6 +5,8 @@ import { useState } from 'react'
 interface WalletConnectProps {
   connected: boolean
   walletAddress?: string | null
+  chainLabel?: string | null
+  balance?: string | null
   onConnected: () => void
   onDisconnect: () => void
 }
@@ -14,7 +16,14 @@ function truncateAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`
 }
 
-export function OpenWalletConnect({ connected, walletAddress, onConnected, onDisconnect }: WalletConnectProps) {
+export function OpenWalletConnect({
+  connected,
+  walletAddress,
+  chainLabel,
+  balance,
+  onConnected,
+  onDisconnect,
+}: WalletConnectProps) {
   const [showForm, setShowForm] = useState(false)
   const [endpoint, setEndpoint] = useState('')
   const [apiKey, setApiKey] = useState('')
@@ -59,93 +68,159 @@ export function OpenWalletConnect({ connected, walletAddress, onConnected, onDis
       })
       onDisconnect()
     } catch {
-      // Failed
+      // Failed silently
     }
   }
 
-  return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">💰</span>
+  if (connected) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        {/* Balance display */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <h3 className="font-medium text-zinc-100">MoonPay Wallet</h3>
-            <p className="text-sm text-zinc-400">Agent wallet &amp; payments</p>
+            <span style={{
+              fontFamily: "'Outfit', sans-serif",
+              fontWeight: 800,
+              fontSize: '1.75rem',
+              letterSpacing: '-0.02em',
+            }}>
+              {balance !== null ? `$${balance}` : '—'}
+            </span>
+            <span style={{
+              fontFamily: "'Outfit', sans-serif",
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              opacity: 0.5,
+              marginLeft: '0.35rem',
+            }}>
+              USDC
+            </span>
           </div>
-        </div>
-        <div>
-          {connected ? (
-            <div className="flex items-center gap-2">
-              <div className="text-right">
-                <span className="text-sm text-emerald-400">Connected</span>
-                {walletAddress && (
-                  <p className="text-xs text-zinc-500 font-mono">{truncateAddress(walletAddress)}</p>
-                )}
-              </div>
-              <button
-                onClick={handleDisconnect}
-                className="text-sm text-zinc-500 hover:text-red-400 transition-colors"
-              >
-                Disconnect
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowForm(!showForm)}
-              className="inline-flex items-center rounded-md bg-cyan-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-cyan-500 transition-colors"
-            >
-              Connect
-            </button>
+          {chainLabel && (
+            <span style={{
+              fontSize: '0.7rem',
+              fontFamily: "'Outfit', sans-serif",
+              fontWeight: 600,
+              border: '1px solid var(--ink)',
+              borderRadius: '1rem',
+              padding: '0.15rem 0.5rem',
+              opacity: 0.6,
+            }}>
+              {chainLabel}
+            </span>
           )}
+        </div>
+
+        {/* Address + disconnect */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              backgroundColor: 'var(--mesh-mint)',
+            }} />
+            <span style={{
+              fontFamily: 'monospace',
+              fontSize: '0.8rem',
+              opacity: 0.6,
+            }}>
+              {walletAddress ? truncateAddress(walletAddress) : 'Connected'}
+            </span>
+          </div>
+          <button
+            onClick={handleDisconnect}
+            style={{
+              background: 'none',
+              border: 'none',
+              fontFamily: "'Outfit', sans-serif",
+              fontSize: '0.75rem',
+              color: 'var(--mesh-peach)',
+              cursor: 'pointer',
+              padding: '0.25rem 0',
+            }}
+          >
+            Disconnect
+          </button>
         </div>
       </div>
+    )
+  }
 
-      {showForm && !connected && (
-        <div className="mt-4 space-y-3 border-t border-zinc-800 pt-4">
-          <p className="text-xs text-zinc-500">
-            Set up your agent wallet with the MoonPay CLI:
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      <p style={{ fontSize: '0.85rem', opacity: 0.6, lineHeight: 1.5 }}>
+        Your agent needs a wallet to use paid APIs (x402) and receive recipe payments. Set one up with MoonPay.
+      </p>
+
+      {!showForm ? (
+        <button
+          onClick={() => setShowForm(true)}
+          className="dock-btn-primary"
+          style={{ alignSelf: 'flex-start' }}
+        >
+          Set up wallet
+        </button>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {/* Setup instructions */}
+          <div style={{
+            fontFamily: 'monospace',
+            fontSize: '0.75rem',
+            padding: '0.75rem',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--ink)',
+            opacity: 0.7,
+            lineHeight: 1.8,
+          }}>
+            <div>npm install -g @moonpay/cli</div>
+            <div>mp login</div>
+            <div>mp wallet create</div>
+          </div>
+
+          <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>
+            Then enter your OWS endpoint and API key. Your key is encrypted before storage.
           </p>
-          <div className="rounded-md bg-zinc-800/50 p-2 font-mono text-xs text-zinc-300 space-y-1">
-            <p>npm install -g @moonpay/cli</p>
-            <p>mp login</p>
-            <p>mp wallet create</p>
-          </div>
-          <p className="text-xs text-zinc-500">
-            Then enter your OWS endpoint and API key below.
-            Your API key is encrypted before storage.
-          </p>
-          <div>
-            <label className="block text-sm text-zinc-400 mb-1">Endpoint URL</label>
-            <input
-              type="url"
-              value={endpoint}
-              onChange={(e) => setEndpoint(e.target.value)}
-              placeholder="http://localhost:8787"
-              className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100"
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-zinc-400 mb-1">API Key</label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="ows_..."
-              className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100"
-            />
-          </div>
+
+          <input
+            type="url"
+            value={endpoint}
+            onChange={(e) => setEndpoint(e.target.value)}
+            placeholder="Endpoint URL (e.g. http://localhost:8787)"
+            className="dock-input"
+          />
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="API Key"
+            className="dock-input"
+          />
+
           {error && (
-            <p className="text-sm text-red-400">{error}</p>
+            <p style={{ fontSize: '0.8rem', color: 'var(--mesh-peach)' }}>{error}</p>
           )}
-          <button
-            onClick={handleConnect}
-            disabled={saving || !endpoint || !apiKey}
-            className="rounded-md bg-cyan-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-cyan-500 transition-colors disabled:opacity-50"
-          >
-            {saving ? 'Connecting...' : 'Connect'}
-          </button>
+
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              onClick={handleConnect}
+              disabled={saving || !endpoint || !apiKey}
+              className="dock-btn-primary"
+              style={{ opacity: saving || !endpoint || !apiKey ? 0.5 : 1 }}
+            >
+              {saving ? 'Connecting...' : 'Connect'}
+            </button>
+            <button
+              onClick={() => { setShowForm(false); setError(null) }}
+              className="dock-btn-secondary"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
     </div>
   )
 }
+
+export { truncateAddress }
