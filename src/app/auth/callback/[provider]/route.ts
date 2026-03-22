@@ -20,6 +20,10 @@ import {
   exchangeWhoopCode,
   storeWhoopTokens,
 } from '@/lib/integrations/whoop'
+import {
+  exchangeTwitterCode,
+  storeTwitterTokens,
+} from '@/lib/integrations/twitter'
 
 export async function GET(
   request: NextRequest,
@@ -93,6 +97,30 @@ export async function GET(
           result.refreshToken,
           result.expiresAt
         )
+        break
+      }
+
+      case 'twitter': {
+        // Retrieve PKCE code verifier from cookie
+        const { cookies } = await import('next/headers')
+        const cookieStore = await cookies()
+        const codeVerifier = cookieStore.get('twitter_cv')?.value
+        if (!codeVerifier) {
+          return NextResponse.redirect(`${appUrl}/onboarding?error=twitter_pkce_expired`)
+        }
+
+        const result = await exchangeTwitterCode(code, codeVerifier)
+        await storeTwitterTokens(
+          session.userId,
+          result.accessToken,
+          result.refreshToken,
+          result.expiresAt,
+          result.userId,
+          result.username
+        )
+
+        // Clear the code verifier cookie
+        cookieStore.delete('twitter_cv')
         break
       }
 

@@ -24,5 +24,6 @@ export async function GET(): Promise<NextResponse> {
     openwallet: connected.has('openwallet'),
     oura: connected.has('oura'),
     whoop: connected.has('whoop'),
+    twitter: connected.has('twitter'),
   })
 }

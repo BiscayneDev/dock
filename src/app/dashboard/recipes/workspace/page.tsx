@@ -2,8 +2,9 @@
 
 import { Suspense, useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { PlaygroundPanel } from './playground'
 
-interface X402Service { name: string; description: string; price: number | null; category: string | null; recipe_idea: string }
+interface X402Service { name: string; description: string; url: string; price: number | null; category: string | null; recipe_idea: string }
 interface ToolCallEntry { name: string; input: unknown; result: unknown }
 interface ParsedRecipe { name: string; trigger_type: string; trigger_config: Record<string, unknown>; instructions: string; category: string }
 interface Message { role: 'user' | 'agent'; content: string; toolCalls?: ToolCallEntry[]; recipe?: ParsedRecipe }
@@ -15,6 +16,7 @@ const SKILLS = [
   { group: 'Web & x402', items: [{ name: 'Search the web', prompt: 'search the web for...' }, { name: 'Browse x402 APIs', prompt: 'show me x402 services I can use' }] },
   { group: 'Wallet', items: [{ name: 'Check balance', prompt: 'check my wallet balance' }] },
   { group: 'Health', items: [{ name: 'Sleep summary', prompt: 'how did I sleep last night?' }, { name: 'Recovery score', prompt: "what's my readiness/recovery score today?" }, { name: 'Daily health snapshot', prompt: 'give me a full health summary for today' }] },
+  { group: 'Twitter', items: [{ name: 'My timeline', prompt: "what's happening on my twitter timeline?" }, { name: 'Search tweets', prompt: 'search twitter for...' }, { name: 'Check a user', prompt: "what has @... been tweeting about?" }] },
 ]
 
 const TRIGGER_LABELS: Record<string, string> = { schedule: 'Schedule', email_event: 'Email', github_event: 'GitHub', notion_event: 'Notion', keyword: 'Keyword', manual: 'Manual' }
@@ -40,6 +42,7 @@ function WorkspacePage() {
   const [sending, setSending] = useState(false)
   const [saving, setSaving] = useState(false)
   const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set())
+  const [playground, setPlayground] = useState<X402Service | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const loadSidebar = useCallback(async () => {
@@ -98,14 +101,14 @@ function WorkspacePage() {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" style={{ marginLeft: 'auto' }}><path d="M12 5v14M5 12h14" /></svg>
           </button>
           <Section title="Your Integrations">
-            {[{ key: 'google', label: 'Gmail & Calendar', icon: '📧' }, { key: 'github', label: 'GitHub', icon: '🐙' }, { key: 'notion', label: 'Notion', icon: '📝' }, { key: 'openwallet', label: 'MoonPay Wallet', icon: '💰' }, { key: 'oura', label: 'Oura Ring', icon: '💤' }, { key: 'whoop', label: 'WHOOP', icon: '💪' }].map((int) => (
+            {[{ key: 'google', label: 'Gmail & Calendar', icon: '📧' }, { key: 'github', label: 'GitHub', icon: '🐙' }, { key: 'notion', label: 'Notion', icon: '📝' }, { key: 'openwallet', label: 'MoonPay Wallet', icon: '💰' }, { key: 'oura', label: 'Oura Ring', icon: '💤' }, { key: 'whoop', label: 'WHOOP', icon: '💪' }, { key: 'twitter', label: 'Twitter / X', icon: '🐦' }].map((int) => (
               <SideItem key={int.key} icon={int.icon} label={int.label} dot={integrations[int.key] ? 'var(--mesh-mint)' : 'var(--mesh-peach)'} onClick={() => setInput(`I want to do something with ${int.label}...`)} />
             ))}
           </Section>
           {services.length > 0 && (
             <Section title="x402 Services">
               {services.slice(0, 4).map((s, i) => (
-                <ServiceCard key={i} name={s.name} desc={s.description} price={s.price} idx={i} onClick={() => setInput(`I want to use ${s.name} to ${s.recipe_idea.toLowerCase()}`)} />
+                <ServiceCard key={i} name={s.name} desc={s.description} price={s.price} idx={i} onClick={() => setPlayground(s)} />
               ))}
             </Section>
           )}
@@ -132,7 +135,18 @@ function WorkspacePage() {
 
         <div ref={scrollRef} className="ws-scroll">
           <div className="ws-scroll-inner">
-            {messages.length === 0 && (
+            {/* x402 Playground */}
+            {playground && (
+              <PlaygroundPanel
+                serviceName={playground.name}
+                serviceUrl={playground.url ?? ''}
+                serviceDescription={playground.description}
+                onClose={() => setPlayground(null)}
+                onBuildRecipe={(desc) => { setPlayground(null); setInput(desc) }}
+              />
+            )}
+
+            {messages.length === 0 && !playground && (
               <div className="ws-hero mesh-bg">
                 <div className="ws-hero-inner">
                   <span className="ws-hero-badge">Live Agent</span>

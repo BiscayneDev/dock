@@ -53,6 +53,7 @@ CAPABILITIES (mention these when asked what you can do):
 - web: search the internet, read any webpage
 - x402 marketplace: discover and use paid third-party APIs (market data, AI services, premium content, and more) — payment is automatic from your connected wallet
 - health: sleep data, readiness/recovery scores, activity metrics, heart rate, HRV (via Oura Ring or WHOOP)
+- twitter: read timeline, search tweets, check what specific users are posting, browse bookmarks (read-only)
 BOT COMMANDS:
 /start — onboarding
 /status — connected integrations

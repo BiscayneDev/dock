@@ -55,6 +55,12 @@ import {
   healthHeartRate,
   healthSummary,
 } from './health'
+import {
+  twitterTimeline,
+  twitterSearch,
+  twitterUserTweets,
+  twitterBookmarks,
+} from './twitter'
 
 // Recipe tools are imported lazily by the orchestrator since they're
 // not available to the execution agent. See lib/tools/recipes.ts.
@@ -117,6 +123,11 @@ export const integrationTools: Tool[] = [
   healthActivity,
   healthHeartRate,
   healthSummary,
+  // Twitter/X (read-only)
+  twitterTimeline,
+  twitterSearch,
+  twitterUserTweets,
+  twitterBookmarks,
 ]
 
 // All tools except recipe management — used by the Execution Agent
