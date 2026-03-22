@@ -148,10 +148,11 @@ export default function LandingPage() {
         </section>
 
         {/* Footer */}
-        <footer style={{ maxWidth: '54rem', margin: '3rem auto 0', padding: '2rem 1.5rem', borderTop: '1.5px solid var(--ink)', textAlign: 'center' }}>
+        <footer style={{ maxWidth: '54rem', margin: '3rem auto 0', padding: '2rem 1.5rem', borderTop: '1.5px solid var(--ink)', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
           <p style={{ fontFamily: "'Outfit', sans-serif", fontSize: '0.75rem', fontWeight: 500, opacity: 0.4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Dock — AI-powered productivity through Telegram
           </p>
+          <a href="/privacy" style={{ fontFamily: "'Outfit', sans-serif", fontSize: '0.7rem', opacity: 0.3, color: 'var(--ink)' }}>Privacy Policy</a>
         </footer>
       </div>
     </>
