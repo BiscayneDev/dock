@@ -158,6 +158,9 @@ export interface Database {
           fee_amount: number
           fee_required: boolean
           is_public: boolean
+          fork_count: number
+          forked_from: string | null
+          category: string | null
           created_at: string
           updated_at: string
         }
@@ -177,6 +180,9 @@ export interface Database {
           fee_amount?: number
           fee_required?: boolean
           is_public?: boolean
+          fork_count?: number
+          forked_from?: string | null
+          category?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -196,6 +202,9 @@ export interface Database {
           fee_amount?: number
           fee_required?: boolean
           is_public?: boolean
+          fork_count?: number
+          forked_from?: string | null
+          category?: string | null
           created_at?: string
           updated_at?: string
         }

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { runAgentLoop } from '@/lib/llm/agent-loop'
 import { integrationTools } from '@/lib/tools/index'
-import { sendMessage } from '@/lib/telegram/client'
 import { getDecryptedTokens } from '@/lib/orchestrator/index'
 import type { UserContext } from '@/lib/llm/types'
 
