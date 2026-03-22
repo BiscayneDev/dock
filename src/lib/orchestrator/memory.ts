@@ -15,6 +15,12 @@ interface DbMessage {
   created_at: string
 }
 
+// Determine the right lightweight model for the current LLM provider
+function getSummarizationModel(): string {
+  const provider = process.env.LLM_PROVIDER ?? 'anthropic'
+  return provider === 'openai' ? 'gpt-4o-mini' : 'claude-haiku-4-5-20251001'
+}
+
 export async function fetchConversationHistory(userId: string): Promise<ChatMessage[]> {
   const supabase = createServerClient()
 
@@ -29,19 +35,21 @@ export async function fetchConversationHistory(userId: string): Promise<ChatMess
     await summarizeOldMessages(userId)
   }
 
-  // Fetch last N messages
+  // Fetch the NEWEST N messages (descending), then reverse for chronological order.
+  // This ensures the agent always has recent context even if summarization fails.
   const { data, error } = await supabase
     .from('messages')
     .select('id, role, content, tool_calls, tool_results, created_at')
     .eq('user_id', userId)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(MAX_CONTEXT_MESSAGES)
 
   if (error || !data) {
     return []
   }
 
-  return data.map(dbMessageToChatMessage)
+  // Reverse to get chronological order (oldest first)
+  return data.reverse().map(dbMessageToChatMessage)
 }
 
 async function summarizeOldMessages(userId: string): Promise<void> {
@@ -75,7 +83,7 @@ async function summarizeOldMessages(userId: string): Promise<void> {
       system: 'You are a conversation summarizer. Create a concise summary of the following conversation, preserving key facts, decisions, and context the user might need later. Keep it under 500 words.',
       messages: [{ role: 'user', content: conversationText }],
       tools: [],
-      model: 'claude-haiku-4-5-20251001',
+      model: getSummarizationModel(),
       maxTokens: 1024,
     })
 

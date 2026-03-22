@@ -48,11 +48,13 @@ async function handleMessage(message: TelegramMessage): Promise<void> {
     await handleMessageInner(chatId, telegramId, text, message)
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err)
-    const errorStack = err instanceof Error ? err.stack?.slice(0, 300) : ''
-    logger.error('handleMessage failed', { chatId, error: errorMsg })
+    logger.error('handleMessage failed', {
+      chatId,
+      error: errorMsg,
+      stack: err instanceof Error ? err.stack?.slice(0, 500) : undefined,
+    })
     try {
-      // Temporarily include error detail so we can debug
-      await sendMessage({ chatId, text: `something went wrong: ${errorMsg}\n\n${errorStack}` })
+      await sendMessage({ chatId, text: 'something went wrong — try again or rephrase' })
     } catch {
       // Can't send error message
     }
@@ -136,14 +138,15 @@ async function handleMessageInner(chatId: number, telegramId: number, initialTex
     { role: 'user', content: text },
   ]
 
-  // Check message count for first-message detection and preference extraction
+  // Count includes the just-persisted user message; first message = count of 1
   const supabaseForCount = createServerClient()
-  const { count: messageCount } = await supabaseForCount
+  const { count: rawCount } = await supabaseForCount
     .from('messages')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', user.id)
 
-  const isFirstMessage = (messageCount ?? 0) <= 1
+  const messageCount = rawCount ?? 0
+  const isFirstMessage = messageCount <= 1
 
   // Build system prompt with personality and context
   const connectedIntegrations = Object.keys(ctx.tokens)
@@ -382,8 +385,7 @@ async function handleBotCommand(text: string, user: DbUser, chatId: number): Pro
     case '/help': {
       await sendMessage({
         chatId,
-        text: `Here's what I can do:\n\n📧 *Email* — search, read, draft, send, reply, archive\n📅 *Calendar* — view events, create, update, delete, find free time\n🐙 *GitHub* — repos, issues, PRs, notifications\n📝 *Notion* — search, read, create, update pages & databases\n🔐 *Wallet* — check balances, send crypto, sign messages \\(via OpenWallet\\)\n⏰ *Reminders* — set, list, cancel\n🤖 *Recipes* — create automations that run on schedule or triggers\n\nJust tell me what you need in plain English\\.`,
-        parseMode: 'MarkdownV2',
+        text: `here's what i can do:\n\n📧 email — search, read, draft, send, reply, archive\n📅 calendar — view events, create, update, delete, find free time\n🐙 github — repos, issues, PRs, notifications\n📝 notion — search, read, create, update pages & databases\n🔐 wallet — check balances, send crypto, sign messages\n⏰ reminders — set, list, cancel\n⚡ recipes — automated workflows on schedule, email, github, notion, or keyword triggers\n🔍 web — search the internet, read any webpage\n🛒 x402 marketplace — discover and use paid third-party APIs\n\njust tell me what you need in plain english.`,
       })
       break
     }

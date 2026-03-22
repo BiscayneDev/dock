@@ -6,6 +6,7 @@ import type {
   ChatMessage,
   ToolCall,
 } from './types'
+import { logger } from '@/lib/logger'
 
 export class OpenAIProvider implements LLMProvider {
   private client: OpenAI
@@ -20,9 +21,10 @@ export class OpenAIProvider implements LLMProvider {
     const model = params.model ?? process.env.LLM_MODEL ?? 'gpt-4o'
     const maxTokens = params.maxTokens ?? 4096
 
+    // Build messages, expanding tool-role messages into one per result
     const messages: OpenAI.ChatCompletionMessageParam[] = [
       { role: 'system', content: params.system },
-      ...params.messages.map((msg) => this.toOpenAIMessage(msg)),
+      ...this.expandMessages(params.messages),
     ]
 
     const tools: OpenAI.ChatCompletionTool[] | undefined =
@@ -47,48 +49,58 @@ export class OpenAIProvider implements LLMProvider {
     return this.parseResponse(response)
   }
 
-  private toOpenAIMessage(
-    msg: ChatMessage
-  ): OpenAI.ChatCompletionMessageParam {
-    if (msg.role === 'user') {
-      return { role: 'user', content: msg.content ?? '' }
-    }
+  // Expand ChatMessage[] into OpenAI messages, handling tool results correctly.
+  // OpenAI requires ONE message per tool result, each with its own tool_call_id.
+  private expandMessages(
+    messages: ChatMessage[]
+  ): OpenAI.ChatCompletionMessageParam[] {
+    const expanded: OpenAI.ChatCompletionMessageParam[] = []
 
-    if (msg.role === 'assistant') {
-      const toolCalls: OpenAI.ChatCompletionMessageToolCall[] | undefined =
-        msg.toolCalls && msg.toolCalls.length > 0
-          ? msg.toolCalls.map((tc) => ({
-              id: tc.id,
-              type: 'function' as const,
-              function: {
-                name: tc.name,
-                arguments: JSON.stringify(tc.input),
-              },
-            }))
-          : undefined
+    for (const msg of messages) {
+      if (msg.role === 'user') {
+        expanded.push({ role: 'user', content: msg.content ?? '' })
+        continue
+      }
 
-      return {
-        role: 'assistant',
-        content: msg.content,
-        tool_calls: toolCalls,
+      if (msg.role === 'assistant') {
+        const toolCalls: OpenAI.ChatCompletionMessageToolCall[] | undefined =
+          msg.toolCalls && msg.toolCalls.length > 0
+            ? msg.toolCalls.map((tc) => ({
+                id: tc.id,
+                type: 'function' as const,
+                function: {
+                  name: tc.name,
+                  arguments: JSON.stringify(tc.input),
+                },
+              }))
+            : undefined
+
+        expanded.push({
+          role: 'assistant',
+          content: msg.content,
+          tool_calls: toolCalls,
+        })
+        continue
+      }
+
+      // role === 'tool' — expand each tool result into its own message
+      if (msg.toolResults && msg.toolResults.length > 0) {
+        for (const tr of msg.toolResults) {
+          expanded.push({
+            role: 'tool',
+            tool_call_id: tr.id,
+            content: tr.error
+              ? JSON.stringify({ error: tr.error })
+              : JSON.stringify(tr.result ?? { success: true }),
+          })
+        }
+      } else {
+        // Fallback: no tool results, treat as user message
+        expanded.push({ role: 'user', content: msg.content ?? '' })
       }
     }
 
-    // role === 'tool'
-    if (msg.toolResults && msg.toolResults.length > 0) {
-      // OpenAI expects one message per tool result, but we need to return a single message.
-      // Return the first one; the agent loop sends them individually.
-      const tr = msg.toolResults[0]
-      return {
-        role: 'tool',
-        tool_call_id: tr.id,
-        content: tr.error
-          ? JSON.stringify({ error: tr.error })
-          : JSON.stringify(tr.result ?? { success: true }),
-      }
-    }
-
-    return { role: 'user', content: msg.content ?? '' }
+    return expanded
   }
 
   private parseResponse(
@@ -102,11 +114,19 @@ export class OpenAIProvider implements LLMProvider {
     const content = choice.message.content
     const toolCalls: ToolCall[] = (choice.message.tool_calls ?? [])
       .filter((tc): tc is OpenAI.ChatCompletionMessageToolCall & { type: 'function' } => tc.type === 'function')
-      .map((tc) => ({
-        id: tc.id,
-        name: tc.function.name,
-        input: JSON.parse(tc.function.arguments) as Record<string, unknown>,
-      }))
+      .map((tc) => {
+        let input: Record<string, unknown> = {}
+        try {
+          input = JSON.parse(tc.function.arguments) as Record<string, unknown>
+        } catch (err) {
+          logger.error('Failed to parse tool call arguments', {
+            toolName: tc.function.name,
+            args: tc.function.arguments,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        }
+        return { id: tc.id, name: tc.function.name, input }
+      })
 
     let stopReason: LLMResponse['stopReason'] = 'end_turn'
     if (choice.finish_reason === 'tool_calls') {
