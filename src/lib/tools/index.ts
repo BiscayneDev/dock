@@ -47,6 +47,7 @@ import {
   walletInfo,
 } from './wallet'
 import { webSearch, webFetch } from './web'
+import { x402Fetch, x402Search } from '@/lib/x402/client'
 
 // Recipe tools are imported lazily by the orchestrator since they're
 // not available to the execution agent. See lib/tools/recipes.ts.
@@ -100,6 +101,9 @@ export const integrationTools: Tool[] = [
   // Web (always available, no OAuth)
   webSearch,
   webFetch,
+  // x402 protocol (paid API access)
+  x402Fetch,
+  x402Search,
 ]
 
 // All tools except recipe management — used by the Execution Agent
