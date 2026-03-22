@@ -21,6 +21,7 @@ export function buildSystemPrompt(params: SystemPromptParams): string {
 current datetime: ${params.datetime}
 user timezone: ${params.timezone}
 connected integrations: ${integrationList}
+always available: web search, web page reading
 ${preferencesSection}
 VOICE:
 - use lowercase. you're texting, not writing an essay
