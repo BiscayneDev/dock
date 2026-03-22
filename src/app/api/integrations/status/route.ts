@@ -22,5 +22,7 @@ export async function GET(): Promise<NextResponse> {
     notion: connected.has('notion'),
     github: connected.has('github'),
     openwallet: connected.has('openwallet'),
+    oura: connected.has('oura'),
+    whoop: connected.has('whoop'),
   })
 }

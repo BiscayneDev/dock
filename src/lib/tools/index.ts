@@ -48,6 +48,13 @@ import {
 } from './wallet'
 import { webSearch, webFetch } from './web'
 import { x402Fetch, x402Search } from '@/lib/x402/client'
+import {
+  healthSleep,
+  healthReadiness,
+  healthActivity,
+  healthHeartRate,
+  healthSummary,
+} from './health'
 
 // Recipe tools are imported lazily by the orchestrator since they're
 // not available to the execution agent. See lib/tools/recipes.ts.
@@ -104,6 +111,12 @@ export const integrationTools: Tool[] = [
   // x402 protocol (paid API access)
   x402Fetch,
   x402Search,
+  // Health (Oura, WHOOP)
+  healthSleep,
+  healthReadiness,
+  healthActivity,
+  healthHeartRate,
+  healthSummary,
 ]
 
 // All tools except recipe management — used by the Execution Agent

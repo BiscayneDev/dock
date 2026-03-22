@@ -12,6 +12,14 @@ import {
   exchangeCode as exchangeGithubCode,
   storeGithubTokens,
 } from '@/lib/integrations/github'
+import {
+  exchangeOuraCode,
+  storeOuraTokens,
+} from '@/lib/integrations/oura'
+import {
+  exchangeWhoopCode,
+  storeWhoopTokens,
+} from '@/lib/integrations/whoop'
 
 export async function GET(
   request: NextRequest,
@@ -62,6 +70,28 @@ export async function GET(
           session.userId,
           result.accessToken,
           result.username
+        )
+        break
+      }
+
+      case 'oura': {
+        const result = await exchangeOuraCode(code)
+        await storeOuraTokens(
+          session.userId,
+          result.accessToken,
+          result.refreshToken,
+          result.expiresAt
+        )
+        break
+      }
+
+      case 'whoop': {
+        const result = await exchangeWhoopCode(code)
+        await storeWhoopTokens(
+          session.userId,
+          result.accessToken,
+          result.refreshToken,
+          result.expiresAt
         )
         break
       }
