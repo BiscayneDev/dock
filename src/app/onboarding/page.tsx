@@ -69,6 +69,21 @@ function OnboardingPage() {
         </div>
       )}
 
+      {/* Progress indicator */}
+      {authenticated && (() => {
+        const connectedCount = Object.values(integrations).filter(Boolean).length
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+            <div style={{ flex: 1, height: 4, borderRadius: 2, background: 'var(--ink)', opacity: 0.1 }}>
+              <div style={{ width: `${(connectedCount / 4) * 100}%`, height: '100%', borderRadius: 2, background: 'var(--mesh-mint)', transition: 'width 0.3s' }} />
+            </div>
+            <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.75rem', opacity: 0.6, whiteSpace: 'nowrap' }}>
+              {connectedCount} of 4 connected
+            </span>
+          </div>
+        )
+      })()}
+
       {!authenticated ? (
         <div className="dock-card" style={{ padding: '2rem 1.5rem', alignItems: 'center', textAlign: 'center' }}>
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '1.25rem', opacity: 0.6 }}>
@@ -158,11 +173,44 @@ function OnboardingPage() {
           </div>
 
           {anyConnected && (
-            <div style={{ marginTop: '2rem', textAlign: 'center' }}>
-              <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, color: 'var(--mesh-mint)', marginBottom: '0.75rem' }}>All set!</p>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem' }}>
-                <a href="https://t.me/heydeckhandbot" className="dock-btn-primary">Back to Telegram</a>
-                <button onClick={() => router.push('/harbor')} className="dock-btn-secondary">Go to Harbor</button>
+            <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {/* Primary CTA: Workspace */}
+              <button
+                onClick={() => router.push('/dashboard/recipes/workspace?from=onboarding')}
+                className="dock-card"
+                style={{
+                  padding: '1.5rem',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  backgroundImage: 'linear-gradient(135deg, rgba(91,167,205,0.15) 0%, rgba(148,196,163,0.15) 100%)',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                  </svg>
+                  <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: '1.1rem', letterSpacing: '-0.02em' }}>
+                    Try the Workspace
+                  </span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="2" strokeLinecap="round" style={{ marginLeft: 'auto' }}>
+                    <path d="M5 12h14M12 5l7 7-7 7" />
+                  </svg>
+                </div>
+                <p style={{ fontSize: '0.85rem', opacity: 0.6, lineHeight: 1.5 }}>
+                  Test your integrations live, explore x402 APIs, and build your first recipe with the agent.
+                </p>
+              </button>
+
+              {/* Secondary options */}
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button onClick={() => router.push('/dashboard/recipes/gallery')} className="dock-btn-secondary" style={{ flex: 1 }}>
+                  Browse ideas
+                </button>
+                <a href="https://t.me/heydeckhandbot" className="dock-btn-secondary" style={{ flex: 1, textAlign: 'center', textDecoration: 'none' }}>
+                  Back to Telegram
+                </a>
               </div>
             </div>
           )}

@@ -167,27 +167,36 @@ export default function HarborHome() {
             </Link>
           </section>
 
-          {/* Cards — responsive grid */}
-          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem', paddingBottom: '2rem' }}>
-            {/* Automations — always spans full width */}
-            <Link href="/dashboard/recipes" className="dock-card" style={{ gridColumn: '1 / -1' }}>
+          {/* Top row — two hero cards */}
+          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem', paddingBottom: '0.75rem' }}>
+            {/* Automations */}
+            <Link href="/dashboard/recipes" className="dock-card" style={{ position: 'relative' }}>
               <div className="badge-num">1</div>
               <div style={{ position: 'absolute', top: 0, right: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1, overflow: 'hidden' }}>
                 <div className="illust-blob" />
-                <svg style={{ position: 'absolute', right: 10, bottom: 10, width: 100, height: 80 }} viewBox="0 0 100 80" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg style={{ position: 'absolute', right: 10, bottom: 10, width: 80, height: 60 }} viewBox="0 0 100 80" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M10 60 Q20 50 30 60 T50 60 T70 60 T90 60" opacity="0.5" />
                   <path d="M0 70 Q15 65 30 70 T60 70 T90 70 T100 65" />
-                  <path d="M0 45 L60 45 L50 70 M20 45 L20 70 M40 45 L40 70" />
-                  <path d="M75 25 L80 15 L85 25 L95 30 L85 35 L80 45 L75 35 L65 30 Z" fill="var(--cream)" stroke="var(--ink)" />
                 </svg>
               </div>
               <h2 className="card-title">Automations</h2>
-              <p className="card-desc">Set your workflows adrift. Let the system handle the current.</p>
+              <p className="card-desc">Your active workflows</p>
             </Link>
 
+            {/* Idea Workspace */}
+            <Link href="/dashboard/recipes/workspace" className="dock-card" style={{ backgroundImage: 'linear-gradient(135deg, rgba(91,167,205,0.2) 0%, rgba(148,196,163,0.2) 100%)' }}>
+              <div className="badge-num">2</div>
+              <svg className="card-icon" viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" /></svg>
+              <h2 className="card-title">Idea Workspace</h2>
+              <p className="card-desc">Test ideas live &amp; build recipes</p>
+            </Link>
+          </section>
+
+          {/* Bottom row — four cards */}
+          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.75rem', paddingBottom: '2rem' }}>
             {/* Integrate */}
             <Link href="/onboarding" className="dock-card">
-              <div className="badge-num">2</div>
+              <div className="badge-num">3</div>
               <svg className="card-icon" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><circle cx="17" cy="17" r="3" /></svg>
               <h2 className="card-title">Integrate</h2>
               <p className="card-desc">Connect tools</p>
@@ -195,26 +204,26 @@ export default function HarborHome() {
 
             {/* Recipes */}
             <Link href="/dashboard/recipes/gallery" className="dock-card card-gradient">
-              <div className="badge-num">3</div>
+              <div className="badge-num">4</div>
               <svg className="card-icon" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
               <h2 className="card-title">Recipes</h2>
-              <p className="card-desc">Proven logic</p>
+              <p className="card-desc">Marketplace</p>
             </Link>
 
             {/* Mail */}
             <Link href="https://t.me/heydeckhandbot?text=/briefing" className="dock-card">
-              <div className="badge-num">4</div>
+              <div className="badge-num">5</div>
               <svg className="card-icon" viewBox="0 0 24 24"><path d="M4 7.00005L10.2 11.65C11.2667 12.45 12.7333 12.45 13.8 11.65L20 7" /><rect x="3" y="5" width="18" height="14" rx="2" /></svg>
               <h2 className="card-title">Mail</h2>
               <p className="card-desc">Dispatches</p>
             </Link>
 
-            {/* Texts */}
+            {/* Telegram */}
             <Link href="https://t.me/heydeckhandbot" className="dock-card">
-              <div className="badge-num">5</div>
+              <div className="badge-num">6</div>
               <svg className="card-icon" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
-              <h2 className="card-title">Texts</h2>
-              <p className="card-desc">Signals</p>
+              <h2 className="card-title">Telegram</h2>
+              <p className="card-desc">Chat with Dock</p>
             </Link>
           </section>
         </div>
