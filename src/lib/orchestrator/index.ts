@@ -292,6 +292,37 @@ async function handleCallbackQuery(query: TelegramCallbackQuery): Promise<void> 
     return
   }
 
+  // Quick action buttons
+  if (data.startsWith('quick:')) {
+    const action = data.replace('quick:', '')
+    await answerCallbackQuery(query.id)
+
+    const quickPrompts: Record<string, string> = {
+      emails: 'Summarize my inbox — what emails need my attention?',
+      calendar: "What's on my calendar today?",
+      reminder: 'I need to set a reminder',
+      search: 'Search the web for',
+      sleep: 'How did I sleep last night?',
+      timeline: "What's happening on my Twitter timeline?",
+      recipe: 'Help me create a new recipe automation',
+    }
+
+    const promptText = quickPrompts[action]
+    if (promptText) {
+      // Get the user from telegram ID
+      const fromId = query.from.id
+      const syntheticMessage: TelegramMessage = {
+        message_id: 0,
+        chat: { id: chatId, type: 'private' },
+        date: Math.floor(Date.now() / 1000),
+        text: promptText,
+        from: { id: fromId, is_bot: false, first_name: query.from.first_name ?? '' },
+      }
+      await handleMessage(syntheticMessage)
+    }
+    return
+  }
+
   await answerCallbackQuery(query.id)
 }
 
@@ -311,6 +342,18 @@ async function handleBotCommand(text: string, user: DbUser, chatId: number): Pro
       await sendMessage({
         chatId,
         text: `hey${firstName ? ` ${firstName}` : ''}! i'm dock ⚓\n\nconnect your stuff and i'll take it from there:\n${magicLink}`,
+        replyMarkup: {
+          inline_keyboard: [
+            [
+              { text: '📧 Check emails', callback_data: 'quick:emails' },
+              { text: '📅 My day', callback_data: 'quick:calendar' },
+            ],
+            [
+              { text: '⏰ Set reminder', callback_data: 'quick:reminder' },
+              { text: '🔍 Search web', callback_data: 'quick:search' },
+            ],
+          ],
+        },
       })
       break
     }
@@ -385,7 +428,23 @@ async function handleBotCommand(text: string, user: DbUser, chatId: number): Pro
     case '/help': {
       await sendMessage({
         chatId,
-        text: `here's what i can do:\n\n📧 email — search, read, draft, send, reply, archive\n📅 calendar — view events, create, update, delete, find free time\n🐙 github — repos, issues, PRs, notifications\n📝 notion — search, read, create, update pages & databases\n🔐 wallet — check balances, send crypto, sign messages\n⏰ reminders — set, list, cancel\n⚡ recipes — automated workflows on schedule, email, github, notion, or keyword triggers\n🔍 web — search the internet, read any webpage\n🛒 x402 marketplace — discover and use paid third-party APIs\n\njust tell me what you need in plain english.`,
+        text: `here's what i can do:\n\n📧 email — search, read, draft, send, reply, archive\n📅 calendar — view events, create, update, delete, find free time\n🐙 github — repos, issues, PRs, notifications\n📝 notion — search, read, create, update pages & databases\n🔐 wallet — check balances, send crypto, sign messages\n⏰ reminders — set, list, cancel\n⚡ recipes — automated workflows on triggers\n🔍 web — search the internet, read any page\n💤 health — sleep, recovery, activity (Oura/WHOOP)\n🐦 twitter — timeline, search, bookmarks\n🛒 x402 — paid third-party APIs\n\ntry one of these to get started:`,
+        replyMarkup: {
+          inline_keyboard: [
+            [
+              { text: '📧 Summarize inbox', callback_data: 'quick:emails' },
+              { text: '📅 Today\'s schedule', callback_data: 'quick:calendar' },
+            ],
+            [
+              { text: '💤 How did I sleep?', callback_data: 'quick:sleep' },
+              { text: '🐦 My timeline', callback_data: 'quick:timeline' },
+            ],
+            [
+              { text: '⚡ Create a recipe', callback_data: 'quick:recipe' },
+              { text: '🔍 Search the web', callback_data: 'quick:search' },
+            ],
+          ],
+        },
       })
       break
     }

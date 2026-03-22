@@ -1,13 +1,59 @@
 import { getLLMProvider } from './index'
+import { logger } from '@/lib/logger'
 import type {
   ChatMessage,
   Tool,
   ToolCall,
   ToolCallResult,
+  ToolResult,
   UserContext,
 } from './types'
 
 const MAX_ITERATIONS = 10
+const TOOL_TIMEOUT_MS = 30_000
+
+// Categorize tool errors into actionable messages for the LLM
+function categorizeError(toolName: string, error: string): string {
+  const lower = error.toLowerCase()
+
+  if (lower.includes('401') || lower.includes('403') || lower.includes('unauthorized') || lower.includes('forbidden')) {
+    return `${toolName} failed: authentication expired. Tell the user to reconnect this integration in The Harbor settings or at /onboarding.`
+  }
+
+  if (lower.includes('429') || lower.includes('rate limit') || lower.includes('too many requests')) {
+    return `${toolName} failed: rate limited. Tell the user to try again in a few minutes.`
+  }
+
+  if (lower.includes('not connected') || lower.includes('no wallet') || lower.includes('no health device')) {
+    return `${toolName} failed: integration not connected. Suggest the user connect it at /onboarding or in The Harbor settings.`
+  }
+
+  if (lower.includes('timeout') || lower.includes('timed out') || lower.includes('aborted')) {
+    return `${toolName} timed out. The service may be slow — suggest trying again.`
+  }
+
+  if (lower.includes('network') || lower.includes('fetch failed') || lower.includes('econnrefused')) {
+    return `${toolName} failed: network error. The service might be temporarily unavailable.`
+  }
+
+  return `${toolName} failed: ${error}`
+}
+
+// Execute a tool with a timeout
+async function executeWithTimeout(
+  tool: Tool,
+  input: unknown,
+  ctx: UserContext
+): Promise<ToolResult> {
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error(`Tool timed out after ${TOOL_TIMEOUT_MS / 1000}s`)), TOOL_TIMEOUT_MS)
+  })
+
+  return Promise.race([
+    tool.execute(input, ctx),
+    timeoutPromise,
+  ])
+}
 
 export async function runAgentLoop(
   systemPrompt: string,
@@ -26,6 +72,7 @@ export async function runAgentLoop(
   }))
 
   let iterations = 0
+  const iterationLog: Array<{ iteration: number; tools: string[] }> = []
 
   while (iterations < MAX_ITERATIONS) {
     iterations++
@@ -40,12 +87,18 @@ export async function runAgentLoop(
       return response.content ?? ''
     }
 
+    // Track which tools were called per iteration
+    iterationLog.push({
+      iteration: iterations,
+      tools: response.toolCalls.map((tc) => tc.name),
+    })
+
     // Send intermediate message if the LLM produced text alongside tool calls
     if (response.content && onIntermediateMessage) {
       await onIntermediateMessage(response.content)
     }
 
-    // Execute all tool calls in parallel
+    // Execute all tool calls in parallel with per-tool timeout
     const settledResults = await Promise.allSettled(
       response.toolCalls.map(async (call: ToolCall): Promise<ToolCallResult> => {
         const tool = tools.find((t) => t.name === call.name)
@@ -74,11 +127,17 @@ export async function runAgentLoop(
         }
 
         try {
-          const result = await tool.execute(call.input, ctx)
+          const result = await executeWithTimeout(tool, call.input, ctx) as ToolResult
           return { id: call.id, result }
         } catch (err) {
-          const errorMsg = err instanceof Error ? err.message : String(err)
-          return { id: call.id, error: errorMsg }
+          const rawError = err instanceof Error ? err.message : String(err)
+          const categorized = categorizeError(call.name, rawError)
+          logger.error('Tool execution failed', {
+            tool: call.name,
+            input: call.input,
+            error: rawError,
+          })
+          return { id: call.id, error: categorized }
         }
       })
     )
@@ -104,5 +163,12 @@ export async function runAgentLoop(
     })
   }
 
-  return 'I ran into an issue completing that task. Please try again.'
+  // Log detailed info when max iterations hit
+  logger.error('Agent loop hit max iterations', {
+    userId: ctx.userId,
+    iterations: MAX_ITERATIONS,
+    iterationLog,
+  })
+
+  return 'I ran into an issue completing that task — got stuck in a loop. try rephrasing or breaking it into smaller steps.'
 }

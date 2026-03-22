@@ -4,6 +4,7 @@ import { TelegramUpdateSchema } from '@/lib/telegram/types'
 import { handleTelegramUpdate } from '@/lib/orchestrator/index'
 import { isRateLimited } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
+import { createServerClient } from '@/lib/supabase/server'
 
 const MAX_REQUESTS_PER_MINUTE = 20
 const WINDOW_MS = 60_000
@@ -35,6 +36,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   if (telegramId && isRateLimited(`tg:${telegramId}`, MAX_REQUESTS_PER_MINUTE, WINDOW_MS)) {
     return NextResponse.json({ error: 'Rate limited' }, { status: 429 })
+  }
+
+  // Idempotency check: skip if this message was already processed
+  const messageId = parsed.data.message?.message_id
+  if (messageId && telegramId) {
+    const supabase = createServerClient()
+    const { count } = await supabase
+      .from('messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('telegram_message_id', messageId)
+
+    if ((count ?? 0) > 0) {
+      return NextResponse.json({ ok: true })
+    }
   }
 
   // Use Next.js after() to process in the background after response is sent

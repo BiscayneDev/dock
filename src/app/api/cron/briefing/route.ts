@@ -5,6 +5,36 @@ import { integrationTools } from '@/lib/tools/index'
 import { getDecryptedTokens } from '@/lib/orchestrator/index'
 import type { UserContext } from '@/lib/llm/types'
 
+function isInQuietHours(
+  quietStart: string | null,
+  quietEnd: string | null,
+  timezone: string
+): boolean {
+  if (!quietStart || !quietEnd) return false
+
+  const now = new Date()
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+    timeZone: timezone,
+  })
+  const [hourStr, minuteStr] = formatter.format(now).split(':')
+  const currentMinutes = parseInt(hourStr, 10) * 60 + parseInt(minuteStr, 10)
+
+  const [startH, startM] = quietStart.split(':').map(Number)
+  const [endH, endM] = quietEnd.split(':').map(Number)
+  const startMinutes = startH * 60 + startM
+  const endMinutes = endH * 60 + endM
+
+  // Handle overnight quiet hours (e.g., 22:00 - 08:00)
+  if (startMinutes > endMinutes) {
+    return currentMinutes >= startMinutes || currentMinutes < endMinutes
+  }
+
+  return currentMinutes >= startMinutes && currentMinutes < endMinutes
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   if (request.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -37,6 +67,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const currentHour = parseInt(formatter.format(now), 10)
 
     if (currentHour !== 8) continue
+
+    // Respect quiet hours
+    if (isInQuietHours(
+      user.quiet_hours_start as string | null,
+      user.quiet_hours_end as string | null,
+      timezone
+    )) continue
 
     // Check if already sent today
     const todayStart = new Date()
