@@ -17,6 +17,10 @@ function categorizeError(toolName: string, error: string): string {
   const lower = error.toLowerCase()
 
   if (lower.includes('401') || lower.includes('403') || lower.includes('unauthorized') || lower.includes('forbidden')) {
+    // Web fetch/search hitting paywalled sites is not an integration auth issue
+    if (toolName === 'web_fetch' || toolName === 'web_search') {
+      return `${toolName} failed: the site returned a ${lower.includes('401') ? '401' : '403'} error. The page may be paywalled or require login. Try a different source or search query.`
+    }
     return `${toolName} failed: authentication expired. Tell the user to reconnect this integration in The Harbor settings or at /onboarding.`
   }
 
