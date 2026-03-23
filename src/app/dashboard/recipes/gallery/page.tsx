@@ -6,9 +6,9 @@ import { HarborShell } from '@/components/HarborShell'
 
 interface Template { slug: string; name: string; description: string; category: string; requiredIntegrations: string[]; triggerType: string; previewOutput: string; icon: string }
 interface PublicRecipe { id: string; name: string; description: string | null; instructions: string; trigger_type: string; category: string | null; fee_amount: number; fee_required: boolean; run_count: number; fork_count: number; creator: { name: string; username: string | null }; created_at: string }
-interface X402Service { name: string; description: string; url: string; price: number | null; category: string | null; recipe_idea: string }
+interface MyRecipe { id: string; name: string; trigger_type: string; enabled: boolean; run_count: number; last_run_at: string | null; is_public: boolean; fee_amount: number; fee_required: boolean }
 
-type Tab = 'marketplace' | 'templates' | 'ideas'
+type Tab = 'mine' | 'marketplace' | 'templates'
 type Pricing = 'all' | 'free' | 'paid'
 
 const TRIGGER_ICONS: Record<string, string> = {
@@ -17,10 +17,10 @@ const TRIGGER_ICONS: Record<string, string> = {
 
 export default function GalleryPage() {
   const router = useRouter()
-  const [tab, setTab] = useState<Tab>('marketplace')
+  const [tab, setTab] = useState<Tab>('mine')
   const [templates, setTemplates] = useState<Template[]>([])
   const [recipes, setRecipes] = useState<PublicRecipe[]>([])
-  const [ideas, setIdeas] = useState<X402Service[]>([])
+  const [myRecipes, setMyRecipes] = useState<MyRecipe[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
@@ -47,17 +47,17 @@ export default function GalleryPage() {
     } catch {}
   }, [search, activeCategory, pricing])
 
-  const loadIdeas = useCallback(async () => {
+  const loadMyRecipes = useCallback(async () => {
     try {
-      const res = await fetch('/api/x402/trending')
-      if (res.ok) setIdeas((await res.json()).services ?? [])
+      const res = await fetch('/api/recipes', { credentials: 'include' })
+      if (res.ok) setMyRecipes((await res.json()).recipes ?? [])
     } catch {}
   }, [])
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([loadTemplates(), loadRecipes(), loadIdeas()]).finally(() => setLoading(false))
-  }, [loadTemplates, loadRecipes, loadIdeas])
+    Promise.all([loadTemplates(), loadRecipes(), loadMyRecipes()]).finally(() => setLoading(false))
+  }, [loadTemplates, loadRecipes, loadMyRecipes])
 
   const installTemplate = async (slug: string) => {
     setInstalling(slug)
@@ -84,14 +84,14 @@ export default function GalleryPage() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+        <button onClick={() => setTab('mine')} className={tab === 'mine' ? 'dock-btn-primary' : 'dock-btn-secondary'} style={{ flex: 1, padding: '0.5rem', fontSize: '0.85rem' }}>
+          My Recipes {myRecipes.length > 0 && <span style={{ opacity: 0.5, marginLeft: '0.25rem' }}>({myRecipes.length})</span>}
+        </button>
         <button onClick={() => setTab('marketplace')} className={tab === 'marketplace' ? 'dock-btn-primary' : 'dock-btn-secondary'} style={{ flex: 1, padding: '0.5rem', fontSize: '0.85rem' }}>
-          Marketplace {recipes.length > 0 && <span style={{ opacity: 0.5, marginLeft: '0.25rem' }}>({recipes.length})</span>}
+          Marketplace
         </button>
         <button onClick={() => setTab('templates')} className={tab === 'templates' ? 'dock-btn-primary' : 'dock-btn-secondary'} style={{ flex: 1, padding: '0.5rem', fontSize: '0.85rem' }}>
           Templates
-        </button>
-        <button onClick={() => setTab('ideas')} className={tab === 'ideas' ? 'dock-btn-primary' : 'dock-btn-secondary'} style={{ flex: 1, padding: '0.5rem', fontSize: '0.85rem' }}>
-          Ideas {ideas.length > 0 && <span style={{ opacity: 0.5, marginLeft: '0.25rem' }}>({ideas.length})</span>}
         </button>
       </div>
 
@@ -126,6 +126,38 @@ export default function GalleryPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
           {[1, 2, 3, 4].map((i) => <div key={i} className="dock-card" style={{ height: '10rem', opacity: 0.3 }} />)}
         </div>
+      ) : tab === 'mine' ? (
+        /* MY RECIPES */
+        myRecipes.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+            <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>No recipes yet</p>
+            <p style={{ opacity: 0.5, fontSize: '0.85rem', marginBottom: '1rem' }}>Create your first recipe or install one from templates.</p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button onClick={() => router.push('/dashboard/recipes/workspace')} className="dock-btn-primary">Open Workspace</button>
+              <button onClick={() => setTab('templates')} className="dock-btn-secondary">Browse Templates</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {myRecipes.map((r) => (
+              <button key={r.id} onClick={() => router.push(`/dashboard/recipes/${r.id}`)} className="dock-card" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', cursor: 'pointer', textAlign: 'left' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: '1.25rem', flexShrink: 0 }}>{TRIGGER_ICONS[r.trigger_type] ?? '⚡'}</span>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.15rem' }}>
+                      <span style={{ fontSize: '0.7rem', fontFamily: "'Outfit', sans-serif", fontWeight: 700, color: r.enabled ? 'var(--mesh-mint)' : 'var(--ink)', opacity: r.enabled ? 1 : 0.4 }}>{r.enabled ? 'Active' : 'Disabled'}</span>
+                      <span style={{ fontSize: '0.65rem', opacity: 0.4 }}>{r.run_count} runs</span>
+                      {r.is_public && <span style={{ fontSize: '0.6rem', fontFamily: "'Outfit', sans-serif", fontWeight: 700, border: '1px solid var(--mesh-cyan)', borderRadius: '1rem', padding: '0 0.35rem', color: 'var(--mesh-cyan)' }}>Public</span>}
+                      {r.fee_required && r.fee_amount > 0 && <span style={{ fontSize: '0.6rem', fontFamily: "'Outfit', sans-serif", fontWeight: 700, border: '1px solid var(--mesh-cyan)', borderRadius: '1rem', padding: '0 0.35rem', color: 'var(--mesh-cyan)' }}>${r.fee_amount}</span>}
+                    </div>
+                  </div>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" style={{ opacity: 0.3, flexShrink: 0 }}><path d="M9 18l6-6-6-6" /></svg>
+              </button>
+            ))}
+          </div>
+        )
       ) : tab === 'marketplace' ? (
         /* MARKETPLACE — public user recipes */
         recipes.length === 0 ? (
@@ -203,52 +235,9 @@ export default function GalleryPage() {
         </div>
       )}
 
-      {/* IDEAS — x402 services as recipe inspiration */}
-      {tab === 'ideas' && (
-        ideas.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
-            <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Loading ideas...</p>
-            <p style={{ opacity: 0.5, fontSize: '0.85rem' }}>Discovering x402 services your agent can use.</p>
-          </div>
-        ) : (
-          <>
-            <p style={{ opacity: 0.5, fontSize: '0.85rem', marginBottom: '1rem' }}>Paid APIs your agent can access via x402. What would you build?</p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.75rem' }}>
-              {ideas.map((s, i) => (
-                <div key={i} className="dock-card">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.25rem' }}>
-                    <span style={{ fontSize: '1.5rem' }}>⚡</span>
-                    {s.category && <span className="meta-text">{s.category}</span>}
-                  </div>
-                  <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.95rem', lineHeight: 1.2, marginTop: '0.5rem' }}>{s.name}</p>
-                  <p style={{ fontSize: '0.75rem', opacity: 0.5, marginTop: '0.25rem' }}>{s.description.slice(0, 120)}{s.description.length > 120 ? '...' : ''}</p>
-
-                  {s.price != null && s.price > 0 && (
-                    <span style={{ display: 'inline-block', marginTop: '0.4rem', fontSize: '0.7rem', fontFamily: "'Outfit', sans-serif", fontWeight: 700, color: 'var(--mesh-cyan)', border: '1px solid var(--mesh-cyan)', borderRadius: '1rem', padding: '0.1rem 0.5rem' }}>${typeof s.price === 'number' ? s.price.toFixed(2) : s.price} / call</span>
-                  )}
-
-                  {/* Recipe idea */}
-                  <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.6rem', borderRadius: 'var(--radius-md)', border: '1.5px dashed var(--ink)', opacity: 0.7 }}>
-                    <p style={{ fontSize: '0.75rem', fontStyle: 'italic' }}>💡 {s.recipe_idea}</p>
-                  </div>
-
-                  <button
-                    onClick={() => router.push(`/dashboard/recipes/new?idea=${encodeURIComponent(s.recipe_idea + '. Use the ' + s.name + ' API via x402.')}`)}
-                    className="dock-btn-primary"
-                    style={{ width: '100%', marginTop: '0.75rem', padding: '0.4rem', fontSize: '0.75rem' }}
-                  >
-                    Build with this
-                  </button>
-                </div>
-              ))}
-            </div>
-          </>
-        )
-      )}
-
       <div style={{ marginTop: '2rem', textAlign: 'center' }}>
-        <p style={{ opacity: 0.4, fontSize: '0.85rem', marginBottom: '0.5rem' }}>Have a recipe others would love?</p>
-        <button onClick={() => router.push('/dashboard/recipes/new')} className="dock-btn-secondary">Publish your own</button>
+        <p style={{ opacity: 0.4, fontSize: '0.85rem', marginBottom: '0.5rem' }}>Want to build something custom?</p>
+        <button onClick={() => router.push('/dashboard/recipes/workspace')} className="dock-btn-primary" style={{ padding: '0.6rem 1.5rem' }}>Open Recipe Workspace</button>
       </div>
     </HarborShell>
   )

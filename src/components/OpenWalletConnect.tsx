@@ -174,8 +174,10 @@ export function OpenWalletConnect({
             lineHeight: 1.8,
           }}>
             <div>npm install -g @moonpay/cli</div>
-            <div>mp login</div>
-            <div>mp wallet create</div>
+            <div>mp consent accept</div>
+            <div>mp login --email your@email.com</div>
+            <div>mp verify --email your@email.com --code 123456</div>
+            <div>mp wallet create --name main</div>
           </div>
 
           <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>

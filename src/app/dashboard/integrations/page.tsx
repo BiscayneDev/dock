@@ -29,7 +29,39 @@ export default function IntegrationsPage() {
     <HarborShell title="MCP Servers" showBack>
       <p style={{ opacity: 0.5, fontSize: '0.9rem', marginBottom: '1rem' }}>Extend Dock with custom tool servers.</p>
 
-      <button onClick={() => setShowAdd(!showAdd)} className="dock-btn-primary" style={{ width: '100%', marginBottom: '1rem' }}>+ Add Server</button>
+      {/* Featured: MoonPay Agents */}
+      {!connections.some((c) => c.name.toLowerCase().includes('moonpay')) && (
+        <div className="dock-card" style={{ marginBottom: '1rem', backgroundImage: 'linear-gradient(135deg, rgba(91,167,205,0.1) 0%, rgba(148,196,163,0.1) 100%)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontSize: '1.75rem' }}>💰</span>
+              <div>
+                <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: '1.05rem' }}>MoonPay Agents</p>
+                <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>54 crypto tools — prices, swaps, bridges, prediction markets</p>
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginTop: '0.75rem' }}>
+            {['Token Prices', 'Trending', 'Polymarket', 'Swaps', 'Bridges', 'DCA', 'Portfolio'].map((t) => (
+              <span key={t} className="meta-text" style={{ border: '1px solid var(--ink)', borderRadius: '1rem', padding: '0.1rem 0.4rem', opacity: 0.5 }}>{t}</span>
+            ))}
+          </div>
+          <div style={{ marginTop: '0.75rem', padding: '0.6rem', borderRadius: 'var(--radius-md)', border: '1.5px dashed var(--ink)', opacity: 0.7 }}>
+            <p style={{ fontSize: '0.75rem', fontFamily: 'monospace', lineHeight: 1.8 }}>
+              npm install -g @moonpay/cli<br />
+              mp consent accept<br />
+              mp login --email your@email.com<br />
+              mp verify --email your@email.com --code 123456<br />
+              mp wallet create --name main<br />
+              mp mcp
+            </p>
+            <p style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '0.35rem' }}>Check your email for the verification code. Then paste the MCP server URL below.</p>
+          </div>
+          <button onClick={() => { setForm({ name: 'MoonPay', serverUrl: '', authType: 'none', apiKey: '' }); setShowAdd(true) }} className="dock-btn-primary" style={{ marginTop: '0.75rem' }}>Connect MoonPay</button>
+        </div>
+      )}
+
+      <button onClick={() => setShowAdd(!showAdd)} className="dock-btn-secondary" style={{ width: '100%', marginBottom: '1rem' }}>+ Add Server</button>
 
       {showAdd && (
         <div className="dock-card" style={{ marginBottom: '1rem' }}>

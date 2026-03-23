@@ -7,7 +7,7 @@ import { PlaygroundPanel } from './playground'
 interface X402Service { name: string; description: string; url: string; price: number | null; category: string | null; recipe_idea: string }
 interface ToolCallEntry { name: string; input: unknown; result: unknown }
 interface ParsedRecipe { name: string; trigger_type: string; trigger_config: Record<string, unknown>; instructions: string; category: string }
-interface Message { role: 'user' | 'agent'; content: string; toolCalls?: ToolCallEntry[]; recipe?: ParsedRecipe }
+interface Message { role: 'user' | 'agent'; content: string; toolCalls?: ToolCallEntry[]; recipe?: ParsedRecipe; quickReplies?: string[] }
 
 const SKILLS = [
   { group: 'Email', items: [{ name: 'Search emails', prompt: 'search my recent emails for...' }, { name: 'Summarize inbox', prompt: 'summarize my unread emails from the last few hours' }] },
@@ -17,7 +17,15 @@ const SKILLS = [
   { group: 'Wallet', items: [{ name: 'Check balance', prompt: 'check my wallet balance' }] },
   { group: 'Health', items: [{ name: 'Sleep summary', prompt: 'how did I sleep last night?' }, { name: 'Recovery score', prompt: "what's my readiness/recovery score today?" }, { name: 'Daily health snapshot', prompt: 'give me a full health summary for today' }] },
   { group: 'Twitter', items: [{ name: 'My timeline', prompt: "what's happening on my twitter timeline?" }, { name: 'Search tweets', prompt: 'search twitter for...' }, { name: 'Check a user', prompt: "what has @... been tweeting about?" }] },
+  { group: 'MoonPay', items: [{ name: 'Token prices', prompt: 'what is the price of SOL right now?' }, { name: 'Trending tokens', prompt: 'what tokens are trending right now?' }, { name: 'Prediction markets', prompt: 'show me the top prediction markets on Polymarket' }, { name: 'Token analysis', prompt: 'analyze ETH — price, volume, trends' }, { name: 'Swap tokens', prompt: 'I want to swap SOL for USDC' }, { name: 'Bridge tokens', prompt: 'bridge ETH from Ethereum to Base' }] },
 ]
+
+// Extract [quick:label] tags from agent response as quick reply options
+function extractQuickReplies(text: string): string[] {
+  const matches = text.match(/\[quick:(.*?)\]/g)
+  if (!matches) return []
+  return matches.map((m) => m.replace(/\[quick:(.*?)\]/, '$1').trim())
+}
 
 const TRIGGER_LABELS: Record<string, string> = { schedule: 'Schedule', email_event: 'Email', github_event: 'GitHub', notion_event: 'Notion', keyword: 'Keyword', manual: 'Manual' }
 const TRIGGER_COLORS: Record<string, string> = { schedule: 'var(--mesh-yellow)', email_event: 'var(--mesh-peach)', github_event: 'var(--mesh-mint)', keyword: 'var(--mesh-cyan)', manual: 'var(--cream)' }
@@ -61,10 +69,15 @@ function WorkspacePage() {
     setInput('')
     setSending(true)
     try {
-      const res = await fetch('/api/workspace/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, history: messages.map((m) => ({ role: m.role === 'agent' ? 'assistant' : 'user', content: m.content })) }), credentials: 'include' })
+      const connectedList = Object.entries(integrations).filter(([, v]) => v).map(([k]) => k)
+      const contextNote = messages.length === 0 && connectedList.length > 0 ? `\n[user has these integrations connected: ${connectedList.join(', ')}]` : ''
+      const res = await fetch('/api/workspace/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text + contextNote, history: messages.map((m) => ({ role: m.role === 'agent' ? 'assistant' : 'user', content: m.content })) }), credentials: 'include' })
       if (res.ok) {
         const data = await res.json()
-        setMessages((prev) => [...prev, { role: 'agent', content: data.response, toolCalls: data.toolCalls ?? [], recipe: data.recipe ?? undefined }])
+        // Extract quick reply suggestions from the response
+        const quickReplies = extractQuickReplies(data.response)
+        const cleanResponse = data.response.replace(/\[quick:.*?\]/g, '').trim()
+        setMessages((prev) => [...prev, { role: 'agent', content: cleanResponse, toolCalls: data.toolCalls ?? [], recipe: data.recipe ?? undefined, quickReplies }])
       } else { setMessages((prev) => [...prev, { role: 'agent', content: 'something went wrong. try again or rephrase.' }]) }
     } catch { setMessages((prev) => [...prev, { role: 'agent', content: 'connection error. try again.' }]) }
     finally { setSending(false) }
@@ -181,6 +194,14 @@ function WorkspacePage() {
                     )}
                     <div className={`ws-bubble ws-bubble-${msg.role}`}><p>{msg.content}</p></div>
                     {msg.recipe && <RecipeCard recipe={msg.recipe} onDeploy={deployRecipe} onRefine={(r) => setInput(`refine this recipe: ${r.instructions}. change it to `)} saving={saving} />}
+                    {/* Quick reply chips */}
+                    {msg.quickReplies && msg.quickReplies.length > 0 && i === messages.length - 1 && (
+                      <div className="ws-quick-replies">
+                        {msg.quickReplies.map((reply, j) => (
+                          <button key={j} className="ws-quick-chip" onClick={() => sendMessage(reply)}>{reply}</button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -223,6 +244,14 @@ function Shell({ children }: { children: React.ReactNode }) {
 
         /* Sidebar */
         .ws-sidebar { width:320px; flex-shrink:0; border-right:var(--border-w) solid var(--ink); display:flex; flex-direction:column; background:rgba(234,230,215,0.5); }
+        @media (max-width: 768px) {
+          .ws-sidebar { display:none; }
+          .ws-header { padding:0 1rem; }
+          .ws-scroll { padding-left:0.5rem; padding-right:0.5rem; }
+          .ws-input-area { padding-left:0.5rem; padding-right:0.5rem; }
+          .ws-hero-h2 { font-size:1.5rem; }
+          .ws-hero { padding:1.5rem 1.25rem 3rem; min-height:200px; }
+        }
         .ws-sidebar-header { height:72px; border-bottom:var(--border-w) solid var(--ink); display:flex; align-items:center; padding:0 1.5rem; justify-content:space-between; flex-shrink:0; }
         .ws-logo { display:flex; align-items:center; gap:0.5rem; cursor:pointer; }
         .ws-logo span { font-weight:800; font-size:1.25rem; letter-spacing:-0.02em; }
@@ -315,6 +344,11 @@ function Shell({ children }: { children: React.ReactNode }) {
         .ws-input:focus { box-shadow:2px 2px 0px var(--ink); transform:translateY(2px) translateX(2px); }
         .ws-send { position:absolute; right:6px; bottom:6px; top:6px; aspect-ratio:1; border-radius:50%; background:var(--ink); color:var(--cream); display:flex; align-items:center; justify-content:center; border:none; cursor:pointer; } .ws-send:disabled { opacity:0.3; } .ws-send:hover:not(:disabled) { transform:scale(0.95); }
         .ws-disclaimer { text-align:center; margin-top:0.75rem; font-size:0.6rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; opacity:0.35; }
+
+        /* Quick reply chips */
+        .ws-quick-replies { display:flex; flex-wrap:wrap; gap:0.4rem; }
+        .ws-quick-chip { padding:0.4rem 0.85rem; border:var(--border-w) solid var(--ink); border-radius:2rem; background:white; font-family:'Outfit',sans-serif; font-weight:600; font-size:0.8rem; cursor:pointer; color:var(--ink); transition:all 0.15s; box-shadow:2px 2px 0px var(--ink); }
+        .ws-quick-chip:hover { background:var(--ink); color:var(--cream); transform:translateY(1px) translateX(1px); box-shadow:1px 1px 0px var(--ink); }
 
         /* Scrollbars */
         .ws-sidebar-scroll::-webkit-scrollbar,.ws-scroll::-webkit-scrollbar { width:8px; }

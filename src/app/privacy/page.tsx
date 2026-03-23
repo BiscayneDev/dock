@@ -11,7 +11,7 @@ export default function PrivacyPolicy() {
         <section>
           <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>What Dock Is</h2>
           <p>
-            Dock is an AI assistant that lives in Telegram and helps you manage email, calendar, GitHub, Notion, crypto wallets, and health data. It also provides a companion web app ("The Harbor") for account management, integrations, and recipe automation.
+            Dock is an AI assistant that lives in Telegram and helps you manage email, calendar, GitHub, Notion, crypto wallets, and health data. It also provides a companion web app (&ldquo;The Harbor&rdquo;) for account management, integrations, and recipe automation.
           </p>
         </section>
 

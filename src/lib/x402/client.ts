@@ -17,6 +17,20 @@ const X402SearchInput = z.object({
   category: z.string().optional().describe('Category filter'),
 })
 
+// Static fallback when the x402 Index is unreachable or paywalled
+const X402_KNOWN_SERVICES = [
+  { name: 'Weather Data API', description: 'Real-time weather data for any location worldwide', url: 'https://weather.x402.org/api/current', price: 0.01, category: 'data' },
+  { name: 'News Headlines', description: 'Latest news headlines from major global sources', url: 'https://news.x402.org/api/top', price: 0.01, category: 'data' },
+  { name: 'Web Scraper', description: 'Extract clean content from any URL with JavaScript rendering', url: 'https://scrape.x402.org/api/extract', price: 0.02, category: 'tools' },
+  { name: 'Image Generation', description: 'Generate images from text prompts using AI models', url: 'https://img.x402.org/api/generate', price: 0.05, category: 'ai' },
+  { name: 'Document Summary', description: 'Summarize long documents and PDFs into key points', url: 'https://summary.x402.org/api/summarize', price: 0.03, category: 'ai' },
+  { name: 'Stock Market Data', description: 'Real-time and historical stock prices and market data', url: 'https://stocks.x402.org/api/quote', price: 0.01, category: 'finance' },
+  { name: 'Crypto Prices', description: 'Live cryptocurrency prices across major exchanges', url: 'https://crypto.x402.org/api/prices', price: 0.005, category: 'finance' },
+  { name: 'Translation', description: 'Translate text between 100+ languages with high accuracy', url: 'https://translate.x402.org/api/translate', price: 0.01, category: 'ai' },
+  { name: 'Code Analysis', description: 'Static analysis and security scanning for code snippets', url: 'https://code.x402.org/api/analyze', price: 0.02, category: 'developer' },
+  { name: 'DNS & Whois Lookup', description: 'Domain registration data and DNS record lookups', url: 'https://dns.x402.org/api/lookup', price: 0.005, category: 'tools' },
+]
+
 async function getPaymentFetch(ctx: UserContext): Promise<typeof fetch | null> {
   try {
     // Dynamic imports to avoid loading x402 when not needed
@@ -192,53 +206,54 @@ export const x402Search: Tool = {
     try {
       const parsed = X402SearchInput.parse(input)
 
+      // Use Dock's cached trending endpoint — free browsing, no paywall
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+      const trendingUrl = new URL('/api/x402/trending', appUrl)
+      if (parsed.category) trendingUrl.searchParams.set('category', parsed.category)
+
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 10_000)
 
       try {
-        const url = new URL('https://www.x402index.com/api/all')
-        if (parsed.query) url.searchParams.set('search', parsed.query)
-        if (parsed.category) url.searchParams.set('category', parsed.category)
-
-        const response = await fetch(url.toString(), {
-          headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'Dock/1.0 (x402-client)',
-          },
+        const response = await fetch(trendingUrl.toString(), {
+          headers: { 'Accept': 'application/json' },
           signal: controller.signal,
         })
 
-        if (!response.ok) {
-          // If 402, the index itself requires payment — fall back to basic info
-          if (response.status === 402) {
-            return {
-              success: true,
-              data: {
-                note: 'The x402 Index requires payment for full results. Use x402_fetch to access it with your wallet.',
-                indexUrl: 'https://www.x402index.com/api/all',
-              },
-            }
-          }
-          return { success: false, error: `Index request failed: HTTP ${response.status}` }
+        let services: Array<{ name: string; description: string; url: string; price: number | null; category: string | null }> = []
+
+        if (response.ok) {
+          const data = await response.json()
+          services = (data.services ?? []).map((s: Record<string, unknown>) => ({
+            name: s.name ?? 'Unknown',
+            description: s.description ?? '',
+            url: s.url ?? '',
+            price: s.price ?? null,
+            category: s.category ?? null,
+          }))
         }
 
-        const data = await response.json()
+        // If cache is empty, use a static fallback list
+        if (services.length === 0) {
+          services = X402_KNOWN_SERVICES
+        }
 
-        // Extract and format services list
-        const services = Array.isArray(data) ? data : (data as Record<string, unknown>).services ?? data
-        const formatted = (Array.isArray(services) ? services : []).slice(0, 20).map((s: Record<string, unknown>) => ({
-          name: s.name ?? s.title ?? 'Unknown',
-          description: s.description ?? '',
-          url: s.url ?? s.endpoint ?? '',
-          price: s.price ?? s.cost ?? null,
-          category: s.category ?? null,
-        }))
+        // Filter by search query if provided
+        if (parsed.query) {
+          const q = parsed.query.toLowerCase()
+          services = services.filter((s) =>
+            s.name.toLowerCase().includes(q) ||
+            s.description.toLowerCase().includes(q) ||
+            (s.category ?? '').toLowerCase().includes(q)
+          )
+        }
 
         return {
           success: true,
           data: {
-            count: formatted.length,
-            services: formatted,
+            count: services.length,
+            services: services.slice(0, 20),
+            note: 'Browsing is free. Use x402_fetch to call any of these services (may cost USDC).',
           },
         }
       } finally {

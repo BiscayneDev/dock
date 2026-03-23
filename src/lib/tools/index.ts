@@ -61,6 +61,7 @@ import {
   twitterUserTweets,
   twitterBookmarks,
 } from './twitter'
+import { tokenPrice, trendingTokens, predictionMarkets } from './crypto'
 
 // Recipe tools are imported lazily by the orchestrator since they're
 // not available to the execution agent. See lib/tools/recipes.ts.
@@ -128,6 +129,10 @@ export const integrationTools: Tool[] = [
   twitterSearch,
   twitterUserTweets,
   twitterBookmarks,
+  // Crypto (always available, no auth — CoinGecko + Polymarket)
+  tokenPrice,
+  trendingTokens,
+  predictionMarkets,
 ]
 
 // All tools except recipe management — used by the Execution Agent

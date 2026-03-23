@@ -118,16 +118,18 @@ export const trendingTokens: Tool = {
 const PredictionInput = z.object({
   query: z.string().optional().describe('Search query to filter markets'),
   tag: z.string().optional().describe('Category: Politics, Crypto, Sports, Pop Culture, Business, Science'),
+  sort: z.enum(['volume', 'newest', 'ending_soon']).optional().default('volume').describe('Sort order: volume (most active), newest (recently created), ending_soon'),
 })
 
 export const predictionMarkets: Tool = {
   name: 'prediction_markets',
-  description: 'Search Polymarket prediction markets. Find what people are betting on — politics, crypto, world events, sports. Returns current odds and volume. Always provide a search query for best results.',
+  description: 'Search Polymarket prediction markets. Find what people are betting on — politics, crypto, world events, sports. Supports sorting by volume, newest, or ending soon.',
   inputSchema: {
     type: 'object',
     properties: {
       query: { type: 'string', description: 'Search term (e.g. "iran", "trump", "bitcoin", "oil"). Be specific.' },
       tag: { type: 'string', description: 'Category filter: Politics, Crypto, Sports, Pop Culture, Business, Science' },
+      sort: { type: 'string', enum: ['volume', 'newest', 'ending_soon'], description: 'Sort: volume (default), newest (recently created), ending_soon' },
     },
   },
   async execute(input: unknown): Promise<ToolResult> {
@@ -142,6 +144,7 @@ export const predictionMarkets: Tool = {
         volume: string
         volume24hr?: string
         liquidity: string
+        startDate?: string
         endDate: string
         slug: string
       }
@@ -153,17 +156,35 @@ export const predictionMarkets: Tool = {
       const eventsUrl = new URL('https://gamma-api.polymarket.com/events')
       eventsUrl.searchParams.set('closed', 'false')
       eventsUrl.searchParams.set('limit', '20')
-      eventsUrl.searchParams.set('order', 'volume')
-      eventsUrl.searchParams.set('ascending', 'false')
+      if (parsed.sort === 'newest') {
+        eventsUrl.searchParams.set('order', 'startDate')
+        eventsUrl.searchParams.set('ascending', 'false')
+      } else if (parsed.sort === 'ending_soon') {
+        eventsUrl.searchParams.set('order', 'endDate')
+        eventsUrl.searchParams.set('ascending', 'true')
+      } else {
+        eventsUrl.searchParams.set('order', 'volume')
+        eventsUrl.searchParams.set('ascending', 'false')
+      }
       if (parsed.tag) eventsUrl.searchParams.set('tag', parsed.tag)
 
       // 2. Search markets (individual questions, more granular)
       const marketsUrl = new URL('https://gamma-api.polymarket.com/markets')
       marketsUrl.searchParams.set('closed', 'false')
       marketsUrl.searchParams.set('limit', '50')
-      marketsUrl.searchParams.set('order', 'volume24hr')
-      marketsUrl.searchParams.set('ascending', 'false')
       marketsUrl.searchParams.set('active', 'true')
+
+      // Sort order
+      if (parsed.sort === 'newest') {
+        marketsUrl.searchParams.set('order', 'startDate')
+        marketsUrl.searchParams.set('ascending', 'false')
+      } else if (parsed.sort === 'ending_soon') {
+        marketsUrl.searchParams.set('order', 'endDate')
+        marketsUrl.searchParams.set('ascending', 'true')
+      } else {
+        marketsUrl.searchParams.set('order', 'volume24hr')
+        marketsUrl.searchParams.set('ascending', 'false')
+      }
 
       const [eventsRes, marketsRes] = await Promise.allSettled([
         fetch(eventsUrl.toString(), { headers: { 'Accept': 'application/json' } }),
@@ -253,7 +274,7 @@ export const predictionMarkets: Tool = {
   },
 }
 
-function formatMarket(m: { question: string; outcomes: string; outcomePrices: string; volume: string; volume24hr?: string; endDate: string; slug: string }, eventSlug?: string) {
+function formatMarket(m: { question: string; outcomes: string; outcomePrices: string; volume: string; volume24hr?: string; startDate?: string; endDate: string; slug: string }, eventSlug?: string) {
   let outcomes: Array<{ outcome: string; probability: string }> = []
   try {
     const names = JSON.parse(m.outcomes ?? '[]') as string[]
@@ -271,6 +292,7 @@ function formatMarket(m: { question: string; outcomes: string; outcomePrices: st
     outcomes,
     volume: m.volume ? `$${parseFloat(m.volume).toLocaleString()}` : 'N/A',
     volume24h: m.volume24hr ? `$${parseFloat(m.volume24hr).toLocaleString()}` : 'N/A',
+    created: m.startDate ?? 'N/A',
     ends: m.endDate ?? 'N/A',
     url: `https://polymarket.com/event/${eventSlug ?? m.slug}`,
   }
