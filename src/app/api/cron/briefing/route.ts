@@ -3,37 +3,8 @@ import { createServerClient } from '@/lib/supabase/server'
 import { runAgentLoop } from '@/lib/llm/agent-loop'
 import { integrationTools } from '@/lib/tools/index'
 import { getDecryptedTokens } from '@/lib/orchestrator/index'
+import { isInQuietHours } from '@/lib/time-utils'
 import type { UserContext } from '@/lib/llm/types'
-
-function isInQuietHours(
-  quietStart: string | null,
-  quietEnd: string | null,
-  timezone: string
-): boolean {
-  if (!quietStart || !quietEnd) return false
-
-  const now = new Date()
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: false,
-    timeZone: timezone,
-  })
-  const [hourStr, minuteStr] = formatter.format(now).split(':')
-  const currentMinutes = parseInt(hourStr, 10) * 60 + parseInt(minuteStr, 10)
-
-  const [startH, startM] = quietStart.split(':').map(Number)
-  const [endH, endM] = quietEnd.split(':').map(Number)
-  const startMinutes = startH * 60 + startM
-  const endMinutes = endH * 60 + endM
-
-  // Handle overnight quiet hours (e.g., 22:00 - 08:00)
-  if (startMinutes > endMinutes) {
-    return currentMinutes >= startMinutes || currentMinutes < endMinutes
-  }
-
-  return currentMinutes >= startMinutes && currentMinutes < endMinutes
-}
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   if (request.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {

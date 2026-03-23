@@ -4,6 +4,7 @@ import { getDecryptedTokens } from '@/lib/orchestrator/index'
 import { integrationTools } from '@/lib/tools/index'
 import { classifyEmail } from '@/lib/email/classifier'
 import { sendMessage } from '@/lib/telegram/client'
+import { isInQuietHours } from '@/lib/time-utils'
 import { logger } from '@/lib/logger'
 import type { UserContext } from '@/lib/llm/types'
 
@@ -143,23 +144,4 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   return NextResponse.json({ checked: users.length, notified: notifiedCount })
-}
-
-function isInQuietHours(start: string | null, end: string | null, timezone: string): boolean {
-  if (!start || !end) return false
-  const now = new Date()
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone,
-  })
-  const currentTime = formatter.format(now)
-  const [currentHour, currentMin] = currentTime.split(':').map(Number)
-  const currentMinutes = currentHour * 60 + currentMin
-  const [startHour, startMin] = start.split(':').map(Number)
-  const startMinutes = startHour * 60 + startMin
-  const [endHour, endMin] = end.split(':').map(Number)
-  const endMinutes = endHour * 60 + endMin
-  if (startMinutes > endMinutes) {
-    return currentMinutes >= startMinutes || currentMinutes < endMinutes
-  }
-  return currentMinutes >= startMinutes && currentMinutes < endMinutes
 }
