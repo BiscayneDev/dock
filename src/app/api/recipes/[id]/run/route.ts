@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { after } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth/session'
 import { executeRecipe } from '@/lib/recipes/execution-agent'
@@ -26,22 +27,33 @@ export async function POST(
     return NextResponse.json({ error: 'Recipe not found' }, { status: 404 })
   }
 
-  // Fire-and-forget
-  executeRecipe(
-    {
-      id: recipe.id as string,
-      user_id: recipe.user_id as string,
-      name: recipe.name as string,
-      instructions: recipe.instructions as string,
-      trigger_type: recipe.trigger_type as string,
-      notify_on_run: recipe.notify_on_run as boolean,
-      run_count: (recipe.run_count as number) ?? 0,
-      fee_amount: (recipe.fee_amount as number) ?? 0,
-      fee_required: (recipe.fee_required as boolean) ?? false,
-    },
-    { manual: true, source: 'harbor' }
-  ).catch(() => {
-    // Error handling is inside executeRecipe
+  // Use after() to keep the function alive for background execution
+  after(async () => {
+    try {
+      await executeRecipe(
+        {
+          id: recipe.id as string,
+          user_id: recipe.user_id as string,
+          name: recipe.name as string,
+          instructions: recipe.instructions as string,
+          trigger_type: recipe.trigger_type as string,
+          notify_on_run: recipe.notify_on_run as boolean,
+          run_count: (recipe.run_count as number) ?? 0,
+          fee_amount: (recipe.fee_amount as number) ?? 0,
+          fee_required: (recipe.fee_required as boolean) ?? false,
+        },
+        { manual: true, source: 'harbor' },
+        undefined,
+        session.userId
+      )
+    } catch (err) {
+      const { logger } = await import('@/lib/logger')
+      logger.error('Recipe execution error from Harbor', {
+        recipeId: recipe.id,
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack?.slice(0, 500) : undefined,
+      })
+    }
   })
 
   return NextResponse.json({ message: 'Recipe triggered' })

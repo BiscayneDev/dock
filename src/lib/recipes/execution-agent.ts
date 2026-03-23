@@ -225,7 +225,16 @@ export async function executeRecipe(
     .gte('triggered_at', oneHourAgo)
 
   if ((recentRuns ?? 0) >= MAX_RUNS_PER_HOUR) {
-    logger.warn('Recipe rate limit exceeded', { recipeId: recipe.id, userId: effectiveRunnerId })
+    logger.warn('Recipe rate limit exceeded', { recipeId: recipe.id, userId: effectiveRunnerId, recentRuns })
+
+    // Notify user so they know why it didn't run
+    try {
+      const user = await getUserById(recipe.user_id)
+      await sendMessage({
+        chatId: user.telegram_id,
+        text: `⏳ Recipe "${recipe.name}" skipped — you've hit the limit of ${MAX_RUNS_PER_HOUR} runs per hour. try again later.`,
+      })
+    } catch {}
     return
   }
 
@@ -294,6 +303,10 @@ export async function executeRecipe(
     .single()
 
   if (runError || !run) {
+    logger.error('Failed to create recipe run record', {
+      recipeId: recipe.id,
+      error: runError?.message,
+    })
     return
   }
 
@@ -398,8 +411,16 @@ export async function executeRecipe(
 
     const isTest = statusOverride === 'test'
     if (recipe.notify_on_run && !noNotify && !isTest) {
-      const { sendRapidFire } = await import('@/lib/telegram/message-splitter')
-      await sendRapidFire(ctx.telegramChatId, `⚡ *${recipe.name}*\n\n${output}`)
+      try {
+        const { sendRapidFire } = await import('@/lib/telegram/message-splitter')
+        await sendRapidFire(ctx.telegramChatId, `⚡ *${recipe.name}*\n\n${output}`)
+      } catch (notifyErr) {
+        logger.error('Failed to send recipe notification', {
+          recipeId: recipe.id,
+          chatId: ctx.telegramChatId,
+          error: notifyErr instanceof Error ? notifyErr.message : String(notifyErr),
+        })
+      }
     }
 
     await supabase
@@ -429,6 +450,7 @@ export async function executeRecipe(
 
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err)
+    logger.error('Recipe execution failed', { recipeId: recipe.id, userId: effectiveRunnerId, error })
 
     await supabase
       .from('recipe_runs')
