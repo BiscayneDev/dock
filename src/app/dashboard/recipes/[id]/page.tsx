@@ -15,6 +15,8 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   const [runs, setRuns] = useState<RecipeRun[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [running, setRunning] = useState(false)
+  const [runStatus, setRunStatus] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -25,15 +27,46 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   }, [id])
   useEffect(() => { load() }, [load])
 
-  const runNow = async () => { await fetch(`/api/recipes/${id}/run`, { method: 'POST', credentials: 'include' }); setTimeout(() => load(), 2000) }
+  const runNow = async () => {
+    setRunning(true)
+    setRunStatus('running...')
+    try {
+      const res = await fetch(`/api/recipes/${id}/run`, { method: 'POST', credentials: 'include' })
+      if (res.ok) {
+        setRunStatus('triggered — check back in a moment')
+        // Poll for the new run result
+        setTimeout(async () => {
+          await load()
+          setRunStatus(null)
+          setRunning(false)
+        }, 5000)
+      } else {
+        const data = await res.json()
+        setRunStatus(data.error ?? 'failed to trigger')
+        setRunning(false)
+      }
+    } catch {
+      setRunStatus('failed to trigger')
+      setRunning(false)
+    }
+  }
 
   if (loading || !recipe) return <HarborShell title="Recipe" showBack backHref="/dashboard/recipes"><div style={{ paddingTop: '5rem', textAlign: 'center', opacity: 0.5 }}>{loading ? 'Loading...' : 'Not found.'}</div></HarborShell>
 
   return (
     <HarborShell title={recipe.name} showBack backHref="/dashboard/recipes">
-      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem' }}>
-        <button onClick={runNow} className="dock-btn-secondary" style={{ flex: 1 }}>▶ Run Now</button>
-        <Link href={`/dashboard/recipes/${id}/edit`} className="dock-btn-primary" style={{ flex: 1 }}>Edit</Link>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button onClick={runNow} disabled={running} className="dock-btn-secondary" style={{ flex: 1, opacity: running ? 0.5 : 1 }}>
+            {running ? '⏳ Running...' : '▶ Run Now'}
+          </button>
+          <Link href={`/dashboard/recipes/${id}/edit`} className="dock-btn-primary" style={{ flex: 1 }}>Edit</Link>
+        </div>
+        {runStatus && (
+          <p style={{ fontFamily: "'Outfit', sans-serif", fontSize: '0.8rem', fontWeight: 600, color: runStatus.includes('fail') ? 'var(--mesh-peach)' : 'var(--mesh-mint)', textAlign: 'center' }}>
+            {runStatus}
+          </p>
+        )}
       </div>
 
       <div className="dock-card" style={{ marginBottom: '1.25rem' }}>
