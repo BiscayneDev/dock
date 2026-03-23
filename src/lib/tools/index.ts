@@ -11,6 +11,7 @@ import {
   gmailArchive,
 } from './gmail'
 import {
+  gcalListCalendars,
   gcalListEvents,
   gcalGetEvent,
   gcalCreateEvent,
@@ -77,6 +78,7 @@ export const integrationTools: Tool[] = [
   gmailLabel,
   gmailArchive,
   // Google Calendar
+  gcalListCalendars,
   gcalListEvents,
   gcalGetEvent,
   gcalCreateEvent,

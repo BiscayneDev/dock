@@ -12,23 +12,121 @@ async function getCalendarClient(ctx: UserContext): Promise<ReturnType<typeof go
   return google.calendar({ version: 'v3', auth })
 }
 
+// Fetch all visible calendars for the user
+async function getAllCalendars(cal: ReturnType<typeof google.calendar>): Promise<Array<{ id: string; summary: string; primary: boolean }>> {
+  const res = await cal.calendarList.list({ showHidden: false })
+  return (res.data.items ?? []).map((c) => ({
+    id: c.id ?? '',
+    summary: c.summary ?? 'Untitled',
+    primary: c.primary ?? false,
+  }))
+}
+
+// Query events from all calendars and merge
+async function listEventsFromAllCalendars(
+  cal: ReturnType<typeof google.calendar>,
+  timeMin: string,
+  timeMax: string,
+  maxResults: number,
+  timezone?: string
+): Promise<Array<Record<string, unknown>>> {
+  const calendars = await getAllCalendars(cal)
+
+  const results = await Promise.allSettled(
+    calendars.map(async (c) => {
+      const res = await cal.events.list({
+        calendarId: c.id,
+        timeMin,
+        timeMax,
+        maxResults,
+        singleEvents: true,
+        orderBy: 'startTime',
+        timeZone: timezone,
+      })
+
+      return (res.data.items ?? []).map((e) => ({
+        id: e.id,
+        summary: e.summary,
+        calendar: c.summary,
+        calendarId: c.id,
+        start: e.start?.dateTime ?? e.start?.date,
+        end: e.end?.dateTime ?? e.end?.date,
+        location: e.location,
+        description: e.description?.slice(0, 500),
+        attendees: (e.attendees ?? []).map((a) => ({ email: a.email, status: a.responseStatus })),
+        meetLink: e.hangoutLink,
+        allDay: !e.start?.dateTime,
+      }))
+    })
+  )
+
+  // Merge and sort by start time
+  const allEvents: Array<Record<string, unknown>> = []
+  for (const r of results) {
+    if (r.status === 'fulfilled') {
+      allEvents.push(...r.value)
+    }
+  }
+
+  allEvents.sort((a, b) => {
+    const aTime = new Date(a.start as string).getTime()
+    const bTime = new Date(b.start as string).getTime()
+    return aTime - bTime
+  })
+
+  return allEvents.slice(0, maxResults)
+}
+
+// --- gcal_list_calendars ---
+
+export const gcalListCalendars: Tool = {
+  name: 'gcal_list_calendars',
+  description: 'List all calendars the user has access to — personal, work, shared, subscribed. Use this to discover available calendars before creating events or when the user asks about their calendars.',
+  inputSchema: {
+    type: 'object',
+    properties: {},
+  },
+  async execute(_input: unknown, ctx: UserContext): Promise<ToolResult> {
+    try {
+      const cal = await getCalendarClient(ctx)
+      const res = await cal.calendarList.list({ showHidden: false })
+
+      const calendars = (res.data.items ?? []).map((c) => ({
+        id: c.id,
+        name: c.summary,
+        primary: c.primary ?? false,
+        color: c.backgroundColor,
+        accessRole: c.accessRole,
+        description: c.description,
+      }))
+
+      return { success: true, data: { count: calendars.length, calendars } }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return { success: false, error: msg }
+    }
+  },
+}
+
 // --- gcal_list_events ---
 
 const ListEventsInput = z.object({
   timeMin: z.string().describe('Start of range (ISO 8601)'),
   timeMax: z.string().describe('End of range (ISO 8601)'),
   maxResults: z.number().optional().default(20),
+  calendarId: z.string().optional().describe('Calendar ID to query. Omit to search ALL calendars.'),
 })
 
 export const gcalListEvents: Tool = {
   name: 'gcal_list_events',
-  description: 'List calendar events within a date/time range.',
+  description: 'List calendar events within a date/time range. Queries ALL calendars by default, or a specific one if calendarId is provided.',
   inputSchema: {
     type: 'object',
     properties: {
       timeMin: { type: 'string', description: 'Start of range (ISO 8601)' },
       timeMax: { type: 'string', description: 'End of range (ISO 8601)' },
       maxResults: { type: 'number', description: 'Max results (default 20)' },
+      calendarId: { type: 'string', description: 'Calendar ID (omit for all calendars)' },
     },
     required: ['timeMin', 'timeMax'],
   },
@@ -37,26 +135,33 @@ export const gcalListEvents: Tool = {
       const parsed = ListEventsInput.parse(input)
       const cal = await getCalendarClient(ctx)
 
-      const res = await cal.events.list({
-        calendarId: 'primary',
-        timeMin: parsed.timeMin,
-        timeMax: parsed.timeMax,
-        maxResults: parsed.maxResults,
-        singleEvents: true,
-        orderBy: 'startTime',
-      })
+      if (parsed.calendarId) {
+        // Single calendar query
+        const res = await cal.events.list({
+          calendarId: parsed.calendarId,
+          timeMin: parsed.timeMin,
+          timeMax: parsed.timeMax,
+          maxResults: parsed.maxResults,
+          singleEvents: true,
+          orderBy: 'startTime',
+        })
 
-      const events = (res.data.items ?? []).map((e) => ({
-        id: e.id,
-        summary: e.summary,
-        start: e.start?.dateTime ?? e.start?.date,
-        end: e.end?.dateTime ?? e.end?.date,
-        location: e.location,
-        description: e.description?.slice(0, 500),
-        attendees: (e.attendees ?? []).map((a) => ({ email: a.email, status: a.responseStatus })),
-        meetLink: e.hangoutLink,
-      }))
+        const events = (res.data.items ?? []).map((e) => ({
+          id: e.id,
+          summary: e.summary,
+          start: e.start?.dateTime ?? e.start?.date,
+          end: e.end?.dateTime ?? e.end?.date,
+          location: e.location,
+          description: e.description?.slice(0, 500),
+          attendees: (e.attendees ?? []).map((a) => ({ email: a.email, status: a.responseStatus })),
+          meetLink: e.hangoutLink,
+        }))
 
+        return { success: true, data: { count: events.length, events } }
+      }
+
+      // All calendars
+      const events = await listEventsFromAllCalendars(cal, parsed.timeMin, parsed.timeMax, parsed.maxResults)
       return { success: true, data: { count: events.length, events } }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -69,6 +174,7 @@ export const gcalListEvents: Tool = {
 
 const GetEventInput = z.object({
   eventId: z.string().describe('The calendar event ID'),
+  calendarId: z.string().optional().default('primary'),
 })
 
 export const gcalGetEvent: Tool = {
@@ -78,6 +184,7 @@ export const gcalGetEvent: Tool = {
     type: 'object',
     properties: {
       eventId: { type: 'string', description: 'The calendar event ID' },
+      calendarId: { type: 'string', description: 'Calendar ID (default: primary)' },
     },
     required: ['eventId'],
   },
@@ -87,7 +194,7 @@ export const gcalGetEvent: Tool = {
       const cal = await getCalendarClient(ctx)
 
       const res = await cal.events.get({
-        calendarId: 'primary',
+        calendarId: parsed.calendarId,
         eventId: parsed.eventId,
       })
 
@@ -127,11 +234,12 @@ const CreateEventInput = z.object({
   description: z.string().optional(),
   location: z.string().optional(),
   attendees: z.array(z.string()).optional().describe('Email addresses of attendees'),
+  calendarId: z.string().optional().default('primary'),
 })
 
 export const gcalCreateEvent: Tool = {
   name: 'gcal_create_event',
-  description: 'Create a new calendar event. Confirm with user first if inviting attendees.',
+  description: 'Create a new calendar event. Use calendarId to target a specific calendar. Confirm with user first if inviting attendees.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -141,6 +249,7 @@ export const gcalCreateEvent: Tool = {
       description: { type: 'string', description: 'Event description' },
       location: { type: 'string', description: 'Event location' },
       attendees: { type: 'array', items: { type: 'string' }, description: 'Attendee emails' },
+      calendarId: { type: 'string', description: 'Calendar ID (default: primary). Use gcal_list_calendars to find IDs.' },
     },
     required: ['summary', 'start', 'end'],
   },
@@ -150,7 +259,7 @@ export const gcalCreateEvent: Tool = {
       const cal = await getCalendarClient(ctx)
 
       const res = await cal.events.insert({
-        calendarId: 'primary',
+        calendarId: parsed.calendarId,
         requestBody: {
           summary: parsed.summary,
           start: { dateTime: parsed.start },
@@ -187,6 +296,7 @@ const UpdateEventInput = z.object({
   end: z.string().optional(),
   description: z.string().optional(),
   location: z.string().optional(),
+  calendarId: z.string().optional().default('primary'),
 })
 
 export const gcalUpdateEvent: Tool = {
@@ -201,6 +311,7 @@ export const gcalUpdateEvent: Tool = {
       end: { type: 'string', description: 'New end time (ISO 8601)' },
       description: { type: 'string', description: 'New description' },
       location: { type: 'string', description: 'New location' },
+      calendarId: { type: 'string', description: 'Calendar ID (default: primary)' },
     },
     required: ['eventId'],
   },
@@ -217,7 +328,7 @@ export const gcalUpdateEvent: Tool = {
       if (parsed.end) body.end = { dateTime: parsed.end }
 
       const res = await cal.events.patch({
-        calendarId: 'primary',
+        calendarId: parsed.calendarId,
         eventId: parsed.eventId,
         requestBody: body,
       })
@@ -237,6 +348,7 @@ export const gcalUpdateEvent: Tool = {
 
 const DeleteEventInput = z.object({
   eventId: z.string().describe('Event ID to delete'),
+  calendarId: z.string().optional().default('primary'),
 })
 
 export const gcalDeleteEvent: Tool = {
@@ -246,6 +358,7 @@ export const gcalDeleteEvent: Tool = {
     type: 'object',
     properties: {
       eventId: { type: 'string', description: 'Event ID to delete' },
+      calendarId: { type: 'string', description: 'Calendar ID (default: primary)' },
     },
     required: ['eventId'],
   },
@@ -255,7 +368,7 @@ export const gcalDeleteEvent: Tool = {
       const cal = await getCalendarClient(ctx)
 
       await cal.events.delete({
-        calendarId: 'primary',
+        calendarId: parsed.calendarId,
         eventId: parsed.eventId,
       })
 
@@ -277,7 +390,7 @@ const FindFreeTimeInput = z.object({
 
 export const gcalFindFreeTime: Tool = {
   name: 'gcal_find_free_time',
-  description: 'Find free time slots within a time window.',
+  description: 'Find free time slots within a time window. Checks ALL calendars to get the full picture.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -292,21 +405,16 @@ export const gcalFindFreeTime: Tool = {
       const parsed = FindFreeTimeInput.parse(input)
       const cal = await getCalendarClient(ctx)
 
-      const res = await cal.events.list({
-        calendarId: 'primary',
-        timeMin: parsed.timeMin,
-        timeMax: parsed.timeMax,
-        singleEvents: true,
-        orderBy: 'startTime',
-      })
+      // Get events from ALL calendars
+      const allEvents = await listEventsFromAllCalendars(cal, parsed.timeMin, parsed.timeMax, 100)
 
-      const events = res.data.items ?? []
-      const busySlots = events
-        .filter((e) => e.start?.dateTime && e.end?.dateTime)
+      const busySlots = allEvents
+        .filter((e) => !e.allDay && e.start && e.end)
         .map((e) => ({
-          start: new Date(e.start!.dateTime!).getTime(),
-          end: new Date(e.end!.dateTime!).getTime(),
+          start: new Date(e.start as string).getTime(),
+          end: new Date(e.end as string).getTime(),
         }))
+        .sort((a, b) => a.start - b.start)
 
       const windowStart = new Date(parsed.timeMin).getTime()
       const windowEnd = new Date(parsed.timeMax).getTime()
@@ -344,7 +452,7 @@ export const gcalFindFreeTime: Tool = {
 
 export const gcalTodayBriefing: Tool = {
   name: 'gcal_today_briefing',
-  description: "Get a formatted summary of today's calendar events.",
+  description: "Get a summary of today's events from ALL calendars.",
   inputSchema: {
     type: 'object',
     properties: {},
@@ -359,24 +467,30 @@ export const gcalTodayBriefing: Tool = {
       const endOfDay = new Date(now)
       endOfDay.setHours(23, 59, 59, 999)
 
-      const res = await cal.events.list({
-        calendarId: 'primary',
-        timeMin: startOfDay.toISOString(),
-        timeMax: endOfDay.toISOString(),
-        singleEvents: true,
-        orderBy: 'startTime',
-        timeZone: ctx.timezone,
-      })
+      const events = await listEventsFromAllCalendars(
+        cal,
+        startOfDay.toISOString(),
+        endOfDay.toISOString(),
+        50,
+        ctx.timezone
+      )
 
-      const events = (res.data.items ?? []).map((e) => ({
-        summary: e.summary,
-        start: e.start?.dateTime ?? e.start?.date,
-        end: e.end?.dateTime ?? e.end?.date,
-        location: e.location,
-        meetLink: e.hangoutLink,
-      }))
-
-      return { success: true, data: { date: now.toISOString().split('T')[0], eventCount: events.length, events } }
+      return {
+        success: true,
+        data: {
+          date: now.toISOString().split('T')[0],
+          eventCount: events.length,
+          events: events.map((e) => ({
+            summary: e.summary,
+            calendar: e.calendar,
+            start: e.start,
+            end: e.end,
+            location: e.location,
+            meetLink: e.meetLink,
+            allDay: e.allDay,
+          })),
+        },
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       return { success: false, error: msg }
