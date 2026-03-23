@@ -1,8 +1,5 @@
 import { z } from 'zod'
-import { tavily } from '@tavily/core'
 import type { Tool, ToolResult } from '@/lib/llm/types'
-
-const tvly = tavily({ apiKey: process.env.TAVILY_API_KEY ?? '' })
 
 // --- web_search ---
 
@@ -10,6 +7,35 @@ const SearchInput = z.object({
   query: z.string().describe('Search query'),
   maxResults: z.number().optional().default(5).describe('Max results (default 5)'),
 })
+
+// Direct Tavily API call — bypasses SDK to avoid header issues
+async function tavilySearch(query: string, maxResults: number): Promise<{ answer: string | null; results: Array<{ title: string; url: string; content: string }> }> {
+  const response = await fetch('https://api.tavily.com/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      api_key: process.env.TAVILY_API_KEY,
+      query,
+      max_results: maxResults,
+      search_depth: 'basic',
+      include_answer: true,
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Tavily API error: ${response.status} ${response.statusText}`)
+  }
+
+  const data = await response.json() as { answer?: string; results?: Array<{ title: string; url: string; content: string }> }
+  return {
+    answer: data.answer ?? null,
+    results: (data.results ?? []).map((r) => ({
+      title: r.title ?? '',
+      url: r.url ?? '',
+      content: (r.content ?? '').slice(0, 500),
+    })),
+  }
+}
 
 export const webSearch: Tool = {
   name: 'web_search',
@@ -29,25 +55,11 @@ export const webSearch: Tool = {
 
     try {
       const parsed = SearchInput.parse(input)
-
-      const response = await tvly.search(parsed.query, {
-        searchDepth: 'basic',
-        maxResults: parsed.maxResults,
-        includeAnswer: true,
-      })
-
-      const results = (response.results ?? []).map((r) => ({
-        title: r.title,
-        url: r.url,
-        content: r.content?.slice(0, 500) ?? '',
-      }))
+      const { answer, results } = await tavilySearch(parsed.query, parsed.maxResults)
 
       return {
         success: true,
-        data: {
-          answer: response.answer ?? null,
-          results,
-        },
+        data: { answer, results },
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -89,7 +101,7 @@ const MAX_CONTENT_LENGTH = 8000
 
 export const webFetch: Tool = {
   name: 'web_fetch',
-  description: 'Fetch and read the content of a web page. Use when you need to read a specific article, documentation page, or website the user shares.',
+  description: 'Fetch and read the content of a web page. ONLY use this when the user explicitly shares a URL they want you to read. Do NOT use this to browse news sites, articles, or gather information — use web_search instead. Many sites block automated fetching and return errors.',
   inputSchema: {
     type: 'object',
     properties: {
