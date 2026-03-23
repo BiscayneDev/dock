@@ -193,7 +193,7 @@ export default function HarborHome() {
           </section>
 
           {/* Bottom row — four cards */}
-          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.75rem', paddingBottom: '2rem' }}>
+          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', paddingBottom: '2rem' }}>
             {/* Integrate */}
             <Link href="/onboarding" className="dock-card">
               <div className="badge-num">3</div>
