@@ -8,7 +8,7 @@ import { processRecipePayment, updatePaymentContext } from '@/lib/payments/proce
 import type { UserContext, Tool, ToolResult, ChatMessage } from '@/lib/llm/types'
 
 const EXECUTION_TIMEOUT_MS = 90_000
-const MAX_RUNS_PER_HOUR = 10
+const MAX_RUNS_PER_HOUR = 60
 const MAX_AGENT_HISTORY = 20 // Keep last N exchanges in persistent history
 
 // Sanitize instructions to prevent prompt injection
