@@ -14,16 +14,18 @@ export interface AnthropicProviderOptions {
 
 export class AnthropicProvider implements LLMProvider {
   private client: Anthropic
+  readonly defaultModel: string
 
   constructor(options: AnthropicProviderOptions = {}) {
     this.client = new Anthropic({
       apiKey: options.apiKey ?? process.env.ANTHROPIC_API_KEY,
       baseURL: options.baseURL ?? process.env.ANTHROPIC_BASE_URL,
     })
+    this.defaultModel = process.env.LLM_MODEL ?? 'claude-sonnet-4-5'
   }
 
   async chat(params: LLMChatParams): Promise<LLMResponse> {
-    const model = params.model ?? process.env.LLM_MODEL ?? 'claude-sonnet-4-5'
+    const model = params.model ?? this.defaultModel
     const maxTokens = params.maxTokens ?? 4096
 
     const messages = params.messages.map((msg) => this.toAnthropicMessage(msg))

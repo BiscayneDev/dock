@@ -1,4 +1,4 @@
-import { getLLMProvider } from './index'
+import { getLLMProvider, type LLMProviderName } from './index'
 import { logger } from '@/lib/logger'
 import type {
   ChatMessage,
@@ -65,9 +65,10 @@ export async function runAgentLoop(
   tools: Tool[],
   ctx: UserContext,
   onIntermediateMessage?: (msg: string) => Promise<void>,
-  onConfirmationRequired?: (toolName: string, toolInput: Record<string, unknown>) => Promise<boolean>
+  onConfirmationRequired?: (toolName: string, toolInput: Record<string, unknown>) => Promise<boolean>,
+  providerOverride?: LLMProviderName
 ): Promise<string> {
-  const llm = getLLMProvider()
+  const llm = getLLMProvider({ provider: providerOverride })
   const history: ChatMessage[] = [...messages]
   const toolDefinitions = tools.map((t) => ({
     name: t.name,

@@ -63,6 +63,7 @@ import {
   twitterBookmarks,
 } from './twitter'
 import { tokenPrice, trendingTokens, predictionMarkets } from './crypto'
+import { switchLLMProvider } from './llm-control'
 
 // Recipe tools are imported lazily by the orchestrator since they're
 // not available to the execution agent. See lib/tools/recipes.ts.
@@ -135,6 +136,8 @@ export const integrationTools: Tool[] = [
   tokenPrice,
   trendingTokens,
   predictionMarkets,
+  // LLM runtime control (self-aware provider swap)
+  switchLLMProvider,
 ]
 
 // All tools except recipe management — used by the Execution Agent

@@ -10,15 +10,17 @@ import { logger } from '@/lib/logger'
 
 export class OpenAIProvider implements LLMProvider {
   private client: OpenAI
+  readonly defaultModel: string
 
   constructor() {
     this.client = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     })
+    this.defaultModel = process.env.LLM_MODEL ?? 'gpt-4o'
   }
 
   async chat(params: LLMChatParams): Promise<LLMResponse> {
-    const model = params.model ?? process.env.LLM_MODEL ?? 'gpt-4o'
+    const model = params.model ?? this.defaultModel
     const maxTokens = params.maxTokens ?? 4096
 
     // Build messages, expanding tool-role messages into one per result
