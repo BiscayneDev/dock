@@ -1,6 +1,7 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { runAgentLoop } from '@/lib/llm/agent-loop'
+import { getActiveProviderInfo, type LLMProviderName } from '@/lib/llm'
 import { buildSystemPrompt } from './system-prompt'
 import { fetchConversationHistory, persistMessage } from './memory'
 import { integrationTools, getOrchestratorTools } from '@/lib/tools/index'
@@ -151,6 +152,8 @@ async function handleMessageInner(chatId: number, telegramId: number, initialTex
   // Build system prompt with personality and context
   const connectedIntegrations = Object.keys(ctx.tokens)
   const userPrefs = (user as unknown as Record<string, unknown>).preferences as Record<string, unknown> | undefined
+  const userProvider = userPrefs?.llm_provider as LLMProviderName | undefined
+  const activeModel = getActiveProviderInfo({ provider: userProvider })
   const systemPrompt = buildSystemPrompt({
     datetime: new Date().toISOString(),
     timezone: user.timezone ?? 'UTC',
@@ -159,6 +162,7 @@ async function handleMessageInner(chatId: number, telegramId: number, initialTex
     userPreferences: userPrefs ?? undefined,
     isFirstMessage: isFirstMessage && connectedIntegrations.length > 0,
     messageCount: messageCount ?? 0,
+    activeModel,
   })
 
   // Get tools (including recipe tools + user's MCP tools)
@@ -181,7 +185,8 @@ async function handleMessageInner(chatId: number, telegramId: number, initialTex
     },
     async (toolName: string, toolInput: Record<string, unknown>) => {
       return requestConfirmation(chatId, toolName, toolInput)
-    }
+    },
+    userProvider
   )
 
   // Persist assistant response

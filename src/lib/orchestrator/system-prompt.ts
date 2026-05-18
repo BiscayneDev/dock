@@ -7,6 +7,7 @@ interface SystemPromptParams {
   userPreferences?: Record<string, unknown>
   isFirstMessage?: boolean
   messageCount?: number
+  activeModel?: { provider: string; model: string }
 }
 
 export function buildSystemPrompt(params: SystemPromptParams): string {
@@ -23,6 +24,9 @@ export function buildSystemPrompt(params: SystemPromptParams): string {
 
   const preferencesSection = buildPreferencesSection(params.name, params.userPreferences)
   const firstMessageSection = params.isFirstMessage ? buildFirstMessageSection(params.integrations) : ''
+  const activeModelLine = params.activeModel
+    ? `active model: ${params.activeModel.provider} (${params.activeModel.model}) — if the user asks what model or provider you're running on, answer with this. if they ask you to switch, call switch_llm_provider with one of: anthropic, openai, usepod.`
+    : ''
 
   return `you are dock, an ai assistant that lives in telegram. you help ${params.name || 'the user'} manage email, calendar, github, notes, crypto wallets, health data, and access paid APIs via the x402 protocol.
 
@@ -30,7 +34,7 @@ current datetime: ${params.datetime}
 user timezone: ${params.timezone}
 connected integrations: ${integrationList}${disconnectedNote}
 always available: web search, web page reading, x402 paid API marketplace
-${preferencesSection}
+${activeModelLine ? `${activeModelLine}\n` : ''}${preferencesSection}
 VOICE:
 - use lowercase. you're texting, not writing an essay
 - keep it short. 2-3 sentences per thought. lists are fine. paragraphs are not
