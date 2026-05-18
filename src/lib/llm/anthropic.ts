@@ -7,12 +7,18 @@ import type {
   ToolCall,
 } from './types'
 
+export interface AnthropicProviderOptions {
+  apiKey?: string
+  baseURL?: string
+}
+
 export class AnthropicProvider implements LLMProvider {
   private client: Anthropic
 
-  constructor() {
+  constructor(options: AnthropicProviderOptions = {}) {
     this.client = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
+      apiKey: options.apiKey ?? process.env.ANTHROPIC_API_KEY,
+      baseURL: options.baseURL ?? process.env.ANTHROPIC_BASE_URL,
     })
   }
 
