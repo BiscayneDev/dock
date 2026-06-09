@@ -13,7 +13,7 @@ const INTEGRATIONS = [
   { key: 'oura', label: 'Oura Ring', desc: 'Sleep, readiness, and activity', authPath: '/api/integrations/oura/auth', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6a6 6 0 1 1 0 12 6 6 0 0 1 0-12z' },
   { key: 'whoop', label: 'WHOOP', desc: 'Recovery, strain, and heart rate', authPath: '/api/integrations/whoop/auth', icon: 'M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z' },
   { key: 'twitter', label: 'Twitter / X', desc: 'Timeline, search, and bookmarks', authPath: '/api/integrations/twitter/auth', icon: 'M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z' },
-  { key: 'paybox', label: 'Paybox', desc: 'Passkey-gated payments and secrets', authPath: '/api/integrations/paybox/auth', icon: 'M3 6h18v12H3zM3 10h18M7 15h4' },
+  { key: 'paybox', label: 'Paybox', desc: 'Required to authorize payments & secrets', authPath: '/api/integrations/paybox/auth', icon: 'M3 6h18v12H3zM3 10h18M7 15h4' },
 ]
 
 export default function OnboardingPageWrapper() {

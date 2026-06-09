@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import { getPayboxClient, type PayboxEnvelope } from '@/lib/integrations/paybox'
+import {
+  getPayboxClient,
+  isPayboxConnected,
+  payboxRequired,
+  type PayboxEnvelope,
+} from '@/lib/integrations/paybox'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 
 // Paybox — passkey-gated payments and secrets for the agent.
@@ -8,11 +13,7 @@ import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 // key (Phase 2) and are intentionally not exposed yet.
 
 function getClient(ctx: UserContext): ReturnType<typeof getPayboxClient> {
-  const tokens = ctx.tokens.paybox
-  if (!tokens) {
-    throw new Error('Paybox not connected. Connect it in The Harbor settings.')
-  }
-  return getPayboxClient(tokens, ctx.userId)
+  return getPayboxClient(ctx.tokens.paybox, ctx.userId)
 }
 
 // Map a Paybox result envelope to a ToolResult. The submit-once-then-poll rule
@@ -70,6 +71,7 @@ export const payboxListCredentials: Tool = {
     'Call this first — every other Paybox tool takes a credential_id from here.',
   inputSchema: { type: 'object', properties: {} },
   async execute(_input: unknown, ctx: UserContext): Promise<ToolResult> {
+    if (!isPayboxConnected(ctx)) return payboxRequired('listing Paybox credentials')
     try {
       const data = await getClient(ctx).listCredentials()
       return { success: true, data }
@@ -107,6 +109,7 @@ export const payboxRequestPayment: Tool = {
     required: ['credentialId', 'merchant', 'merchantUrl', 'amountCents'],
   },
   async execute(input: unknown, ctx: UserContext): Promise<ToolResult> {
+    if (!isPayboxConnected(ctx)) return payboxRequired('making a payment')
     try {
       const p = PaymentInput.parse(input)
       const env = await getClient(ctx).requestPayment({
@@ -150,6 +153,7 @@ export const payboxRequestSecret: Tool = {
     required: ['credentialId'],
   },
   async execute(input: unknown, ctx: UserContext): Promise<ToolResult> {
+    if (!isPayboxConnected(ctx)) return payboxRequired('using a stored secret')
     try {
       const p = SecretInput.parse(input)
       const env = await getClient(ctx).requestSecret({
@@ -184,6 +188,7 @@ export const payboxGetRequest: Tool = {
     required: ['requestId'],
   },
   async execute(input: unknown, ctx: UserContext): Promise<ToolResult> {
+    if (!isPayboxConnected(ctx)) return payboxRequired('checking a Paybox request')
     try {
       const p = GetRequestInput.parse(input)
       const env = await getClient(ctx).getRequest(p.requestId)

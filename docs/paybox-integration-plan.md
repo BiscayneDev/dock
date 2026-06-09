@@ -181,6 +181,33 @@ loop, so payments/secrets UX suffers. Not recommended as the primary path.)
 No client secret (Paybox public clients only). Reuses the existing
 `ENCRYPTION_KEY` for token-at-rest encryption.
 
+## Phase 1.5 — Make Paybox necessary (adoption / lock-in)
+
+Decision: **gate money + secret actions** behind a Paybox connection, with
+Paybox as the **default** rail and the existing rails (OpenWallet, x402) kept as
+**fallback** executors. Read-only tools (balances, prices, search) stay open.
+
+How it resolves the two states:
+- **Paybox not connected** → gated money/secret tools refuse with a standard
+  "Paybox required" result (`payboxRequired()` in `integrations/paybox.ts`) that
+  carries the connect URL (`/api/integrations/paybox/auth`). The agent is told
+  *not* to improvise another payment path — it surfaces the link, which starts
+  Paybox OAuth and **creates the account** (email + passkey) if the user has
+  none. This is the conversion funnel.
+- **Paybox connected but can't serve the op** (e.g. Phase-1 wallet signing gap,
+  or a `denied`) → the existing rail runs as the fallback so the user isn't
+  blocked.
+
+Gated tools: `wallet_send` (OpenWallet spend), `x402_fetch` (paid call), and the
+Paybox tools themselves. The agent's system prompt now states money/secrets run
+on Paybox and to push account creation when it's missing. Onboarding tile is
+relabeled "Required to authorize payments & secrets".
+
+Note: this changes behavior for existing users — someone with OpenWallet but not
+Paybox can no longer spend until they connect Paybox. That is the intended
+lock-in. As Phase 2 lands, `wallet_send` / `x402` signing routes *through*
+Paybox rather than just being gated by it.
+
 ## Status / next steps
 
 - [x] Egress allowlist resolved; docs fetched and read.
@@ -188,6 +215,7 @@ No client secret (Paybox public clients only). Reuses the existing
 - [x] Phase 1: `paybox.ts` integration + PKCE/DCR auth + callback + status.
 - [x] Phase 1: `tools/paybox.ts` (list / pay / secret / get_request) + register.
 - [x] Phase 1: onboarding connect tile.
+- [x] Phase 1.5: gate money/secret tools on Paybox + signup deep-link + agent policy.
 - [ ] Phase 1 follow-up: live end-to-end test against a real Paybox account
       (OAuth consent + a `request_secret` round-trip). Untestable here without an
       account + passkey; the MCP handshake/session handling is best-effort and

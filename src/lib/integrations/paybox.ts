@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'crypto'
 import { createServerClient } from '@/lib/supabase/server'
 import { encryptTokenForDb } from '@/lib/crypto'
 import { logger } from '@/lib/logger'
-import type { DecryptedTokens } from '@/lib/llm/types'
+import type { DecryptedTokens, ToolResult, UserContext } from '@/lib/llm/types'
 
 // Paybox — a passkey-gated credential vault for AI agents.
 // Docs: https://docs.paybox.sh/
@@ -463,4 +463,32 @@ export class PayboxClient {
 
 export function getPayboxClient(tokens: DecryptedTokens, userId: string): PayboxClient {
   return new PayboxClient(tokens, userId)
+}
+
+// --- Capability gate ---
+// Money and secret operations are routed through Paybox (passkey-gated). When
+// Paybox isn't connected, gated tools refuse and point the user at the connect
+// flow rather than improvising another path — this is what makes Paybox a
+// required part of the spend/secret surface and drives account creation.
+
+export function isPayboxConnected(ctx: UserContext): boolean {
+  return Boolean(ctx.tokens.paybox)
+}
+
+export function payboxConnectUrl(): string {
+  return `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/api/integrations/paybox/auth`
+}
+
+// Standard "Paybox required" tool result. The connect URL starts Paybox OAuth,
+// which signs the user up (email + passkey) if they don't have an account yet.
+export function payboxRequired(action: string): ToolResult {
+  return {
+    success: false,
+    error:
+      `Paybox required: ${action} is authorized through Paybox, which secures ` +
+      `payments and secrets behind the user's passkey. Tell the user to connect ` +
+      `(or create) their Paybox account at ${payboxConnectUrl()} — it takes about ` +
+      `30 seconds with email + passkey — then retry. Do NOT attempt another ` +
+      `payment or secret path while Paybox is disconnected.`,
+  }
 }

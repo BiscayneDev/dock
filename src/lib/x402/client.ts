@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
+import { isPayboxConnected, payboxRequired } from '@/lib/integrations/paybox'
 import { logger } from '@/lib/logger'
 
 // x402 client tools — let Dock's agent consume external x402-gated APIs
@@ -124,6 +125,9 @@ export const x402Fetch: Tool = {
     required: ['url'],
   },
   async execute(input: unknown, ctx: UserContext): Promise<ToolResult> {
+    // Paid x402 calls spend the user's money — gate on Paybox. When connected,
+    // the existing wallet-backed payment path runs as the fallback executor.
+    if (!isPayboxConnected(ctx)) return payboxRequired('paying for an x402 API call')
     try {
       const parsed = X402FetchInput.parse(input)
 
