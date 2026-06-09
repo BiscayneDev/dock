@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { HarborShell } from '@/components/HarborShell'
 import { OpenWalletConnect } from '@/components/OpenWalletConnect'
+import { PayboxSigningKey } from '@/components/PayboxSigningKey'
 
 interface WalletInfo {
   connected: boolean
@@ -201,6 +202,17 @@ export default function DashboardPage() {
             onConnected={() => loadWallet()}
             onDisconnect={() => setWallet({ connected: false, address: null, chain: null, chainLabel: null, balance: null })}
           />
+        </div>
+
+        {/* Paybox */}
+        <div className="dock-card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="6" width="18" height="12" rx="2" /><path d="M3 10h18" /><path d="M7 14h4" />
+            </svg>
+            <p className="section-title" style={{ margin: 0 }}>Paybox</p>
+          </div>
+          <PayboxSigningKey />
         </div>
 
         {/* Danger Zone */}
