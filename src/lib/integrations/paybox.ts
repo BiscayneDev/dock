@@ -1,22 +1,29 @@
 import { createHash, randomBytes } from 'crypto'
+import { PayboxClient as PayboxSdk } from '@paybox-sh/sdk'
 import { createServerClient } from '@/lib/supabase/server'
-import { encryptTokenForDb } from '@/lib/crypto'
+import { encryptTokenForDb, decryptTokenFromDb } from '@/lib/crypto'
 import { logger } from '@/lib/logger'
 import type { DecryptedTokens, ToolResult, UserContext } from '@/lib/llm/types'
 
 // Paybox — a passkey-gated credential vault for AI agents.
-// Docs: https://docs.paybox.sh/
+// Docs: https://docs.paybox.sh/  SDK: @paybox-sh/sdk
 //
-// The developer surface is OAuth 2.1 (authorize) -> MCP (act). Paybox is NOT a
-// writable secret store; credentials are vaulted by the user in the Paybox app.
-// Dock connects as a public OAuth client and calls the MCP tools on behalf of
-// the user. Every operation is scoped to a user-approved grant and may pause for
-// a passkey step-up (surfaced as `pending_approval` + an `approval_url`).
+// The developer surface is OAuth 2.1 (authorize) -> the Paybox agent API. Paybox
+// is NOT a writable secret store; credentials are vaulted by the user in the
+// Paybox app. Dock connects as a public OAuth client and drives the official
+// SDK (REST /agent/* over the same bearer token) on the user's behalf. Wallet
+// signing is non-custodial and runs in-process via a `pbxk1.` signing key the
+// user provisions in the Paybox app; the MoonX secret never reaches Dock.
 
 const DEFAULT_API_URL = 'https://api.paybox.sh'
+const DEFAULT_APP_URL = 'https://app.paybox.sh'
 
 export function getPayboxApiUrl(): string {
   return (process.env.PAYBOX_API_URL ?? DEFAULT_API_URL).replace(/\/+$/, '')
+}
+
+export function getPayboxAppUrl(): string {
+  return (process.env.PAYBOX_APP_URL ?? DEFAULT_APP_URL).replace(/\/+$/, '')
 }
 
 function getMcpResource(): string {
@@ -289,180 +296,117 @@ export async function getPayboxAccessToken(
   }
 }
 
-// --- MCP client (streamable HTTP, JSON-RPC 2.0) ---
+// --- Signing key (pbxk1.) storage ---
+// Enables in-process, non-custodial wallet signing (sign/swap). Stored
+// encrypted in the paybox token row's `signing_key` column (migration 005).
+// Reads are tolerant: if the column/key is absent, sign/swap simply stall at
+// pending_signature rather than erroring.
 
-const MCP_PROTOCOL_VERSION = '2025-06-18'
-
-interface McpToolCallResult {
-  content: Array<{ type: string; text?: string }>
-  isError?: boolean
-}
-
-async function mcpRpc(
-  accessToken: string,
-  method: string,
-  params: Record<string, unknown>,
-  sessionId?: string
-): Promise<{ result: unknown; sessionId: string | null }> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json, text/event-stream',
-    Authorization: `Bearer ${accessToken}`,
-    'MCP-Protocol-Version': MCP_PROTOCOL_VERSION,
-  }
-  if (sessionId) headers['Mcp-Session-Id'] = sessionId
-
-  const res = await fetch(getMcpResource(), {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
-  })
-
-  const returnedSessionId = res.headers.get('mcp-session-id')
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText)
-    throw new Error(`Paybox MCP ${method} failed: ${res.status} ${text}`)
-  }
-
-  const contentType = res.headers.get('content-type') ?? ''
-  const parsed = contentType.includes('text/event-stream')
-    ? parseSse(await res.text())
-    : ((await res.json()) as { result?: unknown; error?: { message: string } })
-
-  if (parsed.error) throw new Error(`Paybox MCP error: ${parsed.error.message}`)
-  return { result: parsed.result, sessionId: returnedSessionId ?? sessionId ?? null }
-}
-
-function parseSse(text: string): { result?: unknown; error?: { message: string } } {
-  for (const line of text.split('\n')) {
-    if (!line.startsWith('data: ')) continue
-    const data = line.slice(6).trim()
-    if (!data) continue
-    try {
-      const json = JSON.parse(data) as { result?: unknown; error?: { message: string } }
-      if (json.result || json.error) return json
-    } catch {
-      // keep scanning
-    }
-  }
-  throw new Error('No valid JSON-RPC payload in SSE stream')
-}
-
-// One MCP tool call with the full streamable-HTTP handshake: initialize ->
-// notifications/initialized -> tools/call, threading the session id.
-async function mcpToolCall(
-  accessToken: string,
-  name: string,
-  args: Record<string, unknown>
-): Promise<unknown> {
-  const init = await mcpRpc(accessToken, 'initialize', {
-    protocolVersion: MCP_PROTOCOL_VERSION,
-    capabilities: {},
-    clientInfo: { name: 'dock', version: '1.0.0' },
-  })
-  const sessionId = init.sessionId ?? undefined
-
-  // Best-effort initialized notification (no response body expected).
-  await fetch(getMcpResource(), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-      'MCP-Protocol-Version': MCP_PROTOCOL_VERSION,
-      ...(sessionId ? { 'Mcp-Session-Id': sessionId } : {}),
-    },
-    body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
-  }).catch(() => {
-    // non-critical
-  })
-
-  const { result } = await mcpRpc(
-    accessToken,
-    'tools/call',
-    { name, arguments: args },
-    sessionId
-  )
-
-  const call = result as McpToolCallResult
-  const text = (call.content ?? [])
-    .filter((c) => c.type === 'text')
-    .map((c) => c.text)
-    .join('\n')
-
-  if (call.isError) {
-    throw new Error(text || `Paybox tool ${name} returned an error`)
-  }
-
-  // Paybox tool outputs are JSON (a result envelope or a list). Parse when we
-  // can; otherwise hand back the raw text.
+export async function getPayboxSigningKey(userId: string): Promise<string | null> {
   try {
-    return JSON.parse(text)
+    const supabase = createServerClient()
+    const { data, error } = await supabase
+      .from('oauth_tokens')
+      .select('signing_key')
+      .eq('user_id', userId)
+      .eq('provider', 'paybox')
+      .single()
+    if (error || !data?.signing_key) return null
+    return decryptTokenFromDb(data.signing_key as string)
   } catch {
-    return text
+    return null
   }
 }
 
-// The Paybox result envelope (see /concepts/requests).
-export type PayboxStatus =
-  | 'success'
-  | 'pending_approval'
-  | 'pending_signature'
-  | 'denied'
-  | 'error'
+export async function storePayboxSigningKey(userId: string, signingKey: string): Promise<void> {
+  const supabase = createServerClient()
+  const { error } = await supabase
+    .from('oauth_tokens')
+    .update({ signing_key: encryptTokenForDb(signingKey), updated_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('provider', 'paybox')
 
-export interface PayboxEnvelope {
-  status?: PayboxStatus
-  request_id?: string
-  approval_url?: string
-  output?: unknown
-  reason?: string
-  message?: string
-  [key: string]: unknown
-}
-
-// A thin client bound to a user; refreshes the token before each call.
-export class PayboxClient {
-  constructor(
-    private tokens: DecryptedTokens,
-    private userId: string
-  ) {}
-
-  private async token(): Promise<string> {
-    return getPayboxAccessToken(this.tokens, this.userId)
-  }
-
-  async listCredentials(): Promise<unknown> {
-    return mcpToolCall(await this.token(), 'list_credentials', {})
-  }
-
-  async requestPayment(args: {
-    credential_id: string
-    merchant: string
-    merchant_url: string
-    amount_cents: number
-    currency: string
-  }): Promise<PayboxEnvelope> {
-    return mcpToolCall(await this.token(), 'request_payment', args) as Promise<PayboxEnvelope>
-  }
-
-  async requestSecret(args: {
-    credential_id: string
-    raw?: boolean
-    purpose?: string
-  }): Promise<PayboxEnvelope> {
-    return mcpToolCall(await this.token(), 'request_secret', args) as Promise<PayboxEnvelope>
-  }
-
-  async getRequest(requestId: string): Promise<PayboxEnvelope> {
-    return mcpToolCall(await this.token(), 'get_request', {
-      request_id: requestId,
-    }) as Promise<PayboxEnvelope>
+  if (error) {
+    throw new Error(
+      `Failed to store Paybox signing key: ${error.message}. ` +
+        `Ensure migration 005_paybox_signing_key.sql is applied.`
+    )
   }
 }
 
-export function getPayboxClient(tokens: DecryptedTokens, userId: string): PayboxClient {
-  return new PayboxClient(tokens, userId)
+export async function removePayboxSigningKey(userId: string): Promise<void> {
+  const supabase = createServerClient()
+  await supabase
+    .from('oauth_tokens')
+    .update({ signing_key: null, updated_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('provider', 'paybox')
+}
+
+// --- SDK client ---
+
+// Build the official SDK client bound to a user: a fresh OAuth bearer token, and
+// the signing key when present (enables in-process sign/swap).
+export async function getPayboxSdk(
+  tokens: DecryptedTokens,
+  userId: string
+): Promise<PayboxSdk> {
+  const [token, signingKey] = await Promise.all([
+    getPayboxAccessToken(tokens, userId),
+    getPayboxSigningKey(userId),
+  ])
+  return new PayboxSdk({
+    baseUrl: getPayboxApiUrl(),
+    token,
+    signingKey: signingKey ?? undefined,
+  })
+}
+
+// Map the SDK's AgentResponse to a ToolResult, honouring the submit-once-then-
+// poll lifecycle. AgentResponse = { request_id, status, output, approval_id,
+// error }; the artifact lives on output.value.
+interface AgentResponseLike {
+  request_id: string
+  status: 'pending_approval' | 'pending_signature' | 'success' | 'denied' | 'error'
+  output: { value?: unknown } | null
+  approval_id: string | null
+  error: string | null
+}
+
+export function agentResultToTool(resp: AgentResponseLike): ToolResult {
+  switch (resp.status) {
+    case 'success':
+      return { success: true, data: { status: 'success', output: resp.output?.value ?? null } }
+    case 'pending_approval':
+      return {
+        success: true,
+        data: {
+          status: 'pending_approval',
+          request_id: resp.request_id,
+          approval_id: resp.approval_id,
+          instruction:
+            `Tell the user to open the Paybox app (${getPayboxAppUrl()}) and approve ` +
+            `the pending request with their passkey, then call paybox_get_request with ` +
+            `this request_id. Do NOT re-issue the original request.`,
+        },
+      }
+    case 'pending_signature':
+      return {
+        success: true,
+        data: {
+          status: 'pending_signature',
+          request_id: resp.request_id,
+          instruction:
+            `Cleared to sign but no in-process signing key is configured (or the signing ` +
+            `window must finish). Ask the user to add their Paybox signing key in The ` +
+            `Harbor, then poll paybox_get_request with this request_id.`,
+        },
+      }
+    case 'denied':
+      return { success: false, error: `Denied: ${resp.error ?? 'no reason given'}` }
+    default:
+      return { success: false, error: resp.error ?? 'Paybox returned an error' }
+  }
 }
 
 // --- Capability gate ---

@@ -67,6 +67,9 @@ import {
   payboxListCredentials,
   payboxRequestPayment,
   payboxRequestSecret,
+  payboxRequestWalletSign,
+  payboxRequestSwap,
+  payboxGetPortfolio,
   payboxGetRequest,
 } from './paybox'
 import { switchLLMProvider } from './llm-control'
@@ -142,10 +145,13 @@ export const integrationTools: Tool[] = [
   tokenPrice,
   trendingTokens,
   predictionMarkets,
-  // Paybox (passkey-gated payments + secrets)
+  // Paybox (passkey-gated payments, secrets, non-custodial wallet ops)
   payboxListCredentials,
   payboxRequestPayment,
   payboxRequestSecret,
+  payboxRequestWalletSign,
+  payboxRequestSwap,
+  payboxGetPortfolio,
   payboxGetRequest,
   // LLM runtime control (self-aware provider swap)
   switchLLMProvider,

@@ -1,61 +1,21 @@
 import { z } from 'zod'
 import {
-  getPayboxClient,
+  getPayboxSdk,
   isPayboxConnected,
   payboxRequired,
-  type PayboxEnvelope,
+  agentResultToTool,
 } from '@/lib/integrations/paybox'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 
-// Paybox — passkey-gated payments and secrets for the agent.
-// Phase 1: list credentials, request a one-time virtual card, reveal a secret,
-// and poll a pending request. Wallet signing / swaps need an in-process signing
-// key (Phase 2) and are intentionally not exposed yet.
+// Paybox — passkey-gated payments, secrets, and non-custodial wallet ops, driven
+// through the official @paybox-sh/sdk over the user's OAuth token. Wallet sign /
+// swap complete in-process when the user has provisioned a `pbxk1.` signing key
+// (otherwise they return pending_signature). See integrations/paybox.ts.
 
-function getClient(ctx: UserContext): ReturnType<typeof getPayboxClient> {
-  return getPayboxClient(ctx.tokens.paybox, ctx.userId)
-}
+type Sdk = Awaited<ReturnType<typeof getPayboxSdk>>
 
-// Map a Paybox result envelope to a ToolResult. The submit-once-then-poll rule
-// means anything not yet terminal returns success:true with instructions to
-// surface the approval URL and poll paybox_get_request — never re-call the
-// original write tool.
-function fromEnvelope(env: PayboxEnvelope): ToolResult {
-  switch (env.status) {
-    case 'success':
-      return { success: true, data: { status: 'success', output: env.output } }
-    case 'pending_approval':
-      return {
-        success: true,
-        data: {
-          status: 'pending_approval',
-          request_id: env.request_id,
-          approval_url: env.approval_url,
-          instruction:
-            'Ask the user to approve this in the Paybox app at approval_url ' +
-            '(passkey required), then call paybox_get_request with request_id. ' +
-            'Do NOT re-issue this request.',
-        },
-      }
-    case 'pending_signature':
-      return {
-        success: true,
-        data: {
-          status: 'pending_signature',
-          request_id: env.request_id,
-          instruction:
-            'Cleared; the signing window is producing the artifact. Poll ' +
-            'paybox_get_request with request_id until it reaches success.',
-        },
-      }
-    case 'denied':
-      return { success: false, error: `Denied: ${env.reason ?? 'no reason given'}` }
-    case 'error':
-      return { success: false, error: env.message ?? 'Paybox returned an error' }
-    default:
-      // Non-enveloped payloads (e.g. an already-resolved get_request) pass through.
-      return { success: true, data: env }
-  }
+async function sdkFor(ctx: UserContext): Promise<Sdk> {
+  return getPayboxSdk(ctx.tokens.paybox, ctx.userId)
 }
 
 function toError(err: unknown): ToolResult {
@@ -73,8 +33,8 @@ export const payboxListCredentials: Tool = {
   async execute(_input: unknown, ctx: UserContext): Promise<ToolResult> {
     if (!isPayboxConnected(ctx)) return payboxRequired('listing Paybox credentials')
     try {
-      const data = await getClient(ctx).listCredentials()
-      return { success: true, data }
+      const creds = await (await sdkFor(ctx)).listCredentials()
+      return { success: true, data: creds }
     } catch (err) {
       return toError(err)
     }
@@ -84,7 +44,7 @@ export const payboxListCredentials: Tool = {
 // --- paybox_request_payment ---
 
 const PaymentInput = z.object({
-  credentialId: z.string().describe('A card-kind credential_id from paybox_list_credentials'),
+  credentialId: z.string().describe('A card-kind credential id from paybox_list_credentials'),
   merchant: z.string().describe('Merchant identifier, shown to the user at approval'),
   merchantUrl: z.string().describe('The real HTTPS merchant origin the one-time card is bound to'),
   amountCents: z.number().int().describe('Amount in cents'),
@@ -100,7 +60,7 @@ export const payboxRequestPayment: Tool = {
   inputSchema: {
     type: 'object',
     properties: {
-      credentialId: { type: 'string', description: 'Card credential_id' },
+      credentialId: { type: 'string', description: 'Card credential id' },
       merchant: { type: 'string', description: 'Merchant identifier' },
       merchantUrl: { type: 'string', description: 'Real HTTPS merchant origin' },
       amountCents: { type: 'integer', description: 'Amount in cents' },
@@ -112,14 +72,14 @@ export const payboxRequestPayment: Tool = {
     if (!isPayboxConnected(ctx)) return payboxRequired('making a payment')
     try {
       const p = PaymentInput.parse(input)
-      const env = await getClient(ctx).requestPayment({
-        credential_id: p.credentialId,
+      const resp = await (await sdkFor(ctx)).requestPayment({
+        credentialId: p.credentialId,
         merchant: p.merchant,
-        merchant_url: p.merchantUrl,
-        amount_cents: p.amountCents,
+        merchantUrl: p.merchantUrl,
+        amountCents: p.amountCents,
         currency: p.currency,
       })
-      return fromEnvelope(env)
+      return agentResultToTool(resp)
     } catch (err) {
       return toError(err)
     }
@@ -129,11 +89,11 @@ export const payboxRequestPayment: Tool = {
 // --- paybox_request_secret ---
 
 const SecretInput = z.object({
-  credentialId: z.string().describe('A secret-kind credential_id from paybox_list_credentials'),
+  credentialId: z.string().describe('A secret-kind credential id from paybox_list_credentials'),
   raw: z
     .boolean()
     .default(false)
-    .describe('false (default) returns a one-time secret_token; true returns plaintext if the grant allows'),
+    .describe('false (default) returns a one-time secret token; true returns plaintext if the grant allows'),
   purpose: z.string().optional().describe('Why the secret is needed, shown at approval'),
 })
 
@@ -146,7 +106,7 @@ export const payboxRequestSecret: Tool = {
   inputSchema: {
     type: 'object',
     properties: {
-      credentialId: { type: 'string', description: 'Secret credential_id' },
+      credentialId: { type: 'string', description: 'Secret credential id' },
       raw: { type: 'boolean', description: 'false = one-time token (preferred); true = plaintext' },
       purpose: { type: 'string', description: 'Why the secret is needed' },
     },
@@ -156,12 +116,154 @@ export const payboxRequestSecret: Tool = {
     if (!isPayboxConnected(ctx)) return payboxRequired('using a stored secret')
     try {
       const p = SecretInput.parse(input)
-      const env = await getClient(ctx).requestSecret({
-        credential_id: p.credentialId,
+      const resp = await (await sdkFor(ctx)).requestSecret({
+        credentialId: p.credentialId,
         raw: p.raw,
         purpose: p.purpose,
       })
-      return fromEnvelope(env)
+      return agentResultToTool(resp)
+    } catch (err) {
+      return toError(err)
+    }
+  },
+}
+
+// --- paybox_request_wallet_sign ---
+
+const WalletSignInput = z.object({
+  credentialId: z.string().describe('A wallet-kind credential id from paybox_list_credentials'),
+  intent: z
+    .record(z.string(), z.unknown())
+    .describe(
+      'What to sign, tagged by op: ' +
+        '{"op":"message","message":"..."} (EIP-191), ' +
+        '{"op":"typedData","typedData":{...}} (EIP-712), ' +
+        '{"op":"transaction","transaction":{...eip1559...}}, ' +
+        '{"op":"solanaMessage","address":"<base58>","message":"..."}, ' +
+        '{"op":"solanaTransaction","address":"<base58>","transactionBase64":"..."}. ' +
+        'The chain/destination/value are read from the intent — do NOT pre-hash.'
+    ),
+})
+
+export const payboxRequestWalletSign: Tool = {
+  name: 'paybox_request_wallet_sign',
+  description:
+    'Sign with a Paybox wallet credential (message, typed data, or a transaction). ' +
+    'Signing is non-custodial and runs in-process via the user\'s signing key — the ' +
+    'private key never leaves MoonX MPC. Completes immediately on an autonomous grant; ' +
+    'otherwise returns pending_approval (user approves with a passkey) — then poll ' +
+    'paybox_get_request. On success, output holds the signature or serialized transaction.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      credentialId: { type: 'string', description: 'Wallet credential id' },
+      intent: {
+        type: 'object',
+        description: 'What to sign, tagged by an "op" field (message/typedData/transaction/solana*)',
+      },
+    },
+    required: ['credentialId', 'intent'],
+  },
+  async execute(input: unknown, ctx: UserContext): Promise<ToolResult> {
+    if (!isPayboxConnected(ctx)) return payboxRequired('signing with a wallet')
+    try {
+      const p = WalletSignInput.parse(input)
+      const sdk = await sdkFor(ctx)
+      const resp = await sdk.requestWalletSign({
+        credentialId: p.credentialId,
+        intent: p.intent as Parameters<typeof sdk.requestWalletSign>[0]['intent'],
+      })
+      return agentResultToTool(resp)
+    } catch (err) {
+      return toError(err)
+    }
+  },
+}
+
+// --- paybox_request_swap ---
+
+const SwapInput = z.object({
+  credentialId: z.string().describe('A wallet-kind credential id'),
+  srcChain: z.string().describe('CAIP-2 source chain, e.g. "eip155:8453" (EVM) or "solana:..."'),
+  dstChain: z.string().optional().describe('Defaults to srcChain (same-chain only for now)'),
+  srcToken: z.string().describe('Source token address, or "native" for the chain native asset'),
+  dstToken: z.string().describe('Destination token address'),
+  amount: z.string().describe("Amount in the source token's smallest unit, as a decimal string"),
+  slippageBps: z.number().int().optional().describe('Slippage in bps (default 50 = 0.5%)'),
+  valueCents: z.number().int().optional().describe('Rough USD value of the sell side, for policy'),
+})
+
+export const payboxRequestSwap: Tool = {
+  name: 'paybox_request_swap',
+  description:
+    'Swap one token for another from a Paybox wallet credential. Paybox quotes the route, ' +
+    'builds the transactions, signs in-process, and broadcasts. Completes on an autonomous ' +
+    'grant; otherwise pending_approval (poll paybox_get_request). Call paybox_get_portfolio ' +
+    'first to size the amount. On success, output holds the swap transaction hash.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      credentialId: { type: 'string', description: 'Wallet credential id' },
+      srcChain: { type: 'string', description: 'CAIP-2 source chain (e.g. eip155:8453)' },
+      dstChain: { type: 'string', description: 'Destination chain (defaults to srcChain)' },
+      srcToken: { type: 'string', description: 'Source token address or "native"' },
+      dstToken: { type: 'string', description: 'Destination token address' },
+      amount: { type: 'string', description: "Amount in source token's smallest unit (decimal string)" },
+      slippageBps: { type: 'integer', description: 'Slippage in bps (default 50)' },
+      valueCents: { type: 'integer', description: 'Rough USD value of the sell side' },
+    },
+    required: ['credentialId', 'srcChain', 'srcToken', 'dstToken', 'amount'],
+  },
+  async execute(input: unknown, ctx: UserContext): Promise<ToolResult> {
+    if (!isPayboxConnected(ctx)) return payboxRequired('swapping tokens')
+    try {
+      const p = SwapInput.parse(input)
+      const result = await (await sdkFor(ctx)).requestSwap({
+        credentialId: p.credentialId,
+        srcChain: p.srcChain,
+        dstChain: p.dstChain,
+        srcToken: p.srcToken,
+        dstToken: p.dstToken,
+        amount: p.amount,
+        slippageBps: p.slippageBps,
+        valueCents: p.valueCents,
+      })
+      return agentResultToTool(result.response)
+    } catch (err) {
+      return toError(err)
+    }
+  },
+}
+
+// --- paybox_get_portfolio ---
+
+const PortfolioInput = z.object({
+  address: z.string().describe('Wallet address (EVM 0x… or Solana base58)'),
+  networkIds: z.string().optional().describe('Comma-separated network ids, e.g. "1,8453"; omit to auto-detect'),
+})
+
+export const payboxGetPortfolio: Tool = {
+  name: 'paybox_get_portfolio',
+  description:
+    "List a Paybox wallet's token balances across chains (public on-chain data). " +
+    'Use before paybox_request_swap to pick the token and size the amount.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      address: { type: 'string', description: 'Wallet address (EVM or Solana)' },
+      networkIds: { type: 'string', description: 'Comma-separated network ids (e.g. "1,8453")' },
+    },
+    required: ['address'],
+  },
+  async execute(input: unknown, ctx: UserContext): Promise<ToolResult> {
+    if (!isPayboxConnected(ctx)) return payboxRequired('reading a wallet portfolio')
+    try {
+      const p = PortfolioInput.parse(input)
+      const data = await (await sdkFor(ctx)).getPortfolio({
+        address: p.address,
+        networkIds: p.networkIds,
+      })
+      return { success: true, data }
     } catch (err) {
       return toError(err)
     }
@@ -171,7 +273,7 @@ export const payboxRequestSecret: Tool = {
 // --- paybox_get_request ---
 
 const GetRequestInput = z.object({
-  requestId: z.string().describe('The request_id returned by a prior Paybox request tool'),
+  requestId: z.string().describe('The request id returned by a prior Paybox request tool'),
 })
 
 export const payboxGetRequest: Tool = {
@@ -183,7 +285,7 @@ export const payboxGetRequest: Tool = {
   inputSchema: {
     type: 'object',
     properties: {
-      requestId: { type: 'string', description: 'request_id from a prior Paybox request' },
+      requestId: { type: 'string', description: 'request id from a prior Paybox request' },
     },
     required: ['requestId'],
   },
@@ -191,8 +293,8 @@ export const payboxGetRequest: Tool = {
     if (!isPayboxConnected(ctx)) return payboxRequired('checking a Paybox request')
     try {
       const p = GetRequestInput.parse(input)
-      const env = await getClient(ctx).getRequest(p.requestId)
-      return fromEnvelope(env)
+      const resp = await (await sdkFor(ctx)).getRequest(p.requestId)
+      return agentResultToTool(resp)
     } catch (err) {
       return toError(err)
     }

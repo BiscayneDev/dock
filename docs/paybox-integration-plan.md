@@ -208,6 +208,37 @@ Paybox can no longer spend until they connect Paybox. That is the intended
 lock-in. As Phase 2 lands, `wallet_send` / `x402` signing routes *through*
 Paybox rather than just being gated by it.
 
+## Phase 2 — Wallet signing, swaps, portfolio (built)
+
+Adopted the official **`@paybox-sh/sdk`** (v0.5.0) and refactored the whole
+integration onto it, replacing the hand-rolled MCP client from Phase 1 (the part
+flagged as unverified). The SDK talks to Paybox's REST `/agent/*` surface using
+the same OAuth bearer token we already mint, returns typed `AgentResponse`s, and
+signs wallet ops **in-process / non-custodially** with a `pbxk1.` key (the MoonX
+secret never reaches Dock). It's fully bundled (no `@paybox/mcp-app` runtime dep)
+and typechecks under `skipLibCheck`.
+
+- `getPayboxSdk(tokens, userId)` builds the SDK client with a fresh access token
+  (+ the signing key when present). `agentResultToTool` maps `AgentResponse` to
+  Dock's `ToolResult`, preserving the submit→poll lifecycle (no `approval_url` on
+  the REST surface — we surface `approval_id` + the app URL instead).
+- New tools: `paybox_request_wallet_sign` (message / typedData / transaction /
+  solana intents), `paybox_request_swap`, `paybox_get_portfolio`. Sign/swap
+  complete immediately on an autonomous grant + a configured signing key,
+  otherwise return `pending_signature` / `pending_approval` and poll.
+- **Signing key provisioning:** migration `005_paybox_signing_key.sql` adds an
+  encrypted `signing_key` column on the paybox token row; `POST/DELETE
+  /api/integrations/paybox/signing-key` stores/clears it; the onboarding page
+  grows a "Paybox signing key" tile (only once Paybox is connected) to paste the
+  `pbxk1.` key. Reads are tolerant — pre-migration or no-key just means sign/swap
+  stall at `pending_signature`.
+
+**Must apply migration 005** to the live DB for signing-key storage to work.
+
+Follow-up worth doing: route Dock's x402 spend through Paybox via the SDK's
+`useService` / `payX402` / `discoverServices` (the gate already requires Paybox
+for `x402_fetch`), retiring the OpenWallet-backed x402 signer.
+
 ## Status / next steps
 
 - [x] Egress allowlist resolved; docs fetched and read.
@@ -216,8 +247,10 @@ Paybox rather than just being gated by it.
 - [x] Phase 1: `tools/paybox.ts` (list / pay / secret / get_request) + register.
 - [x] Phase 1: onboarding connect tile.
 - [x] Phase 1.5: gate money/secret tools on Paybox + signup deep-link + agent policy.
-- [ ] Phase 1 follow-up: live end-to-end test against a real Paybox account
-      (OAuth consent + a `request_secret` round-trip). Untestable here without an
-      account + passkey; the MCP handshake/session handling is best-effort and
-      should be confirmed against the live server.
-- [ ] Phase 2: SDK + `pbxk1.` signing key → wallet sign / swap / portfolio.
+- [x] Phase 2: `@paybox-sh/sdk` refactor + `pbxk1.` signing key → wallet sign /
+      swap / portfolio, with provisioning endpoint + onboarding UI + migration 005.
+- [ ] Apply migration 005 to the live DB.
+- [ ] Live end-to-end test against a real Paybox account: OAuth consent, a secret
+      round-trip, and a wallet sign + swap with a real `pbxk1.` signing key.
+      Untestable here without an account + passkey.
+- [ ] Follow-up: route x402 through Paybox (`useService` / `payX402`).

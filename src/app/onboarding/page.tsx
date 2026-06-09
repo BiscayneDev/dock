@@ -35,6 +35,11 @@ function OnboardingPage() {
   const [owsSaving, setOwsSaving] = useState(false)
   const [owsError, setOwsError] = useState<string | null>(null)
   const [showOws, setShowOws] = useState(false)
+  const [payboxCanSign, setPayboxCanSign] = useState(false)
+  const [showPbxKey, setShowPbxKey] = useState(false)
+  const [pbxKey, setPbxKey] = useState('')
+  const [pbxKeySaving, setPbxKeySaving] = useState(false)
+  const [pbxKeyError, setPbxKeyError] = useState<string | null>(null)
 
   const checkIntegrations = useCallback(async () => {
     try {
@@ -42,7 +47,12 @@ function OnboardingPage() {
       if (!authRes.ok) { setLoading(false); return }
       setAuthenticated(true)
       const statusRes = await fetch('/api/integrations/status', { credentials: 'include' })
-      if (statusRes.ok) setIntegrations(await statusRes.json())
+      if (statusRes.ok) {
+        // Keep payboxCanSign out of `integrations` so it doesn't skew the count.
+        const { payboxCanSign: canSign, ...connected } = await statusRes.json()
+        setIntegrations(connected)
+        setPayboxCanSign(Boolean(canSign))
+      }
     } catch { /* Not authenticated */ } finally { setLoading(false) }
   }, [])
 
@@ -56,6 +66,16 @@ function OnboardingPage() {
       if (res.ok) { setIntegrations({ ...integrations, openwallet: true }); setShowOws(false) }
       else setOwsError(data.error ?? 'Connection failed')
     } catch { setOwsError('Connection failed') } finally { setOwsSaving(false) }
+  }
+
+  const savePayboxKey = async () => {
+    setPbxKeySaving(true); setPbxKeyError(null)
+    try {
+      const res = await fetch('/api/integrations/paybox/signing-key', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ signingKey: pbxKey }), credentials: 'include' })
+      const data = await res.json()
+      if (res.ok) { setPayboxCanSign(true); setShowPbxKey(false); setPbxKey('') }
+      else setPbxKeyError(data.error ?? 'Could not save signing key')
+    } catch { setPbxKeyError('Could not save signing key') } finally { setPbxKeySaving(false) }
   }
 
   const anyConnected = Object.values(integrations).some(Boolean)
@@ -174,6 +194,32 @@ function OnboardingPage() {
                 </div>
               )}
             </div>
+
+            {/* Paybox signing key — enables non-custodial wallet sign/swap. Only
+                relevant once Paybox is connected. */}
+            {integrations.paybox && (
+              <div className="dock-card" style={{ padding: '1rem 1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.9rem' }}>Paybox signing key</p>
+                    <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>Enables wallet signing &amp; swaps (optional)</p>
+                  </div>
+                  {payboxCanSign ? (
+                    <span className="meta-text" style={{ color: 'var(--mesh-mint)' }}>Added</span>
+                  ) : (
+                    <button onClick={() => setShowPbxKey(!showPbxKey)} className="dock-btn-primary" style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }}>Add key</button>
+                  )}
+                </div>
+                {showPbxKey && !payboxCanSign && (
+                  <div style={{ marginTop: '1rem', borderTop: '1.5px solid var(--ink)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <p style={{ fontSize: '0.75rem', opacity: 0.6 }}>Mint a <code>pbxk1.</code> key in the Paybox app (scoped to your granted wallets) and paste it here. It&apos;s stored encrypted and used to sign in-process — Paybox never sees it.</p>
+                    <input type="password" placeholder="pbxk1...." value={pbxKey} onChange={(e) => setPbxKey(e.target.value)} className="dock-input" />
+                    {pbxKeyError && <p style={{ fontSize: '0.8rem', color: 'var(--mesh-peach)' }}>{pbxKeyError}</p>}
+                    <button onClick={savePayboxKey} disabled={pbxKeySaving || !pbxKey.startsWith('pbxk1.')} className="dock-btn-primary">{pbxKeySaving ? 'Saving...' : 'Save key'}</button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {anyConnected && (

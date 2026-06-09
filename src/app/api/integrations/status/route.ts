@@ -17,6 +17,23 @@ export async function GET(): Promise<NextResponse> {
 
   const connected = new Set((tokens ?? []).map((t) => t.provider as string))
 
+  // Whether the user has provisioned a Paybox signing key (enables wallet
+  // sign/swap). Tolerant of the pre-migration state where the column is absent.
+  let payboxCanSign = false
+  if (connected.has('paybox')) {
+    try {
+      const { data } = await supabase
+        .from('oauth_tokens')
+        .select('signing_key')
+        .eq('user_id', session.userId)
+        .eq('provider', 'paybox')
+        .single()
+      payboxCanSign = Boolean(data?.signing_key)
+    } catch {
+      payboxCanSign = false
+    }
+  }
+
   return NextResponse.json({
     google: connected.has('google'),
     notion: connected.has('notion'),
@@ -26,5 +43,6 @@ export async function GET(): Promise<NextResponse> {
     whoop: connected.has('whoop'),
     twitter: connected.has('twitter'),
     paybox: connected.has('paybox'),
+    payboxCanSign,
   })
 }
