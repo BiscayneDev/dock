@@ -5,6 +5,7 @@ interface SystemPromptParams {
   integrations: string[]
   allIntegrations?: string[]
   userPreferences?: Record<string, unknown>
+  relevantMemory?: string[]
   isFirstMessage?: boolean
   messageCount?: number
   activeModel?: { provider: string; model: string }
@@ -23,6 +24,7 @@ export function buildSystemPrompt(params: SystemPromptParams): string {
     : ''
 
   const preferencesSection = buildPreferencesSection(params.name, params.userPreferences)
+  const memorySection = buildMemorySection(params.relevantMemory)
   const firstMessageSection = params.isFirstMessage ? buildFirstMessageSection(params.integrations) : ''
   const activeModelLine = params.activeModel
     ? `active model: ${params.activeModel.provider} (${params.activeModel.model}) — if the user asks what model or provider you're running on, answer with this. if they ask you to switch, call switch_llm_provider with one of: anthropic, openai, usepod.`
@@ -34,7 +36,7 @@ current datetime: ${params.datetime}
 user timezone: ${params.timezone}
 connected integrations: ${integrationList}${disconnectedNote}
 always available: web search, web page reading, x402 paid API marketplace
-${activeModelLine ? `${activeModelLine}\n` : ''}${preferencesSection}
+${activeModelLine ? `${activeModelLine}\n` : ''}${preferencesSection}${memorySection}
 VOICE:
 - use lowercase. you're texting, not writing an essay
 - keep it short. 2-3 sentences per thought. lists are fine. paragraphs are not
@@ -123,6 +125,12 @@ function buildPreferencesSection(
   if (lines.length === 0) return ''
 
   return `\nWHAT YOU KNOW ABOUT ${name || 'this user'}:\n${lines.join('\n')}\n`
+}
+
+function buildMemorySection(relevantMemory?: string[]): string {
+  if (!relevantMemory || relevantMemory.length === 0) return ''
+  const lines = relevantMemory.map((m) => `- ${m}`).join('\n')
+  return `\nRELEVANT MEMORY (recalled from past conversations — use if helpful, don't force it):\n${lines}\n`
 }
 
 function buildFirstMessageSection(connectedIntegrations: string[]): string {

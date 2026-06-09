@@ -4,6 +4,7 @@ import { runAgentLoop } from '@/lib/llm/agent-loop'
 import { getActiveProviderInfo, type LLMProviderName } from '@/lib/llm'
 import { buildSystemPrompt } from './system-prompt'
 import { fetchConversationHistory, persistMessage } from './memory'
+import { recallMemories } from '@/lib/memory/semantic'
 import { integrationTools, getOrchestratorTools } from '@/lib/tools/index'
 import {
   sendMessage,
@@ -124,8 +125,15 @@ async function handleMessageInner(chatId: number, telegramId: number, initialTex
   // Build user context
   const ctx = await buildUserContext(user, chatId)
 
-  // Fetch conversation history
-  const history = await fetchConversationHistory(user.id)
+  const userPrefs = (user as unknown as Record<string, unknown>).preferences as Record<string, unknown> | undefined
+  const userProvider = userPrefs?.llm_provider as LLMProviderName | undefined
+
+  // Fetch conversation history (summarization uses the user's provider) and
+  // recall relevant long-term memory for this message — in parallel.
+  const [history, relevantMemory] = await Promise.all([
+    fetchConversationHistory(user.id, userProvider),
+    recallMemories(user.id, text),
+  ])
 
   // Persist user message
   await persistMessage(user.id, {
@@ -151,8 +159,6 @@ async function handleMessageInner(chatId: number, telegramId: number, initialTex
 
   // Build system prompt with personality and context
   const connectedIntegrations = Object.keys(ctx.tokens)
-  const userPrefs = (user as unknown as Record<string, unknown>).preferences as Record<string, unknown> | undefined
-  const userProvider = userPrefs?.llm_provider as LLMProviderName | undefined
   const activeModel = getActiveProviderInfo({ provider: userProvider })
   const systemPrompt = buildSystemPrompt({
     datetime: new Date().toISOString(),
@@ -160,6 +166,7 @@ async function handleMessageInner(chatId: number, telegramId: number, initialTex
     name: user.name ?? 'there',
     integrations: connectedIntegrations,
     userPreferences: userPrefs ?? undefined,
+    relevantMemory,
     isFirstMessage: isFirstMessage && connectedIntegrations.length > 0,
     messageCount: messageCount ?? 0,
     activeModel,

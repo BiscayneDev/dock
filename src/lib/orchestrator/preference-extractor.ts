@@ -1,5 +1,6 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { getLLMProvider } from '@/lib/llm/index'
+import { storeMemory } from '@/lib/memory/semantic'
 import { logger } from '@/lib/logger'
 
 interface UserPreferences {
@@ -7,6 +8,12 @@ interface UserPreferences {
   important_contacts?: string[]
   common_topics?: string[]
   quirks?: string[]
+}
+
+// Extracted alongside preferences but stored in semantic memory, not on the
+// user row — richer durable facts (projects, goals, people, decisions).
+interface Extraction extends UserPreferences {
+  facts?: string[]
 }
 
 /**
@@ -45,25 +52,27 @@ export async function extractPreferences(userId: string): Promise<void> {
   const llm = getLLMProvider()
 
   const response = await llm.chat({
-    system: `extract user preferences from this conversation. respond with ONLY valid JSON:
+    system: `extract user preferences and durable facts from this conversation. respond with ONLY valid JSON:
 {
   "communication_style": "brief" | "detailed" | "casual" | null,
   "important_contacts": ["name or email they mention often"],
   "common_topics": ["topics they frequently ask about"],
-  "quirks": ["notable preferences, habits, or pet peeves"]
+  "quirks": ["notable preferences, habits, or pet peeves"],
+  "facts": ["durable facts worth remembering long-term: projects, goals, people, commitments, decisions"]
 }
 
 rules:
 - only include fields where you have real evidence from the conversation
 - keep arrays short (max 5 items each)
 - quirks should be actionable (e.g. "prefers morning meetings" not "seems busy")
+- facts should be specific and standalone (e.g. "launching a podcast called Harbor in March")
 - if you can't determine something, omit the field entirely
 - merge with existing preferences where provided
 
 existing preferences: ${JSON.stringify(existing)}`,
     messages: [{ role: 'user', content: conversationText }],
     tools: [],
-    maxTokens: 300,
+    maxTokens: 400,
   })
 
   try {
@@ -71,7 +80,14 @@ existing preferences: ${JSON.stringify(existing)}`,
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (!jsonMatch) return
 
-    const extracted = JSON.parse(jsonMatch[0]) as UserPreferences
+    const extracted = JSON.parse(jsonMatch[0]) as Extraction
+
+    // Store durable facts in semantic memory (best-effort, non-blocking flow).
+    for (const fact of (extracted.facts ?? []).slice(0, 5)) {
+      if (typeof fact === 'string' && fact.trim()) {
+        await storeMemory(userId, fact, 'fact')
+      }
+    }
 
     // Merge immutably with existing — arrays are unioned, scalars overwritten
     const merged: UserPreferences = {
