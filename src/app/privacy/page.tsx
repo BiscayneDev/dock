@@ -18,7 +18,8 @@ export default function PrivacyPolicy() {
         <section>
           <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Information We Collect</h2>
           <p><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Account information:</strong> When you connect via Telegram, we store your Telegram user ID, first name, and username. No phone number or password is collected.</p>
-          <p style={{ marginTop: '0.5rem' }}><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Integration tokens:</strong> When you connect services (Google, GitHub, Notion, Oura, WHOOP, MoonPay), we store encrypted OAuth access tokens and refresh tokens. These are used solely to make API calls on your behalf. All tokens are encrypted at rest using AES-256-GCM.</p>
+          <p style={{ marginTop: '0.5rem' }}><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Integration tokens:</strong> When you connect services (Google, GitHub, Notion, Oura, WHOOP, Twitter/X, MoonPay, Paybox), we store encrypted OAuth access tokens and refresh tokens. These are used solely to make API calls on your behalf. All tokens are encrypted at rest using AES-256-GCM.</p>
+          <p style={{ marginTop: '0.5rem' }}><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Paybox:</strong> If you connect Paybox, your actual payment and secret credentials are vaulted by Paybox, not Dock — we store only a scoped OAuth token and, if you provide one, an encrypted in-process wallet signing key. Sensitive operations are gated by your passkey in the Paybox app.</p>
           <p style={{ marginTop: '0.5rem' }}><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Messages:</strong> Your conversation history with the Dock bot is stored to maintain context across sessions. Messages are associated with your user ID and are not shared with other users.</p>
           <p style={{ marginTop: '0.5rem' }}><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Health data:</strong> If you connect Oura Ring or WHOOP, we access sleep, readiness/recovery, activity, and heart rate data through their APIs. This data is fetched on demand and not stored persistently — it is retrieved each time the agent needs it.</p>
           <p style={{ marginTop: '0.5rem' }}><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Recipes and automation:</strong> Recipes you create (including instructions, trigger configurations, and run history) are stored in our database.</p>
@@ -47,6 +48,7 @@ export default function PrivacyPolicy() {
             <li>Oura — for sleep, readiness, and activity data</li>
             <li>WHOOP — for recovery, strain, and heart rate data</li>
             <li>MoonPay / OpenWallet — for crypto wallet operations</li>
+            <li>Paybox — for passkey-gated payments, secrets, and wallet operations</li>
             <li>OpenAI — for AI language model processing</li>
             <li>Telegram — for bot messaging</li>
             <li>Supabase — for data storage</li>

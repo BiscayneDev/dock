@@ -115,7 +115,7 @@ function WorkspacePage() {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" style={{ marginLeft: 'auto' }}><path d="M12 5v14M5 12h14" /></svg>
           </button>
           <Section title="Your Integrations">
-            {[{ key: 'google', label: 'Gmail & Calendar', icon: '📧' }, { key: 'github', label: 'GitHub', icon: '🐙' }, { key: 'notion', label: 'Notion', icon: '📝' }, { key: 'openwallet', label: 'MoonPay Wallet', icon: '💰' }, { key: 'oura', label: 'Oura Ring', icon: '💤' }, { key: 'whoop', label: 'WHOOP', icon: '💪' }, { key: 'twitter', label: 'Twitter / X', icon: '🐦' }].map((int) => (
+            {[{ key: 'google', label: 'Gmail & Calendar', icon: '📧' }, { key: 'github', label: 'GitHub', icon: '🐙' }, { key: 'notion', label: 'Notion', icon: '📝' }, { key: 'openwallet', label: 'MoonPay Wallet', icon: '💰' }, { key: 'paybox', label: 'Paybox', icon: '🔐' }, { key: 'oura', label: 'Oura Ring', icon: '💤' }, { key: 'whoop', label: 'WHOOP', icon: '💪' }, { key: 'twitter', label: 'Twitter / X', icon: '🐦' }].map((int) => (
               <SideItem key={int.key} icon={int.icon} label={int.label} dot={integrations[int.key] ? 'var(--mesh-mint)' : 'var(--mesh-peach)'} onClick={() => setInput(`I want to do something with ${int.label}...`)} />
             ))}
           </Section>

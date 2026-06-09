@@ -22,6 +22,10 @@ const INTEGRATION_META: Record<string, { label: string; desc: string; icon: stri
   github: { label: 'GitHub', desc: 'Repos, issues, and PRs', icon: '🐙', authPath: '/api/integrations/github/auth' },
   notion: { label: 'Notion', desc: 'Pages and databases', icon: '📝', authPath: '/api/integrations/notion/auth' },
   openwallet: { label: 'MoonPay Wallet', desc: 'Agent wallet & payments', icon: '💰', authPath: '' },
+  paybox: { label: 'Paybox', desc: 'Passkey-gated payments & secrets', icon: '🔐', authPath: '/api/integrations/paybox/auth' },
+  twitter: { label: 'Twitter / X', desc: 'Timeline, search, and bookmarks', icon: '🐦', authPath: '/api/integrations/twitter/auth' },
+  oura: { label: 'Oura Ring', desc: 'Sleep, readiness, and activity', icon: '💤', authPath: '/api/integrations/oura/auth' },
+  whoop: { label: 'WHOOP', desc: 'Recovery, strain, and heart rate', icon: '💪', authPath: '/api/integrations/whoop/auth' },
 }
 
 export default function MarketplaceRecipeDetailPage({ params }: { params: Promise<{ id: string }> }) {
