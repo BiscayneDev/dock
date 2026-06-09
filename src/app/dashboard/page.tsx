@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { HarborShell } from '@/components/HarborShell'
 import { OpenWalletConnect } from '@/components/OpenWalletConnect'
+import { PayboxFund } from '@/components/PayboxFund'
 import { PayboxSigningKey } from '@/components/PayboxSigningKey'
 
 interface WalletInfo {
@@ -212,7 +213,10 @@ export default function DashboardPage() {
             </svg>
             <p className="section-title" style={{ margin: 0 }}>Paybox</p>
           </div>
-          <PayboxSigningKey />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+            <PayboxFund />
+            <PayboxSigningKey />
+          </div>
         </div>
 
         {/* Danger Zone */}

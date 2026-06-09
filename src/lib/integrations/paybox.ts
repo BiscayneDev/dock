@@ -234,6 +234,49 @@ export async function storePayboxTokens(
   }
 }
 
+// Load the user's decrypted Paybox tokens (for building an SDK client outside
+// the agent's UserContext, e.g. in API routes).
+export async function getDecryptedPayboxTokens(userId: string): Promise<DecryptedTokens | null> {
+  const supabase = createServerClient()
+  const { data } = await supabase
+    .from('oauth_tokens')
+    .select('access_token, refresh_token, expires_at')
+    .eq('user_id', userId)
+    .eq('provider', 'paybox')
+    .single()
+
+  if (!data?.access_token) return null
+  return {
+    accessToken: decryptTokenFromDb(data.access_token as string),
+    refreshToken: data.refresh_token ? decryptTokenFromDb(data.refresh_token as string) : null,
+    expiresAt: (data.expires_at as string) ?? null,
+  }
+}
+
+// Pull the wallet credentials (address + chains) the client may use — for the
+// fund/deposit flow.
+export interface PayboxWallet {
+  credentialId: string
+  name: string
+  address: string | null
+  chains: string[]
+}
+
+export async function getPayboxWallets(sdk: PayboxSdk): Promise<PayboxWallet[]> {
+  const creds = await sdk.listCredentials()
+  return creds
+    .filter((c) => c.credential.credential_type === 'wallet')
+    .map((c) => {
+      const meta = (c.credential.metadata ?? {}) as Record<string, unknown>
+      return {
+        credentialId: c.credential.id,
+        name: c.credential.name,
+        address: (meta.address as string | null) ?? null,
+        chains: Array.isArray(meta.chains) ? (meta.chains as string[]) : [],
+      }
+    })
+}
+
 // Returns a valid access token, refreshing (and persisting the rotated refresh
 // token — Paybox rotates on every use) when within 5 minutes of expiry.
 export async function getPayboxAccessToken(

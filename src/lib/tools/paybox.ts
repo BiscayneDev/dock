@@ -1,10 +1,12 @@
 import { z } from 'zod'
 import {
   getPayboxSdk,
+  getPayboxWallets,
   isPayboxConnected,
   payboxRequired,
   agentResultToTool,
 } from '@/lib/integrations/paybox'
+import { buildMoonpayOnrampUrl } from '@/lib/moonpay/onramp'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 
 // Paybox — passkey-gated payments, secrets, and non-custodial wallet ops, driven
@@ -375,6 +377,60 @@ export const payboxPayX402: Tool = {
         accepts: p.accepts,
       })
       return agentResultToTool(result.response)
+    } catch (err) {
+      return toError(err)
+    }
+  },
+}
+
+// --- paybox_fund_wallet ---
+
+const FundInput = z.object({
+  credentialId: z.string().optional().describe('Wallet credential to fund; defaults to the first wallet'),
+})
+
+export const payboxFundWallet: Tool = {
+  name: 'paybox_fund_wallet',
+  description:
+    "Get ways to add funds to the user's Paybox wallet: the deposit address (send any " +
+    'crypto there) and, when configured, a MoonPay buy-with-card link. Use whenever the ' +
+    'user wants to deposit, top up, fund, or add money/crypto to their wallet.',
+  inputSchema: {
+    type: 'object',
+    properties: { credentialId: { type: 'string', description: 'Wallet credential id (optional)' } },
+  },
+  async execute(input: unknown, ctx: UserContext): Promise<ToolResult> {
+    if (!isPayboxConnected(ctx)) return payboxRequired('funding a wallet')
+    try {
+      const p = FundInput.parse(input ?? {})
+      const wallets = await getPayboxWallets(await sdkFor(ctx))
+      if (wallets.length === 0) {
+        return { success: false, error: 'No Paybox wallet found. Create one in the Paybox app, then try again.' }
+      }
+      const wallet = (p.credentialId && wallets.find((w) => w.credentialId === p.credentialId)) || wallets[0]
+      if (!wallet.address) {
+        return { success: false, error: 'This Paybox wallet has no address yet.' }
+      }
+
+      const chain = wallet.chains[0] ?? null
+      const buyWithCardUrl = buildMoonpayOnrampUrl({
+        address: wallet.address,
+        chain,
+        redirectUrl: process.env.NEXT_PUBLIC_APP_URL,
+      })
+
+      return {
+        success: true,
+        data: {
+          address: wallet.address,
+          chains: wallet.chains,
+          depositInstructions: `Send crypto to ${wallet.address}${chain ? ` on ${chain}` : ''} to fund the wallet.`,
+          buyWithCardUrl,
+          note: buyWithCardUrl
+            ? 'Share buyWithCardUrl for a card on-ramp, or the address for a crypto transfer.'
+            : 'Card on-ramp is not configured; share the address for a crypto transfer.',
+        },
+      }
     } catch (err) {
       return toError(err)
     }

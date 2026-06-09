@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { HarborShell } from '@/components/HarborShell'
+import { PayboxFund } from '@/components/PayboxFund'
 
 interface ConnectedIntegrations { google: boolean; notion: boolean; github: boolean; openwallet: boolean; oura: boolean; whoop: boolean; twitter: boolean; paybox: boolean }
 
@@ -194,6 +195,13 @@ function OnboardingPage() {
                 </div>
               )}
             </div>
+
+            {/* Paybox deposit / top-up — wallet address + QR + buy-with-card. */}
+            {integrations.paybox && (
+              <div className="dock-card" style={{ padding: '1rem 1.25rem' }}>
+                <PayboxFund />
+              </div>
+            )}
 
             {/* Paybox signing key — enables non-custodial wallet sign/swap. Only
                 relevant once Paybox is connected. */}
