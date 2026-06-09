@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { HarborShell } from '@/components/HarborShell'
 
-interface ConnectedIntegrations { google: boolean; notion: boolean; github: boolean; openwallet: boolean; oura: boolean; whoop: boolean; twitter: boolean }
+interface ConnectedIntegrations { google: boolean; notion: boolean; github: boolean; openwallet: boolean; oura: boolean; whoop: boolean; twitter: boolean; paybox: boolean }
 
 const INTEGRATIONS = [
   { key: 'google', label: 'Google', desc: 'Gmail and Google Calendar', authPath: '/api/integrations/google/auth', icon: 'M4 7L10.2 11.65C11.27 12.45 12.73 12.45 13.8 11.65L20 7M3 5h18v14H3z' },
@@ -13,6 +13,7 @@ const INTEGRATIONS = [
   { key: 'oura', label: 'Oura Ring', desc: 'Sleep, readiness, and activity', authPath: '/api/integrations/oura/auth', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6a6 6 0 1 1 0 12 6 6 0 0 1 0-12z' },
   { key: 'whoop', label: 'WHOOP', desc: 'Recovery, strain, and heart rate', authPath: '/api/integrations/whoop/auth', icon: 'M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z' },
   { key: 'twitter', label: 'Twitter / X', desc: 'Timeline, search, and bookmarks', authPath: '/api/integrations/twitter/auth', icon: 'M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z' },
+  { key: 'paybox', label: 'Paybox', desc: 'Passkey-gated payments and secrets', authPath: '/api/integrations/paybox/auth', icon: 'M3 6h18v12H3zM3 10h18M7 15h4' },
 ]
 
 export default function OnboardingPageWrapper() {
@@ -28,7 +29,7 @@ function OnboardingPage() {
   const searchParams = useSearchParams()
   const justConnected = searchParams.get('connected')
   const [authenticated, setAuthenticated] = useState(false)
-  const [integrations, setIntegrations] = useState<ConnectedIntegrations>({ google: false, notion: false, github: false, openwallet: false, oura: false, whoop: false, twitter: false })
+  const [integrations, setIntegrations] = useState<ConnectedIntegrations>({ google: false, notion: false, github: false, openwallet: false, oura: false, whoop: false, twitter: false, paybox: false })
   const [loading, setLoading] = useState(true)
   const [owsForm, setOwsForm] = useState({ endpoint: '', apiKey: '' })
   const [owsSaving, setOwsSaving] = useState(false)
@@ -78,10 +79,10 @@ function OnboardingPage() {
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
             <div style={{ flex: 1, height: 4, borderRadius: 2, background: 'var(--ink)', opacity: 0.1 }}>
-              <div style={{ width: `${(connectedCount / 7) * 100}%`, height: '100%', borderRadius: 2, background: 'var(--mesh-mint)', transition: 'width 0.3s' }} />
+              <div style={{ width: `${(connectedCount / 8) * 100}%`, height: '100%', borderRadius: 2, background: 'var(--mesh-mint)', transition: 'width 0.3s' }} />
             </div>
             <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.75rem', opacity: 0.6, whiteSpace: 'nowrap' }}>
-              {connectedCount} of 7 connected
+              {connectedCount} of 8 connected
             </span>
           </div>
         )

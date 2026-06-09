@@ -25,5 +25,6 @@ export async function GET(): Promise<NextResponse> {
     oura: connected.has('oura'),
     whoop: connected.has('whoop'),
     twitter: connected.has('twitter'),
+    paybox: connected.has('paybox'),
   })
 }

@@ -24,6 +24,10 @@ import {
   exchangeTwitterCode,
   storeTwitterTokens,
 } from '@/lib/integrations/twitter'
+import {
+  exchangePayboxCode,
+  storePayboxTokens,
+} from '@/lib/integrations/paybox'
 
 export async function GET(
   request: NextRequest,
@@ -121,6 +125,24 @@ export async function GET(
 
         // Clear the code verifier cookie
         cookieStore.delete('twitter_cv')
+        break
+      }
+
+      case 'paybox': {
+        // Retrieve PKCE verifier + client_id stashed at the start of the flow
+        const { cookies } = await import('next/headers')
+        const cookieStore = await cookies()
+        const codeVerifier = cookieStore.get('paybox_cv')?.value
+        const clientId = cookieStore.get('paybox_client_id')?.value
+        if (!codeVerifier || !clientId) {
+          return NextResponse.redirect(`${appUrl}/onboarding?error=paybox_pkce_expired`)
+        }
+
+        const result = await exchangePayboxCode(code, codeVerifier, clientId)
+        await storePayboxTokens(session.userId, result, clientId)
+
+        cookieStore.delete('paybox_cv')
+        cookieStore.delete('paybox_client_id')
         break
       }
 

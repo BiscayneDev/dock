@@ -168,10 +168,28 @@ loop, so payments/secrets UX suffers. Not recommended as the primary path.)
    `raw:true` (plaintext) — default to `raw:false` so secrets never transit the
    model.
 
+## Env vars (Phase 1)
+
+- `PAYBOX_API_URL` — optional, defaults to `https://api.paybox.sh`.
+- `PAYBOX_REDIRECT_URI` — optional, defaults to
+  `${NEXT_PUBLIC_APP_URL}/auth/callback/paybox`. Must match the registered
+  redirect exactly (HTTPS, or `http://localhost` for dev).
+- `PAYBOX_CLIENT_ID` — optional. If set, reuse this app-wide public client;
+  otherwise a public client is dynamically registered per connect and its
+  `client_id` is stored on the token row (`provider_account_id`).
+
+No client secret (Paybox public clients only). Reuses the existing
+`ENCRYPTION_KEY` for token-at-rest encryption.
+
 ## Status / next steps
 
 - [x] Egress allowlist resolved; docs fetched and read.
 - [x] Plan corrected against real docs (this file).
-- [ ] Phase 1: `paybox.ts` integration + PKCE/DCR auth + callback + status.
-- [ ] Phase 1: `tools/paybox.ts` (list/pay/secret/get_request) + register.
-- [ ] Phase 2: SDK + signing key → wallet sign/swap/portfolio.
+- [x] Phase 1: `paybox.ts` integration + PKCE/DCR auth + callback + status.
+- [x] Phase 1: `tools/paybox.ts` (list / pay / secret / get_request) + register.
+- [x] Phase 1: onboarding connect tile.
+- [ ] Phase 1 follow-up: live end-to-end test against a real Paybox account
+      (OAuth consent + a `request_secret` round-trip). Untestable here without an
+      account + passkey; the MCP handshake/session handling is best-effort and
+      should be confirmed against the live server.
+- [ ] Phase 2: SDK + `pbxk1.` signing key → wallet sign / swap / portfolio.
