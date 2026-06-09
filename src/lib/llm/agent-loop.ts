@@ -12,6 +12,14 @@ import type {
 const MAX_ITERATIONS = 10
 const TOOL_TIMEOUT_MS = 30_000
 
+// One tool execution in a run's trace — for observability (per-tool latency +
+// outcome). Collected per turn and emitted as a structured run-summary log.
+export interface ToolTrace {
+  name: string
+  ms: number
+  ok: boolean
+}
+
 // Categorize tool errors into actionable messages for the LLM
 function categorizeError(toolName: string, error: string): string {
   const lower = error.toLowerCase()
@@ -66,7 +74,8 @@ export async function runAgentLoop(
   ctx: UserContext,
   onIntermediateMessage?: (msg: string) => Promise<void>,
   onConfirmationRequired?: (toolName: string, toolInput: Record<string, unknown>) => Promise<boolean>,
-  providerOverride?: LLMProviderName
+  providerOverride?: LLMProviderName,
+  trace?: ToolTrace[]
 ): Promise<string> {
   const llm = getLLMProvider({ provider: providerOverride })
   const history: ChatMessage[] = [...messages]
@@ -76,8 +85,24 @@ export async function runAgentLoop(
     inputSchema: t.inputSchema,
   }))
 
+  const startedAt = Date.now()
+  const toolTrace: ToolTrace[] = trace ?? []
   let iterations = 0
   const iterationLog: Array<{ iteration: number; tools: string[] }> = []
+
+  // Emit one structured run-summary log line (captured by Vercel logs) so the
+  // conversational agent is observable: tool latencies, outcome, total time.
+  const logRun = (outcome: 'completed' | 'max_iterations'): void => {
+    logger.info('agent run', {
+      userId: ctx.userId,
+      outcome,
+      iterations,
+      durationMs: Date.now() - startedAt,
+      toolCalls: toolTrace.length,
+      toolErrors: toolTrace.filter((t) => !t.ok).length,
+      trace: toolTrace,
+    })
+  }
 
   while (iterations < MAX_ITERATIONS) {
     iterations++
@@ -96,6 +121,7 @@ export async function runAgentLoop(
     }
 
     if (response.stopReason === 'end_turn' || response.toolCalls.length === 0) {
+      logRun('completed')
       return response.content ?? ''
     }
 
@@ -138,10 +164,13 @@ export async function runAgentLoop(
           }
         }
 
+        const startedTool = Date.now()
         try {
           const result = await executeWithTimeout(tool, call.input, ctx) as ToolResult
+          toolTrace.push({ name: call.name, ms: Date.now() - startedTool, ok: result.success !== false })
           return { id: call.id, result }
         } catch (err) {
+          toolTrace.push({ name: call.name, ms: Date.now() - startedTool, ok: false })
           const rawError = err instanceof Error ? err.message : String(err)
           const categorized = categorizeError(call.name, rawError)
           logger.error('Tool execution failed', {
@@ -181,6 +210,7 @@ export async function runAgentLoop(
     iterations: MAX_ITERATIONS,
     iterationLog,
   })
+  logRun('max_iterations')
 
   return 'I ran into an issue completing that task — got stuck in a loop. try rephrasing or breaking it into smaller steps.'
 }

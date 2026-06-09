@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { LLMResponse, Tool, UserContext } from './types'
+import type { ToolTrace } from './agent-loop'
 
 // Drive the loop with a scripted provider and a controllable CONFIRM_TOOLS set.
 const { responses, mockChat } = vi.hoisted(() => {
@@ -77,6 +78,39 @@ describe('runAgentLoop', () => {
     expect(onConfirm).toHaveBeenCalledTimes(1)
     expect(danger).not.toHaveBeenCalled()
     expect(result).toBe('ok')
+  })
+
+  it('records a tool trace with per-call outcomes', async () => {
+    const ok = vi.fn(async () => ({ success: true }))
+    const fail = vi.fn(async () => ({ success: false, error: 'nope' }))
+    responses.push(
+      {
+        content: null,
+        toolCalls: [
+          { id: '1', name: 'ok_tool', input: {} },
+          { id: '2', name: 'fail_tool', input: {} },
+        ],
+        stopReason: USE,
+      },
+      { content: 'done', toolCalls: [], stopReason: END }
+    )
+
+    const trace: ToolTrace[] = []
+    await runAgentLoop(
+      'sys',
+      [{ role: 'user', content: 'go' }],
+      [tool('ok_tool', ok), tool('fail_tool', fail)],
+      ctx,
+      undefined, // onIntermediateMessage
+      undefined, // onConfirmationRequired
+      undefined, // providerOverride
+      trace
+    )
+
+    expect(trace).toHaveLength(2)
+    expect(trace.find((t) => t.name === 'ok_tool')?.ok).toBe(true)
+    expect(trace.find((t) => t.name === 'fail_tool')?.ok).toBe(false)
+    expect(trace.every((t) => typeof t.ms === 'number')).toBe(true)
   })
 
   it('catches a throwing tool and keeps going', async () => {
