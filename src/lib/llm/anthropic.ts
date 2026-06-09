@@ -67,6 +67,28 @@ export class AnthropicProvider implements LLMProvider {
     msg: ChatMessage
   ): Anthropic.MessageParam {
     if (msg.role === 'user') {
+      if (msg.attachments && msg.attachments.length > 0) {
+        const content: Anthropic.ContentBlockParam[] = []
+        if (msg.content) content.push({ type: 'text', text: msg.content })
+        for (const a of msg.attachments) {
+          if (a.kind === 'document') {
+            content.push({
+              type: 'document',
+              source: { type: 'base64', media_type: 'application/pdf', data: a.dataBase64 },
+            })
+          } else {
+            content.push({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: a.mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+                data: a.dataBase64,
+              },
+            })
+          }
+        }
+        return { role: 'user', content }
+      }
       return { role: 'user', content: msg.content ?? '' }
     }
 

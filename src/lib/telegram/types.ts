@@ -25,13 +25,32 @@ export const TelegramVoiceSchema = z.object({
   file_size: z.number().optional(),
 })
 
+export const TelegramPhotoSizeSchema = z.object({
+  file_id: z.string(),
+  file_unique_id: z.string(),
+  width: z.number(),
+  height: z.number(),
+  file_size: z.number().optional(),
+})
+
+export const TelegramDocumentSchema = z.object({
+  file_id: z.string(),
+  file_unique_id: z.string(),
+  file_name: z.string().optional(),
+  mime_type: z.string().optional(),
+  file_size: z.number().optional(),
+})
+
 export const TelegramMessageSchema = z.object({
   message_id: z.number(),
   from: TelegramUserSchema.optional(),
   chat: TelegramChatSchema,
   date: z.number(),
   text: z.string().optional(),
+  caption: z.string().optional(),
   voice: TelegramVoiceSchema.optional(),
+  photo: z.array(TelegramPhotoSizeSchema).optional(),
+  document: TelegramDocumentSchema.optional(),
 })
 
 export const TelegramCallbackQuerySchema = z.object({

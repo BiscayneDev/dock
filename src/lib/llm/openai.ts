@@ -65,7 +65,20 @@ export class OpenAIProvider implements LLMProvider {
 
     for (const msg of messages) {
       if (msg.role === 'user') {
-        expanded.push({ role: 'user', content: msg.content ?? '' })
+        const images = (msg.attachments ?? []).filter((a) => a.kind === 'image')
+        if (images.length > 0) {
+          const parts: OpenAI.ChatCompletionContentPart[] = []
+          const docNote = (msg.attachments ?? []).some((a) => a.kind === 'document')
+            ? ' (a document was attached but cannot be shown to this model)'
+            : ''
+          if (msg.content || docNote) parts.push({ type: 'text', text: `${msg.content ?? ''}${docNote}` })
+          for (const a of images) {
+            parts.push({ type: 'image_url', image_url: { url: `data:${a.mediaType};base64,${a.dataBase64}` } })
+          }
+          expanded.push({ role: 'user', content: parts })
+        } else {
+          expanded.push({ role: 'user', content: msg.content ?? '' })
+        }
         continue
       }
 

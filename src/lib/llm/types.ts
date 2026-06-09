@@ -1,8 +1,17 @@
+export interface MessageAttachment {
+  kind: 'image' | 'document'
+  mediaType: string // e.g. image/jpeg, image/png, application/pdf
+  dataBase64: string
+  name?: string
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'tool'
   content: string | null
   toolCalls?: ToolCall[]
   toolResults?: ToolCallResult[]
+  // Only set on the current-turn user message; not persisted/replayed from history.
+  attachments?: MessageAttachment[]
 }
 
 export interface ToolCall {

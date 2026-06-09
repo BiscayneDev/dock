@@ -13,7 +13,8 @@ import {
   answerCallbackQuery,
 } from '@/lib/telegram/client'
 import type { TelegramUpdate, TelegramMessage, TelegramCallbackQuery } from '@/lib/telegram/types'
-import type { UserContext, DecryptedTokens, ChatMessage } from '@/lib/llm/types'
+import { downloadTelegramFile } from '@/lib/telegram/files'
+import type { UserContext, DecryptedTokens, ChatMessage, MessageAttachment } from '@/lib/llm/types'
 import { decryptTokenFromDb } from '@/lib/crypto'
 
 // Lazy import recipe tools to avoid circular dependency
@@ -44,7 +45,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
 async function handleMessage(message: TelegramMessage): Promise<void> {
   const chatId = message.chat.id
   const telegramId = message.from?.id ?? chatId
-  const text = message.text ?? ''
+  const text = message.text ?? message.caption ?? ''
 
   try {
     await handleMessageInner(chatId, telegramId, text, message)
@@ -82,10 +83,43 @@ async function handleMessageInner(chatId: number, telegramId: number, initialTex
     }
   }
 
-  // If still no text (e.g. photo, sticker), bail
-  if (!text) {
-    await sendMessage({ chatId, text: "I can only process text and voice messages for now." })
+  // Handle image / document attachments — download + attach for the vision model
+  const attachments: MessageAttachment[] = []
+  if (message.photo && message.photo.length > 0) {
+    const largest = message.photo[message.photo.length - 1]
+    const file = await downloadTelegramFile(largest.file_id)
+    if (file) {
+      attachments.push({
+        kind: 'image',
+        mediaType: file.mimeType.startsWith('image/') ? file.mimeType : 'image/jpeg',
+        dataBase64: file.dataBase64,
+      })
+    }
+  }
+  if (message.document) {
+    const mime = message.document.mime_type ?? ''
+    if (mime.startsWith('image/') || mime === 'application/pdf') {
+      const file = await downloadTelegramFile(message.document.file_id)
+      if (file) {
+        attachments.push({
+          kind: mime === 'application/pdf' ? 'document' : 'image',
+          mediaType: mime || file.mimeType,
+          dataBase64: file.dataBase64,
+          name: message.document.file_name,
+        })
+      }
+    }
+  }
+
+  // Nothing usable (e.g. sticker, unsupported document)
+  if (!text && attachments.length === 0) {
+    await sendMessage({ chatId, text: 'I can process text, voice, images, and PDFs. That one I couldn\'t read.' })
     return
+  }
+
+  // Give the model a prompt when an attachment arrives with no caption
+  if (!text && attachments.length > 0) {
+    text = attachments.some((a) => a.kind === 'document') ? '(document attached)' : '(image attached)'
   }
 
   // Get or create user
@@ -144,7 +178,7 @@ async function handleMessageInner(chatId: number, telegramId: number, initialTex
   // Add user message to history for this turn
   const messages: ChatMessage[] = [
     ...history,
-    { role: 'user', content: text },
+    { role: 'user', content: text, ...(attachments.length > 0 ? { attachments } : {}) },
   ]
 
   // Count includes the just-persisted user message; first message = count of 1
