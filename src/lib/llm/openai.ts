@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { withRetry } from './retry'
 import type {
   LLMProvider,
   LLMChatParams,
@@ -21,7 +22,7 @@ export class OpenAIProvider implements LLMProvider {
 
   async chat(params: LLMChatParams): Promise<LLMResponse> {
     const model = params.model ?? this.defaultModel
-    const maxTokens = params.maxTokens ?? 4096
+    const maxTokens = params.maxTokens ?? 8192
 
     // Build messages, expanding tool-role messages into one per result
     const messages: OpenAI.ChatCompletionMessageParam[] = [
@@ -41,12 +42,16 @@ export class OpenAIProvider implements LLMProvider {
           }))
         : undefined
 
-    const response = await this.client.chat.completions.create({
-      model,
-      max_tokens: maxTokens,
-      messages,
-      tools,
-    })
+    const response = await withRetry(
+      () =>
+        this.client.chat.completions.create({
+          model,
+          max_tokens: maxTokens,
+          messages,
+          tools,
+        }),
+      `openai.chat:${model}`
+    )
 
     return this.parseResponse(response)
   }

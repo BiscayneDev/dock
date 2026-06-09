@@ -88,6 +88,13 @@ export async function runAgentLoop(
       tools: toolDefinitions,
     })
 
+    if (response.stopReason === 'max_tokens') {
+      logger.warn('LLM response hit max_tokens (output truncated)', {
+        userId: ctx.userId,
+        iteration: iterations,
+      })
+    }
+
     if (response.stopReason === 'end_turn' || response.toolCalls.length === 0) {
       return response.content ?? ''
     }

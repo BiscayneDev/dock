@@ -184,7 +184,7 @@ async function handleMessageInner(chatId: number, telegramId: number, initialTex
       await sendMessage({ chatId, text: intermediateMsg })
     },
     async (toolName: string, toolInput: Record<string, unknown>) => {
-      return requestConfirmation(chatId, toolName, toolInput)
+      return requestConfirmation(chatId, toolName, toolInput, ctx.userId)
     },
     userProvider
   )
@@ -221,7 +221,7 @@ async function handleCallbackQuery(query: TelegramCallbackQuery): Promise<void> 
   if (data.startsWith('confirm:')) {
     const actionId = data.replace('confirm:', '')
     const { resolveConfirmation } = await import('@/lib/orchestrator/confirmation')
-    const resolved = resolveConfirmation(actionId, true)
+    const resolved = await resolveConfirmation(actionId, true)
 
     if (!resolved) {
       await answerCallbackQuery(query.id, 'This action has expired.')
@@ -242,7 +242,7 @@ async function handleCallbackQuery(query: TelegramCallbackQuery): Promise<void> 
   if (data.startsWith('cancel:')) {
     const actionId = data.replace('cancel:', '')
     const { resolveConfirmation } = await import('@/lib/orchestrator/confirmation')
-    resolveConfirmation(actionId, false)
+    await resolveConfirmation(actionId, false)
     await answerCallbackQuery(query.id, 'cancelled')
 
     if (query.message) {

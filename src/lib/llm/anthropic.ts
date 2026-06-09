@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { withRetry } from './retry'
 import type {
   LLMProvider,
   LLMChatParams,
@@ -26,23 +27,38 @@ export class AnthropicProvider implements LLMProvider {
 
   async chat(params: LLMChatParams): Promise<LLMResponse> {
     const model = params.model ?? this.defaultModel
-    const maxTokens = params.maxTokens ?? 4096
+    const maxTokens = params.maxTokens ?? 8192
 
     const messages = params.messages.map((msg) => this.toAnthropicMessage(msg))
 
-    const tools = params.tools.map((tool) => ({
+    const tools: Anthropic.Tool[] = params.tools.map((tool) => ({
       name: tool.name,
       description: tool.description,
       input_schema: tool.inputSchema as Anthropic.Tool['input_schema'],
     }))
 
-    const response = await this.client.messages.create({
-      model,
-      max_tokens: maxTokens,
-      system: params.system,
-      messages,
-      tools: tools.length > 0 ? tools : undefined,
-    })
+    // Prompt caching: tool schemas are large and identical on every turn, and
+    // sit before `system`/`messages` in the cache hierarchy, so a breakpoint on
+    // the last tool caches the whole tool prefix across a conversation — even
+    // though the system prompt carries volatile bits (datetime, recalled memory).
+    if (tools.length > 0) {
+      tools[tools.length - 1] = {
+        ...tools[tools.length - 1],
+        cache_control: { type: 'ephemeral' },
+      }
+    }
+
+    const response = await withRetry(
+      () =>
+        this.client.messages.create({
+          model,
+          max_tokens: maxTokens,
+          system: params.system,
+          messages,
+          tools: tools.length > 0 ? tools : undefined,
+        }),
+      `anthropic.chat:${model}`
+    )
 
     return this.parseResponse(response)
   }
