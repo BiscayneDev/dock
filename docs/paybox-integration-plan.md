@@ -266,9 +266,21 @@ Applied alongside this work:
   record); writes are service-role only, owner-scoped SELECT kept. WARN →
   resolved.
 
-Remaining (pre-existing, not addressed — your call): `health_documents` public
-bucket allows listing, Auth leaked-password protection disabled, Postgres
-security patches available.
+- `008` — secure the `health_documents` storage bucket: made it private and
+  scoped its policies to `auth.uid() = owner` (was public + bucket-id-only
+  policies = cross-tenant PHI access). WARN → resolved.
+- `009` — drop the orphaned health-document storage policies. The bucket is
+  legacy (old project: no code refs; 13 objects from a one-day 2025-04-26 batch,
+  none owned by current Dock users). Supabase blocks SQL deletion of storage
+  rows, so emptying + deleting the bucket itself is done via
+  `scripts/remove-health-documents.mjs` (Storage API, service-role key).
+
+Remaining (platform/Auth settings — not code/SQL-fixable, need the Supabase
+dashboard):
+- **Postgres security patches** — upgrade via Dashboard → Settings →
+  Infrastructure (incurs brief downtime; no MCP/SQL path). The user's call.
+- **Auth leaked-password protection** — enable via Dashboard → Authentication →
+  Policies (toggle HaveIBeenPwned check).
 
 ## Status / next steps
 
