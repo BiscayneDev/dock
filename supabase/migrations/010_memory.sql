@@ -32,6 +32,7 @@ create or replace function match_memories(
 )
 returns table (id uuid, content text, kind text, similarity float)
 language sql stable
+set search_path = public
 as $$
   select m.id, m.content, m.kind, 1 - (m.embedding <=> query_embedding) as similarity
   from memories m
