@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
-import { isPayboxConnected, payboxRequired } from '@/lib/integrations/paybox'
+import { isPayboxConnected, payboxRequired, getPayboxSdk, agentResultToTool } from '@/lib/integrations/paybox'
 import { logger } from '@/lib/logger'
 
 // x402 client tools — let Dock's agent consume external x402-gated APIs
@@ -111,6 +111,56 @@ function createOWSSigner(
   }
 }
 
+// Default x402 path: route through Paybox (gateway mode — Paybox probes the url,
+// pays the 402 from a wallet credential, and returns the resource's reply). Returns
+// a ToolResult to short-circuit, or null to fall back to the OpenWallet rail when
+// Paybox can't serve it (no wallet credential, no signing key, denied, or error).
+async function tryPayboxX402(
+  ctx: UserContext,
+  parsed: { url: string; method: string; body?: string }
+): Promise<ToolResult | null> {
+  try {
+    const sdk = await getPayboxSdk(ctx.tokens.paybox, ctx.userId)
+    const creds = await sdk.listCredentials()
+    const wallet = creds.find((c) => c.credential.credential_type === 'wallet')
+    if (!wallet) return null // no wallet credential → fall back
+
+    let body: unknown
+    if (parsed.body) {
+      try {
+        body = JSON.parse(parsed.body)
+      } catch {
+        body = parsed.body
+      }
+    }
+
+    const result = await sdk.useService({
+      credentialId: wallet.credential.id,
+      url: parsed.url,
+      method: parsed.method,
+      body,
+    })
+    const resp = result.response
+
+    if (resp.status === 'success') {
+      const value = (resp.output?.value ?? {}) as Record<string, unknown>
+      return {
+        success: true,
+        data: { via: 'paybox', paid: true, body: value.response ?? value },
+      }
+    }
+    // Needs the user's passkey — surface it (don't bypass Paybox via the fallback).
+    if (resp.status === 'pending_approval') return agentResultToTool(resp)
+    // pending_signature (no signing key) / denied / error → fall back to the wallet rail.
+    return null
+  } catch (err) {
+    logger.error('Paybox x402 path failed, falling back', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return null
+  }
+}
+
 export const x402Fetch: Tool = {
   name: 'x402_fetch',
   description: 'Call a paid API using the x402 protocol. Automatically pays with the user\'s wallet. Use after finding a service with x402_search, or when you have a URL to an x402-gated endpoint. Handles payment negotiation, signing, and verification automatically.',
@@ -130,6 +180,11 @@ export const x402Fetch: Tool = {
     if (!isPayboxConnected(ctx)) return payboxRequired('paying for an x402 API call')
     try {
       const parsed = X402FetchInput.parse(input)
+
+      // Default rail: pay through Paybox (passkey-gated). Falls back to the
+      // wallet-backed signer below when Paybox can't serve the call.
+      const viaPaybox = await tryPayboxX402(ctx, parsed)
+      if (viaPaybox) return viaPaybox
 
       const paidFetch = await getPaymentFetch(ctx)
       if (!paidFetch) {
