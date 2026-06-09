@@ -7,6 +7,8 @@
 
 ## Goal
 
+Docs: **https://docs.paybox.sh/** (docs password: `paybox3645`).
+
 Integrate **Paybox** (https://paybox.sh) into Dock as the **backing vault for
 user credentials** — Paybox becomes the store of record for secret material
 (OAuth access/refresh tokens, API keys), and Dock holds only a reference plus
@@ -21,9 +23,19 @@ denies any non-allowlisted host (`x-deny-reason: host_not_allowed`).
 gets submitted. Confirmed `example.com` is also blocked while `api.github.com`
 is allowed — it's the network policy, not Paybox.
 
-**Action required:** allowlist `paybox.sh`, `www.paybox.sh`, and the API host
-(likely `api.paybox.sh`) in the environment's network policy, then start a
-fresh session on this branch. Once reachable, fetch the docs (password
+**Action required:** in the environment's Network access settings, set
+**Custom** and allow (one per line; keep "include default package managers"
+checked):
+
+```
+paybox.sh
+*.paybox.sh
+```
+
+`*.paybox.sh` covers the docs host (`docs.paybox.sh`) and any API/CDN
+subdomain; the apex line covers bare `paybox.sh`. The change only applies to
+sessions started *after* it's saved, so start a **fresh session** on this
+branch. Once reachable, fetch **https://docs.paybox.sh/** (password
 `paybox3645`) before writing any code — do NOT build against a guessed API.
 
 ## How Dock manages credentials today (map of the seam)
@@ -81,7 +93,8 @@ Cross-cutting:
 
 ## Next steps (post-restart)
 
-1. Verify `paybox.sh` is reachable; fetch + read docs (pw `paybox3645`).
+1. Verify reachable (`curl -I https://docs.paybox.sh/`); fetch + read docs at
+   https://docs.paybox.sh/ (pw `paybox3645`).
 2. Answer the open questions; choose A or B.
 3. Draft the `CredentialStore` interface + `PayboxStore`.
 4. Wire env vars (Paybox base URL / token), migration for `paybox_ref` if A.
