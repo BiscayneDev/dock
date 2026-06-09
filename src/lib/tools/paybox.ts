@@ -270,8 +270,118 @@ export const payboxGetPortfolio: Tool = {
   },
 }
 
-// --- paybox_get_request ---
+// --- paybox_discover_services ---
 
+const DiscoverInput = z.object({
+  query: z.string().optional().describe('Optional ranked search term; omit for the full catalog'),
+})
+
+export const payboxDiscoverServices: Tool = {
+  name: 'paybox_discover_services',
+  description:
+    'Browse paid x402 services from the Paybox/MoonPay Bazaar catalog. Returns each ' +
+    "service's resource URL, description, and accepts (payment requirements). Pair with " +
+    'paybox_use_service (Paybox pays + fetches) or paybox_pay_x402 (get an X-PAYMENT header).',
+  inputSchema: {
+    type: 'object',
+    properties: { query: { type: 'string', description: 'Optional search term' } },
+  },
+  async execute(input: unknown, ctx: UserContext): Promise<ToolResult> {
+    if (!isPayboxConnected(ctx)) return payboxRequired('browsing paid services')
+    try {
+      const p = DiscoverInput.parse(input)
+      const services = await (await sdkFor(ctx)).discoverServices(p.query)
+      return { success: true, data: services }
+    } catch (err) {
+      return toError(err)
+    }
+  },
+}
+
+// --- paybox_use_service ---
+
+const UseServiceInput = z.object({
+  credentialId: z.string().describe('A wallet-kind credential id to pay from'),
+  url: z.string().describe('The paid x402 resource URL to fetch'),
+  method: z.string().optional().describe('HTTP method (default GET)'),
+  body: z.unknown().optional().describe('Optional JSON request body (for POST/PUT)'),
+})
+
+export const payboxUseService: Tool = {
+  name: 'paybox_use_service',
+  description:
+    'Fetch a paid x402 resource and have Paybox pay for it (gateway mode): Paybox probes ' +
+    'the url, pays the 402 from a wallet credential, re-fetches, and returns the resource ' +
+    "reply. On success, output.response holds the resource's reply. May require approval.",
+  inputSchema: {
+    type: 'object',
+    properties: {
+      credentialId: { type: 'string', description: 'Wallet credential id to pay from' },
+      url: { type: 'string', description: 'Paid x402 resource URL' },
+      method: { type: 'string', description: 'HTTP method (default GET)' },
+      body: { type: 'object', description: 'Optional JSON request body' },
+    },
+    required: ['credentialId', 'url'],
+  },
+  async execute(input: unknown, ctx: UserContext): Promise<ToolResult> {
+    if (!isPayboxConnected(ctx)) return payboxRequired('using a paid service')
+    try {
+      const p = UseServiceInput.parse(input)
+      const result = await (await sdkFor(ctx)).useService({
+        credentialId: p.credentialId,
+        url: p.url,
+        method: p.method,
+        body: p.body,
+      })
+      return agentResultToTool(result.response)
+    } catch (err) {
+      return toError(err)
+    }
+  },
+}
+
+// --- paybox_pay_x402 ---
+
+const PayX402Input = z.object({
+  credentialId: z.string().describe('A wallet-kind credential id to pay from'),
+  resourceUrl: z.string().describe('The paywalled resource URL'),
+  accepts: z
+    .array(z.unknown())
+    .describe("The 402's `accepts` PaymentRequirements array, verbatim (from the resource's 402 or paybox_discover_services)"),
+})
+
+export const payboxPayX402: Tool = {
+  name: 'paybox_pay_x402',
+  description:
+    'Pay a paid x402 endpoint from a wallet credential (header mode). On success, ' +
+    'output.x_payment is the X-PAYMENT header to replay on the original request. Use ' +
+    'paybox_use_service instead if you want Paybox to make the paid call for you.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      credentialId: { type: 'string', description: 'Wallet credential id to pay from' },
+      resourceUrl: { type: 'string', description: 'Paywalled resource URL' },
+      accepts: { type: 'array', description: "The 402's accepts PaymentRequirements array" },
+    },
+    required: ['credentialId', 'resourceUrl', 'accepts'],
+  },
+  async execute(input: unknown, ctx: UserContext): Promise<ToolResult> {
+    if (!isPayboxConnected(ctx)) return payboxRequired('paying for an x402 resource')
+    try {
+      const p = PayX402Input.parse(input)
+      const result = await (await sdkFor(ctx)).payX402({
+        credentialId: p.credentialId,
+        resourceUrl: p.resourceUrl,
+        accepts: p.accepts,
+      })
+      return agentResultToTool(result.response)
+    } catch (err) {
+      return toError(err)
+    }
+  },
+}
+
+// --- paybox_get_request ---
 const GetRequestInput = z.object({
   requestId: z.string().describe('The request id returned by a prior Paybox request tool'),
 })

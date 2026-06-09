@@ -239,6 +239,37 @@ Follow-up worth doing: route Dock's x402 spend through Paybox via the SDK's
 `useService` / `payX402` / `discoverServices` (the gate already requires Paybox
 for `x402_fetch`), retiring the OpenWallet-backed x402 signer.
 
+## Skill surface — coverage of MoonPay's agent products
+
+Two distinct MoonPay agent products; Dock now covers both:
+
+- **Paybox CLI/SDK** (`@paybox-sh/sdk`) — integrated first-party. Dock now
+  exposes the **full v0.5.0 tool surface**: `list_credentials`,
+  `request_payment`, `request_secret`, `request_wallet_sign`, `request_swap`,
+  `get_portfolio`, `get_request`, plus the x402/Bazaar trio
+  `discover_services`, `use_service`, `pay_x402`. (`use_service` is also wired
+  into `x402_fetch` as the default rail.)
+- **MoonAgents** (`moonpay.com/agents`, `@moonpay/cli`) — onramp / offramp /
+  swap / card / Open Wallet Standard. These are delivered by running
+  `mp mcp` (a local MCP server) and connecting it, which Dock already supports
+  via its **MCP connector registry** (`/dashboard/integrations`, featured
+  "MoonPay Agents" tile). Tools are auto-discovered, so they stay current
+  without hardcoding — nothing to add in-tree.
+
+## Security hardening (Supabase advisories)
+
+Applied alongside this work:
+- `006` — enable RLS on `engagement_events` (was fully exposed to the anon
+  key; service-role-only table, so no policies needed). CRITICAL → resolved.
+- `007` — drop the permissive public `INSERT (WITH CHECK true)` / `UPDATE
+  (USING true)` policies on `recipe_payments` (anyone could forge a paid
+  record); writes are service-role only, owner-scoped SELECT kept. WARN →
+  resolved.
+
+Remaining (pre-existing, not addressed — your call): `health_documents` public
+bucket allows listing, Auth leaked-password protection disabled, Postgres
+security patches available.
+
 ## Status / next steps
 
 - [x] Egress allowlist resolved; docs fetched and read.
