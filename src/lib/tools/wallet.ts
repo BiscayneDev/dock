@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { getOWSClient } from '@/lib/integrations/openwallet'
+import { isPayboxConnected, payboxRequired } from '@/lib/integrations/paybox'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 
 function getClient(ctx: UserContext): ReturnType<typeof getOWSClient> {
@@ -131,6 +132,9 @@ export const walletSend: Tool = {
     required: ['walletId', 'chainId', 'to', 'amount'],
   },
   async execute(input: unknown, ctx: UserContext): Promise<ToolResult> {
+    // Money movement is gated on Paybox. If connected, the existing OpenWallet
+    // rail executes the send as a fallback (Paybox MPC signing lands in Phase 2).
+    if (!isPayboxConnected(ctx)) return payboxRequired('sending crypto')
     try {
       const parsed = SendInput.parse(input)
       const ows = getClient(ctx)

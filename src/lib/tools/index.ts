@@ -63,6 +63,15 @@ import {
   twitterBookmarks,
 } from './twitter'
 import { tokenPrice, trendingTokens, predictionMarkets } from './crypto'
+import {
+  payboxListCredentials,
+  payboxRequestPayment,
+  payboxRequestSecret,
+  payboxRequestWalletSign,
+  payboxRequestSwap,
+  payboxGetPortfolio,
+  payboxGetRequest,
+} from './paybox'
 import { switchLLMProvider } from './llm-control'
 
 // Recipe tools are imported lazily by the orchestrator since they're
@@ -136,6 +145,14 @@ export const integrationTools: Tool[] = [
   tokenPrice,
   trendingTokens,
   predictionMarkets,
+  // Paybox (passkey-gated payments, secrets, non-custodial wallet ops)
+  payboxListCredentials,
+  payboxRequestPayment,
+  payboxRequestSecret,
+  payboxRequestWalletSign,
+  payboxRequestSwap,
+  payboxGetPortfolio,
+  payboxGetRequest,
   // LLM runtime control (self-aware provider swap)
   switchLLMProvider,
 ]

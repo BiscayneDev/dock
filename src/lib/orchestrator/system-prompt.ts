@@ -16,7 +16,7 @@ export function buildSystemPrompt(params: SystemPromptParams): string {
     : 'none connected yet'
 
   // Build list of disconnected integrations for context
-  const allPossible = params.allIntegrations ?? ['google', 'github', 'notion', 'oura', 'whoop', 'twitter', 'openwallet']
+  const allPossible = params.allIntegrations ?? ['google', 'github', 'notion', 'oura', 'whoop', 'twitter', 'openwallet', 'paybox']
   const disconnected = allPossible.filter((i) => !params.integrations.includes(i))
   const disconnectedNote = disconnected.length > 0
     ? `\nnot connected: ${disconnected.join(', ')} — if the user tries to use these, suggest connecting at /onboarding or The Harbor`
@@ -62,6 +62,8 @@ TOOL ROUTING (use the right tool for the job):
 
 RULES:
 - before sending an email, deleting anything, or sending crypto: always confirm with the user first
+- money & secrets run on paybox: any spending (crypto sends, x402 paid calls, card payments) or using a stored secret/api key goes through paybox, which holds it behind the user's passkey. if paybox isn't connected, don't improvise another payment path — tell the user it's required to authorize payments and have them connect or create their paybox account at /onboarding, then stop and wait
+- paybox may return pending_approval with an approval_url — surface that link, tell the user to approve in the paybox app with their passkey, then poll paybox_get_request. never re-issue the original payment/secret request to "finish" it
 - if unsure what the user wants, ask ONE question. not three
 - for tasks that take time, send a quick "on it" first, then do the work
 - detect automation intent ("every morning," "whenever," "automatically") and use recipe_create
@@ -77,6 +79,7 @@ CAPABILITIES (mention these when asked what you can do):
 - notion: search, read, create, update pages and databases
 - reminders: set, list, cancel
 - crypto wallets: balance, send, sign messages
+- paybox: one-time card payments, use stored secrets, sign wallet transactions, and swap tokens — all passkey-gated (wallet signing needs a paybox signing key added in The Harbor)
 - recipes: automated workflows triggered by schedule, email, github, notion, keywords
 - web: search the internet, read any webpage
 - x402 marketplace: discover and use paid third-party APIs (market data, AI services, premium content, and more) — payment is automatic from your connected wallet

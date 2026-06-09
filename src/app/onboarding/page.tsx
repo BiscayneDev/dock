@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { HarborShell } from '@/components/HarborShell'
 
-interface ConnectedIntegrations { google: boolean; notion: boolean; github: boolean; openwallet: boolean; oura: boolean; whoop: boolean; twitter: boolean }
+interface ConnectedIntegrations { google: boolean; notion: boolean; github: boolean; openwallet: boolean; oura: boolean; whoop: boolean; twitter: boolean; paybox: boolean }
 
 const INTEGRATIONS = [
   { key: 'google', label: 'Google', desc: 'Gmail and Google Calendar', authPath: '/api/integrations/google/auth', icon: 'M4 7L10.2 11.65C11.27 12.45 12.73 12.45 13.8 11.65L20 7M3 5h18v14H3z' },
@@ -13,6 +13,7 @@ const INTEGRATIONS = [
   { key: 'oura', label: 'Oura Ring', desc: 'Sleep, readiness, and activity', authPath: '/api/integrations/oura/auth', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6a6 6 0 1 1 0 12 6 6 0 0 1 0-12z' },
   { key: 'whoop', label: 'WHOOP', desc: 'Recovery, strain, and heart rate', authPath: '/api/integrations/whoop/auth', icon: 'M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z' },
   { key: 'twitter', label: 'Twitter / X', desc: 'Timeline, search, and bookmarks', authPath: '/api/integrations/twitter/auth', icon: 'M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z' },
+  { key: 'paybox', label: 'Paybox', desc: 'Required to authorize payments & secrets', authPath: '/api/integrations/paybox/auth', icon: 'M3 6h18v12H3zM3 10h18M7 15h4' },
 ]
 
 export default function OnboardingPageWrapper() {
@@ -28,12 +29,17 @@ function OnboardingPage() {
   const searchParams = useSearchParams()
   const justConnected = searchParams.get('connected')
   const [authenticated, setAuthenticated] = useState(false)
-  const [integrations, setIntegrations] = useState<ConnectedIntegrations>({ google: false, notion: false, github: false, openwallet: false, oura: false, whoop: false, twitter: false })
+  const [integrations, setIntegrations] = useState<ConnectedIntegrations>({ google: false, notion: false, github: false, openwallet: false, oura: false, whoop: false, twitter: false, paybox: false })
   const [loading, setLoading] = useState(true)
   const [owsForm, setOwsForm] = useState({ endpoint: '', apiKey: '' })
   const [owsSaving, setOwsSaving] = useState(false)
   const [owsError, setOwsError] = useState<string | null>(null)
   const [showOws, setShowOws] = useState(false)
+  const [payboxCanSign, setPayboxCanSign] = useState(false)
+  const [showPbxKey, setShowPbxKey] = useState(false)
+  const [pbxKey, setPbxKey] = useState('')
+  const [pbxKeySaving, setPbxKeySaving] = useState(false)
+  const [pbxKeyError, setPbxKeyError] = useState<string | null>(null)
 
   const checkIntegrations = useCallback(async () => {
     try {
@@ -41,7 +47,12 @@ function OnboardingPage() {
       if (!authRes.ok) { setLoading(false); return }
       setAuthenticated(true)
       const statusRes = await fetch('/api/integrations/status', { credentials: 'include' })
-      if (statusRes.ok) setIntegrations(await statusRes.json())
+      if (statusRes.ok) {
+        // Keep payboxCanSign out of `integrations` so it doesn't skew the count.
+        const { payboxCanSign: canSign, ...connected } = await statusRes.json()
+        setIntegrations(connected)
+        setPayboxCanSign(Boolean(canSign))
+      }
     } catch { /* Not authenticated */ } finally { setLoading(false) }
   }, [])
 
@@ -55,6 +66,16 @@ function OnboardingPage() {
       if (res.ok) { setIntegrations({ ...integrations, openwallet: true }); setShowOws(false) }
       else setOwsError(data.error ?? 'Connection failed')
     } catch { setOwsError('Connection failed') } finally { setOwsSaving(false) }
+  }
+
+  const savePayboxKey = async () => {
+    setPbxKeySaving(true); setPbxKeyError(null)
+    try {
+      const res = await fetch('/api/integrations/paybox/signing-key', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ signingKey: pbxKey }), credentials: 'include' })
+      const data = await res.json()
+      if (res.ok) { setPayboxCanSign(true); setShowPbxKey(false); setPbxKey('') }
+      else setPbxKeyError(data.error ?? 'Could not save signing key')
+    } catch { setPbxKeyError('Could not save signing key') } finally { setPbxKeySaving(false) }
   }
 
   const anyConnected = Object.values(integrations).some(Boolean)
@@ -78,10 +99,10 @@ function OnboardingPage() {
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
             <div style={{ flex: 1, height: 4, borderRadius: 2, background: 'var(--ink)', opacity: 0.1 }}>
-              <div style={{ width: `${(connectedCount / 7) * 100}%`, height: '100%', borderRadius: 2, background: 'var(--mesh-mint)', transition: 'width 0.3s' }} />
+              <div style={{ width: `${(connectedCount / 8) * 100}%`, height: '100%', borderRadius: 2, background: 'var(--mesh-mint)', transition: 'width 0.3s' }} />
             </div>
             <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.75rem', opacity: 0.6, whiteSpace: 'nowrap' }}>
-              {connectedCount} of 7 connected
+              {connectedCount} of 8 connected
             </span>
           </div>
         )
@@ -173,6 +194,32 @@ function OnboardingPage() {
                 </div>
               )}
             </div>
+
+            {/* Paybox signing key — enables non-custodial wallet sign/swap. Only
+                relevant once Paybox is connected. */}
+            {integrations.paybox && (
+              <div className="dock-card" style={{ padding: '1rem 1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.9rem' }}>Paybox signing key</p>
+                    <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>Enables wallet signing &amp; swaps (optional)</p>
+                  </div>
+                  {payboxCanSign ? (
+                    <span className="meta-text" style={{ color: 'var(--mesh-mint)' }}>Added</span>
+                  ) : (
+                    <button onClick={() => setShowPbxKey(!showPbxKey)} className="dock-btn-primary" style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }}>Add key</button>
+                  )}
+                </div>
+                {showPbxKey && !payboxCanSign && (
+                  <div style={{ marginTop: '1rem', borderTop: '1.5px solid var(--ink)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <p style={{ fontSize: '0.75rem', opacity: 0.6 }}>Mint a <code>pbxk1.</code> key in the Paybox app (scoped to your granted wallets) and paste it here. It&apos;s stored encrypted and used to sign in-process — Paybox never sees it.</p>
+                    <input type="password" placeholder="pbxk1...." value={pbxKey} onChange={(e) => setPbxKey(e.target.value)} className="dock-input" />
+                    {pbxKeyError && <p style={{ fontSize: '0.8rem', color: 'var(--mesh-peach)' }}>{pbxKeyError}</p>}
+                    <button onClick={savePayboxKey} disabled={pbxKeySaving || !pbxKey.startsWith('pbxk1.')} className="dock-btn-primary">{pbxKeySaving ? 'Saving...' : 'Save key'}</button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {anyConnected && (
