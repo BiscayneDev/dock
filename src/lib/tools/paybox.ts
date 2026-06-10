@@ -6,7 +6,6 @@ import {
   payboxRequired,
   agentResultToTool,
 } from '@/lib/integrations/paybox'
-import { buildMoonpayOnrampUrl } from '@/lib/moonpay/onramp'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 
 // Paybox — passkey-gated payments, secrets, and non-custodial wallet ops, driven
@@ -413,11 +412,6 @@ export const payboxFundWallet: Tool = {
       }
 
       const chain = wallet.chains[0] ?? null
-      const buyWithCardUrl = buildMoonpayOnrampUrl({
-        address: wallet.address,
-        chain,
-        redirectUrl: process.env.NEXT_PUBLIC_APP_URL,
-      })
 
       return {
         success: true,
@@ -425,10 +419,10 @@ export const payboxFundWallet: Tool = {
           address: wallet.address,
           chains: wallet.chains,
           depositInstructions: `Send crypto to ${wallet.address}${chain ? ` on ${chain}` : ''} to fund the wallet.`,
-          buyWithCardUrl,
-          note: buyWithCardUrl
-            ? 'Share buyWithCardUrl for a card on-ramp, or the address for a crypto transfer.'
-            : 'Card on-ramp is not configured; share the address for a crypto transfer.',
+          buyWithCard:
+            'To buy crypto with a card, use the MoonPay Agents "buy" tool (it returns a signed ' +
+            'checkout link the user completes — no merchant key needed). If MoonPay Agents is not ' +
+            'connected, suggest connecting it under Settings → Integrations.',
         },
       }
     } catch (err) {

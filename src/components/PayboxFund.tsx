@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
-import { buildMoonpayOnrampUrl } from '@/lib/moonpay/onramp'
 
 interface Wallet {
   credentialId: string
@@ -49,11 +48,6 @@ export function PayboxFund() {
   }
 
   const chain = wallet.chains[0] ?? null
-  const onrampUrl = buildMoonpayOnrampUrl({
-    address: wallet.address,
-    chain,
-    redirectUrl: typeof window !== 'undefined' ? window.location.origin : undefined,
-  })
 
   const copy = async () => {
     try {
@@ -87,20 +81,13 @@ export function PayboxFund() {
             >
               {copied ? 'Copied' : 'Copy address'}
             </button>
-            {onrampUrl && (
-              <a
-                href={onrampUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="dock-btn-primary"
-                style={{ padding: '0.3rem 0.8rem', fontSize: '0.78rem' }}
-              >
-                Buy with card
-              </a>
-            )}
           </div>
         </div>
       </div>
+      <p style={{ fontSize: '0.72rem', opacity: 0.5 }}>
+        Want to buy with a card? Ask the assistant to “top up my wallet” — it uses MoonPay Agents to
+        generate a checkout link (no extra keys required).
+      </p>
     </div>
   )
 }
