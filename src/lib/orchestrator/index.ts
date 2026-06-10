@@ -199,6 +199,19 @@ async function handleMessageInner(chatId: number, telegramId: number, initialTex
   const { sendRapidFire } = await import('@/lib/telegram/message-splitter')
   await sendRapidFire(chatId, response)
 
+  // Post-turn: settle accrued inference cost if the user crossed the billing
+  // threshold. Keyless — prompts the user to passkey-approve in Paybox. Cheap
+  // below threshold; runs in the webhook's after() so the ~1min approval wait
+  // never delays this reply. Never let a billing hiccup break the chat.
+  try {
+    const { settleUser } = await import('@/lib/billing/settle')
+    await settleUser(user.id, chatId)
+  } catch (err) {
+    logger.error('post-turn settlement failed', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+
   // Background: extract user preferences every ~10 messages
   if ((messageCount ?? 0) > 0 && (messageCount ?? 0) % 10 === 0) {
     import('@/lib/orchestrator/preference-extractor')
