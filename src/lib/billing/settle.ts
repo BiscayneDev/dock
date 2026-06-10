@@ -128,6 +128,9 @@ export async function settleUser(userId: string): Promise<SettleOutcome> {
       amount: atomic_usdc,
       network,
       rpcUrl: process.env.SHIPYARD_SETTLE_RPC_URL,
+      // Override the canonical Circle devUSDC mint when settling a different USDC
+      // token (e.g. Orca/Nebula devUSDC on devnet). Unset => SDK default per network.
+      usdcMint: process.env.SHIPYARD_SETTLE_USDC_MINT,
     })
     await supabase.rpc('finalize_settlement', {
       p_settlement_id: settlement_id,
