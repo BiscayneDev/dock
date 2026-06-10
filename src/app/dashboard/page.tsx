@@ -129,6 +129,10 @@ export default function DashboardPage() {
             </svg>
             <span className="meta-text" style={{ marginTop: '0.25rem' }}>Treasury</span>
           </a>
+          <Link href="/dashboard/savings" className="dock-card" style={{ alignItems: 'center', padding: '1rem', gap: '0.25rem' }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--mesh-mint)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 17l6-6 4 4 8-8" /><path d="M17 7h4v4" /></svg>
+            <span className="meta-text" style={{ marginTop: '0.25rem' }}>Savings</span>
+          </Link>
         </div>
 
         {/* Timezone */}

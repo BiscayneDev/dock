@@ -68,7 +68,7 @@ export async function runAgentLoop(
   onConfirmationRequired?: (toolName: string, toolInput: Record<string, unknown>) => Promise<boolean>,
   providerOverride?: LLMProviderName
 ): Promise<string> {
-  const llm = getLLMProvider({ provider: providerOverride })
+  const llm = getLLMProvider({ provider: providerOverride, userId: ctx.userId })
   const history: ChatMessage[] = [...messages]
   const toolDefinitions = tools.map((t) => ({
     name: t.name,
