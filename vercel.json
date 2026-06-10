@@ -5,7 +5,6 @@
     { "path": "/api/cron/poll-triggers", "schedule": "*/5 * * * *" },
     { "path": "/api/cron/email-monitor", "schedule": "* * * * *" },
     { "path": "/api/cron/smart-alerts", "schedule": "*/15 * * * *" },
-    { "path": "/api/cron/engagement", "schedule": "0 * * * *" },
-    { "path": "/api/cron/settle-inference", "schedule": "*/5 * * * *" }
+    { "path": "/api/cron/engagement", "schedule": "0 * * * *" }
   ]
 }
