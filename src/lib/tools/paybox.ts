@@ -424,7 +424,7 @@ export const payboxFundWallet: Tool = {
             'moonpay_create_deposit — generate multi-chain deposit addresses (send from Bitcoin/Ethereum/Solana/Tron and it auto-settles to this wallet).',
             "moonpay_buy — buy crypto with a card (fiat); returns a MoonPay checkout link. Needs the token, USD amount, and the user's email.",
           ],
-          note: 'The two MoonPay options use the MoonPay Agents service (paid via the user\'s wallet over x402) — only call them when the user explicitly wants them.',
+          note: "The two MoonPay options use the MoonPay Agents service, paid from the user's Paybox wallet over x402 (may need passkey approval) — only call them when the user explicitly asks to deposit or buy.",
         },
       }
     } catch (err) {
@@ -435,8 +435,8 @@ export const payboxFundWallet: Tool = {
 
 // --- moonpay_create_deposit (MoonPay Agents, paid via x402) ---
 
-async function resolveWallet(ctx: UserContext, credentialId?: string) {
-  const wallets = await getPayboxWallets(await sdkFor(ctx))
+async function resolveWallet(sdk: Sdk, credentialId?: string) {
+  const wallets = await getPayboxWallets(sdk)
   const wallet = (credentialId && wallets.find((w) => w.credentialId === credentialId)) || wallets[0]
   return wallet ?? null
 }
@@ -450,8 +450,8 @@ export const moonpayCreateDeposit: Tool = {
   name: 'moonpay_create_deposit',
   description:
     'Generate multi-chain deposit addresses (Bitcoin, Ethereum, Solana, Tron, …) that auto-convert ' +
-    "and settle into the user's Paybox wallet, via MoonPay Agents. Paid from the user's wallet over " +
-    'x402 — only call when the user explicitly wants to deposit/top up from another chain.',
+    "and settle into the user's Paybox wallet, via MoonPay Agents. Paid from the Paybox wallet over " +
+    'x402 (may require passkey approval) — only call when the user explicitly wants to deposit/top up.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -463,7 +463,8 @@ export const moonpayCreateDeposit: Tool = {
     if (!isPayboxConnected(ctx)) return payboxRequired('creating a deposit')
     try {
       const p = CreateDepositInput.parse(input ?? {})
-      const wallet = await resolveWallet(ctx, p.credentialId)
+      const sdk = await sdkFor(ctx)
+      const wallet = await resolveWallet(sdk, p.credentialId)
       if (!wallet?.address) return { success: false, error: 'No Paybox wallet address found.' }
 
       const mpChain = toMoonpayChain(wallet.chains[0])
@@ -471,8 +472,12 @@ export const moonpayCreateDeposit: Tool = {
         return { success: false, error: `Wallet chain ${wallet.chains[0] ?? '(unknown)'} is not supported by MoonPay deposits.` }
       }
 
-      const result = await createMultiChainDeposit(ctx, { wallet: wallet.address, chain: mpChain, token: p.token })
-      return { success: true, data: result }
+      const result = await createMultiChainDeposit(sdk, wallet.credentialId, {
+        wallet: wallet.address,
+        chain: mpChain,
+        token: p.token,
+      })
+      return agentResultToTool(result.response)
     } catch (err) {
       return toError(err)
     }
@@ -508,19 +513,17 @@ export const moonpayBuy: Tool = {
     if (!isPayboxConnected(ctx)) return payboxRequired('buying crypto')
     try {
       const p = BuyInput.parse(input)
-      const wallet = await resolveWallet(ctx, p.credentialId)
+      const sdk = await sdkFor(ctx)
+      const wallet = await resolveWallet(sdk, p.credentialId)
       if (!wallet?.address) return { success: false, error: 'No Paybox wallet address found.' }
 
-      const result = await createBuyCheckout(ctx, {
+      const result = await createBuyCheckout(sdk, wallet.credentialId, {
         token: p.token,
         amount: p.amount,
         wallet: wallet.address,
         email: p.email,
       })
-      return {
-        success: true,
-        data: { checkoutUrl: result.url, note: 'Open this link in a browser to complete the card purchase.' },
-      }
+      return agentResultToTool(result.response)
     } catch (err) {
       return toError(err)
     }

@@ -32,7 +32,7 @@ const X402_KNOWN_SERVICES = [
   { name: 'DNS & Whois Lookup', description: 'Domain registration data and DNS record lookups', url: 'https://dns.x402.org/api/lookup', price: 0.005, category: 'tools' },
 ]
 
-export async function getPaymentFetch(ctx: UserContext): Promise<typeof fetch | null> {
+async function getPaymentFetch(ctx: UserContext): Promise<typeof fetch | null> {
   try {
     // Dynamic imports to avoid loading x402 when not needed
     const { wrapFetchWithPaymentFromConfig } = await import('@x402/fetch')
