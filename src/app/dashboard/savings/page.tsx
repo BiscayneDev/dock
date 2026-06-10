@@ -7,6 +7,8 @@ import { HarborShell } from '@/components/HarborShell'
 interface Totals {
   requests: number
   actualUsd: number
+  chargedUsd: number
+  paidUsd: number
   baselineUsd: number
   savedUsd: number
   savedPct: number
@@ -19,6 +21,8 @@ interface ModelRow {
   model: string | null
   requests: number
   actualUsd: number
+  chargedUsd: number
+  paidUsd: number
   baselineUsd: number
   savedUsd: number
   savedPct: number
@@ -113,7 +117,7 @@ export default function SavingsPage() {
             <span className="savings-amount" style={{ fontSize: '2.75rem' }}>{usd(u.savedUsd)}</span>
             <p className="meta-text" style={{ margin: 0 }}>
               <span className="pill">{u.savedPct.toFixed(0)}% off</span>{' '}
-              vs calling the model direct ({fineUsd(u.baselineUsd)} → {fineUsd(u.actualUsd)})
+              vs calling the model direct ({fineUsd(u.baselineUsd)} → you paid {fineUsd(u.paidUsd)})
             </p>
           </div>
 
@@ -170,7 +174,8 @@ export default function SavingsPage() {
 
           <p className="meta-text" style={{ marginTop: '0.5rem', textAlign: 'center' }}>
             Baseline = the same request on the model it asked for, called direct &amp; uncached.
-            Savings come from cost-routing + prompt caching. Measured, not estimated.
+            You pay the routed + cached cost (plus a small margin), settled from your own wallet —
+            always below baseline. Measured, not estimated.
           </p>
         </>
       )}

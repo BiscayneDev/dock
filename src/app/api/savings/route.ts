@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic'
 interface Totals {
   requests: number
   actualUsd: number
+  chargedUsd: number
   baselineUsd: number
   savedUsd: number
   inputTokens: number
@@ -18,6 +19,7 @@ interface ModelRow {
   model: string | null
   requests: number
   actualUsd: number
+  chargedUsd: number
   baselineUsd: number
   savedUsd: number
 }
@@ -28,10 +30,20 @@ interface SummaryRow {
   byModel: ModelRow[]
 }
 
-/** `savedUsd / baselineUsd` as a percent, guarded against divide-by-zero. */
-function pct(saved: number, baseline: number): number {
+/** `n / baseline` as a percent, guarded against divide-by-zero. */
+function pct(n: number, baseline: number): number {
   if (baseline <= 0) return 0
-  return (saved / baseline) * 100
+  return (n / baseline) * 100
+}
+
+/**
+ * The user pays `charged` (routed cost + margin, capped at baseline). Their real
+ * out-of-pocket saving vs calling the model direct is `baseline − charged`.
+ */
+function shape<T extends Totals | ModelRow>(t: T) {
+  const paidUsd = t.chargedUsd
+  const savedUsd = Math.max(0, t.baselineUsd - paidUsd)
+  return { ...t, paidUsd, savedUsd, savedPct: pct(savedUsd, t.baselineUsd) }
 }
 
 /**
@@ -56,17 +68,8 @@ export async function GET(): Promise<NextResponse> {
 
   const summary = data as SummaryRow
   return NextResponse.json({
-    user: {
-      ...summary.user,
-      savedPct: pct(summary.user.savedUsd, summary.user.baselineUsd),
-    },
-    global: {
-      ...summary.global,
-      savedPct: pct(summary.global.savedUsd, summary.global.baselineUsd),
-    },
-    byModel: summary.byModel.map((m) => ({
-      ...m,
-      savedPct: pct(m.savedUsd, m.baselineUsd),
-    })),
+    user: shape(summary.user),
+    global: shape(summary.global),
+    byModel: summary.byModel.map(shape),
   })
 }

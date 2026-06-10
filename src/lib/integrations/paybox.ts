@@ -296,6 +296,33 @@ export async function getPayboxAccessToken(
   }
 }
 
+/**
+ * Load + decrypt a user's Paybox OAuth tokens directly from the DB, for
+ * server-side jobs (e.g. the settlement cron) that have no UserContext. Returns
+ * null if the user hasn't connected Paybox or the token can't be decrypted.
+ */
+export async function getPayboxTokensForUser(
+  userId: string,
+): Promise<DecryptedTokens | null> {
+  const supabase = createServerClient()
+  const { data, error } = await supabase
+    .from('oauth_tokens')
+    .select('access_token, refresh_token, expires_at')
+    .eq('user_id', userId)
+    .eq('provider', 'paybox')
+    .single()
+  if (error || !data) return null
+  try {
+    return {
+      accessToken: decryptTokenFromDb(data.access_token as string),
+      refreshToken: data.refresh_token ? decryptTokenFromDb(data.refresh_token as string) : null,
+      expiresAt: (data.expires_at as string) ?? null,
+    }
+  } catch {
+    return null
+  }
+}
+
 // --- Signing key (pbxk1.) storage ---
 // Enables in-process, non-custodial wallet signing (sign/swap). Stored
 // encrypted in the paybox token row's `signing_key` column (migration 005).

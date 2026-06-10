@@ -18,6 +18,21 @@ import { logger } from '@/lib/logger'
  */
 const DEFAULT_MODEL = process.env.LLM_MODEL ?? 'claude-sonnet-4-5'
 
+/**
+ * Margin added on top of the routed (actual) cost when billing the user's Paybox
+ * wallet. `charged = actual * (1 + margin)`, clamped to the baseline so the user
+ * never pays more than calling the model direct. Default 15%. See settle.ts.
+ */
+const MARGIN = Number(process.env.SHIPYARD_MARGIN_PCT ?? '15') / 100
+
+/** What we bill the user for a request: actual + margin, never above baseline. */
+function computeChargedUsd(actual: number | null, baseline: number | null): number | null {
+  if (actual == null) return null // unpriced request → not billable
+  const withMargin = actual * (1 + MARGIN)
+  if (baseline == null) return withMargin // no baseline to clamp against
+  return Math.min(withMargin, baseline) // user always still saves vs direct
+}
+
 // Advisory pricing (USD per 1M tokens) for the models we route across. These
 // rank candidates and compute the baseline-vs-actual savings; not billing-exact.
 const ANTHROPIC_MODELS: ModelMetadata[] = [
@@ -84,6 +99,7 @@ function supabaseRecorder() {
             actual_cost_usd: r.actualCostUsd ?? null,
             baseline_cost_usd: r.baselineCostUsd ?? null,
             saved_usd: r.savedUsd ?? null,
+            charged_usd: computeChargedUsd(r.actualCostUsd ?? null, r.baselineCostUsd ?? null),
             latency_ms: Math.round(r.latencyMs),
           })
           if (error) throw error
