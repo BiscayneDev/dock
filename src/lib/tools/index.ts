@@ -74,6 +74,8 @@ import {
   payboxUseService,
   payboxPayX402,
   payboxFundWallet,
+  moonpayCreateDeposit,
+  moonpayBuy,
   payboxGetRequest,
 } from './paybox'
 import { switchLLMProvider } from './llm-control'
@@ -160,6 +162,8 @@ export const integrationTools: Tool[] = [
   payboxUseService,
   payboxPayX402,
   payboxFundWallet,
+  moonpayCreateDeposit,
+  moonpayBuy,
   payboxGetRequest,
   // LLM runtime control (self-aware provider swap)
   switchLLMProvider,

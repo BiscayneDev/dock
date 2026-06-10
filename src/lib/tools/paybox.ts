@@ -6,6 +6,7 @@ import {
   payboxRequired,
   agentResultToTool,
 } from '@/lib/integrations/paybox'
+import { createMultiChainDeposit, createBuyCheckout, toMoonpayChain } from '@/lib/moonpay/agents'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 
 // Paybox — passkey-gated payments, secrets, and non-custodial wallet ops, driven
@@ -418,12 +419,107 @@ export const payboxFundWallet: Tool = {
         data: {
           address: wallet.address,
           chains: wallet.chains,
-          depositInstructions: `Send crypto to ${wallet.address}${chain ? ` on ${chain}` : ''} to fund the wallet.`,
-          buyWithCard:
-            'To buy crypto with a card, use the MoonPay Agents "buy" tool (it returns a signed ' +
-            'checkout link the user completes — no merchant key needed). If MoonPay Agents is not ' +
-            'connected, suggest connecting it under Settings → Integrations.',
+          depositInstructions: `Send crypto to ${wallet.address}${chain ? ` on ${chain}` : ''} to fund the wallet (free, direct on-chain transfer).`,
+          moreOptions: [
+            'moonpay_create_deposit — generate multi-chain deposit addresses (send from Bitcoin/Ethereum/Solana/Tron and it auto-settles to this wallet).',
+            "moonpay_buy — buy crypto with a card (fiat); returns a MoonPay checkout link. Needs the token, USD amount, and the user's email.",
+          ],
+          note: 'The two MoonPay options use the MoonPay Agents service (paid via the user\'s wallet over x402) — only call them when the user explicitly wants them.',
         },
+      }
+    } catch (err) {
+      return toError(err)
+    }
+  },
+}
+
+// --- moonpay_create_deposit (MoonPay Agents, paid via x402) ---
+
+async function resolveWallet(ctx: UserContext, credentialId?: string) {
+  const wallets = await getPayboxWallets(await sdkFor(ctx))
+  const wallet = (credentialId && wallets.find((w) => w.credentialId === credentialId)) || wallets[0]
+  return wallet ?? null
+}
+
+const CreateDepositInput = z.object({
+  token: z.string().optional().describe('Token to receive, e.g. USDC (default), USDT, ETH, SOL'),
+  credentialId: z.string().optional(),
+})
+
+export const moonpayCreateDeposit: Tool = {
+  name: 'moonpay_create_deposit',
+  description:
+    'Generate multi-chain deposit addresses (Bitcoin, Ethereum, Solana, Tron, …) that auto-convert ' +
+    "and settle into the user's Paybox wallet, via MoonPay Agents. Paid from the user's wallet over " +
+    'x402 — only call when the user explicitly wants to deposit/top up from another chain.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      token: { type: 'string', description: 'Token to receive (default USDC)' },
+      credentialId: { type: 'string', description: 'Wallet credential id (optional)' },
+    },
+  },
+  async execute(input: unknown, ctx: UserContext): Promise<ToolResult> {
+    if (!isPayboxConnected(ctx)) return payboxRequired('creating a deposit')
+    try {
+      const p = CreateDepositInput.parse(input ?? {})
+      const wallet = await resolveWallet(ctx, p.credentialId)
+      if (!wallet?.address) return { success: false, error: 'No Paybox wallet address found.' }
+
+      const mpChain = toMoonpayChain(wallet.chains[0])
+      if (!mpChain) {
+        return { success: false, error: `Wallet chain ${wallet.chains[0] ?? '(unknown)'} is not supported by MoonPay deposits.` }
+      }
+
+      const result = await createMultiChainDeposit(ctx, { wallet: wallet.address, chain: mpChain, token: p.token })
+      return { success: true, data: result }
+    } catch (err) {
+      return toError(err)
+    }
+  },
+}
+
+// --- moonpay_buy (MoonPay Agents fiat checkout, paid via x402) ---
+
+const BuyInput = z.object({
+  token: z.string().describe('MoonPay currency code, e.g. usdc_base, usdc_sol, eth, usdc'),
+  amount: z.number().positive().describe('Amount of fiat (USD) to spend'),
+  email: z.string().email().describe("Buyer's email — required by MoonPay"),
+  credentialId: z.string().optional(),
+})
+
+export const moonpayBuy: Tool = {
+  name: 'moonpay_buy',
+  description:
+    "Buy crypto with a card (fiat) delivered to the user's Paybox wallet, via MoonPay Agents. " +
+    'Returns a MoonPay checkout URL the user opens in a browser to complete the purchase. Requires ' +
+    "the token (e.g. usdc_base), a USD amount, and the user's email. Paid from the user's wallet over x402.",
+  inputSchema: {
+    type: 'object',
+    properties: {
+      token: { type: 'string', description: 'MoonPay currency code (e.g. usdc_base)' },
+      amount: { type: 'number', description: 'USD amount to spend' },
+      email: { type: 'string', description: "Buyer's email" },
+      credentialId: { type: 'string', description: 'Wallet credential id (optional)' },
+    },
+    required: ['token', 'amount', 'email'],
+  },
+  async execute(input: unknown, ctx: UserContext): Promise<ToolResult> {
+    if (!isPayboxConnected(ctx)) return payboxRequired('buying crypto')
+    try {
+      const p = BuyInput.parse(input)
+      const wallet = await resolveWallet(ctx, p.credentialId)
+      if (!wallet?.address) return { success: false, error: 'No Paybox wallet address found.' }
+
+      const result = await createBuyCheckout(ctx, {
+        token: p.token,
+        amount: p.amount,
+        wallet: wallet.address,
+        email: p.email,
+      })
+      return {
+        success: true,
+        data: { checkoutUrl: result.url, note: 'Open this link in a browser to complete the card purchase.' },
       }
     } catch (err) {
       return toError(err)
