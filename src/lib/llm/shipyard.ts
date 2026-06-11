@@ -1,7 +1,6 @@
 import {
   Router,
-  AnthropicProvider,
-  OpenAIProvider,
+  createOpenRouterProvider,
   createUsePodProvider,
   costOptimized,
   type ProviderCandidate,
@@ -16,7 +15,7 @@ import { logger } from '@/lib/logger'
  * The model Dock would otherwise have called for a request that doesn't pin one.
  * This is the savings BASELINE — "cheaper than calling <DEFAULT_MODEL> direct."
  */
-const DEFAULT_MODEL = process.env.LLM_MODEL ?? 'claude-sonnet-4-5'
+const DEFAULT_MODEL = process.env.LLM_MODEL ?? 'anthropic/claude-sonnet-4.5'
 
 /**
  * Margin added on top of the routed (actual) cost when billing the user's Paybox
@@ -33,38 +32,44 @@ function computeChargedUsd(actual: number | null, baseline: number | null): numb
   return Math.min(withMargin, baseline) // user always still saves vs direct
 }
 
-// Advisory pricing (USD per 1M tokens) for the models we route across. These
-// rank candidates and compute the baseline-vs-actual savings; not billing-exact.
-const ANTHROPIC_MODELS: ModelMetadata[] = [
-  { model: 'claude-haiku-4-5', inputCostPerMTok: 0.8, outputCostPerMTok: 4, contextWindow: 200_000, tier: 'economy', capabilities: ['tools', 'vision', 'json'] },
-  { model: 'claude-sonnet-4-5', inputCostPerMTok: 3, outputCostPerMTok: 15, contextWindow: 200_000, tier: 'standard', capabilities: ['tools', 'vision', 'json'] },
-  { model: 'claude-opus-4-5', inputCostPerMTok: 5, outputCostPerMTok: 25, contextWindow: 200_000, tier: 'frontier', capabilities: ['tools', 'vision', 'json'] },
-]
-
-const OPENAI_MODELS: ModelMetadata[] = [
-  { model: 'gpt-4o-mini', inputCostPerMTok: 0.15, outputCostPerMTok: 0.6, contextWindow: 128_000, tier: 'economy', capabilities: ['tools', 'vision', 'json'] },
-  { model: 'gpt-4o', inputCostPerMTok: 2.5, outputCostPerMTok: 10, contextWindow: 128_000, tier: 'standard', capabilities: ['tools', 'vision', 'json'] },
+// The routable catalog, served through OpenRouter (one key fronting many
+// vendors). `tier` drives the per-request quality floor (autoTier picks the
+// cheapest model *at or above* the inferred tier); rates are OpenRouter's live
+// $/1M and feed cost ranking + the savings math. Open-weight models are the
+// cheap-but-capable `standard` tier (a general request lands on DeepSeek V3.2 at
+// ~$0.23/$0.34 instead of Sonnet at $3/$15 — comparable quality, ~13× cheaper).
+// Cheap text-only models omit `vision`, so image requests fall to a vision model.
+const OPENROUTER_MODELS: ModelMetadata[] = [
+  // economy — short/simple requests
+  { model: 'meta-llama/llama-3.3-70b-instruct', inputCostPerMTok: 0.1, outputCostPerMTok: 0.32, contextWindow: 131_072, tier: 'economy', capabilities: ['tools', 'json'] },
+  { model: 'openai/gpt-4o-mini', inputCostPerMTok: 0.15, outputCostPerMTok: 0.6, contextWindow: 128_000, tier: 'economy', capabilities: ['tools', 'vision', 'json'] },
+  { model: 'anthropic/claude-haiku-4.5', inputCostPerMTok: 1, outputCostPerMTok: 5, contextWindow: 200_000, tier: 'economy', capabilities: ['tools', 'vision', 'json'] },
+  // standard — general / tool-using requests; cheapest here = open-weight
+  { model: 'deepseek/deepseek-v3.2', inputCostPerMTok: 0.23, outputCostPerMTok: 0.34, contextWindow: 131_072, tier: 'standard', capabilities: ['tools', 'json'] },
+  { model: 'qwen/qwen3-235b-a22b', inputCostPerMTok: 0.46, outputCostPerMTok: 1.82, contextWindow: 131_072, tier: 'standard', capabilities: ['tools', 'json'] },
+  { model: 'google/gemini-2.5-flash', inputCostPerMTok: 0.3, outputCostPerMTok: 2.5, contextWindow: 1_048_576, tier: 'standard', capabilities: ['tools', 'vision', 'json'] },
+  { model: 'openai/gpt-4o', inputCostPerMTok: 2.5, outputCostPerMTok: 10, contextWindow: 128_000, tier: 'standard', capabilities: ['tools', 'vision', 'json'] },
+  { model: 'anthropic/claude-sonnet-4.5', inputCostPerMTok: 3, outputCostPerMTok: 15, contextWindow: 1_000_000, tier: 'standard', capabilities: ['tools', 'vision', 'json'] },
+  // frontier — long-context / complex / large-output requests
+  { model: 'anthropic/claude-opus-4.5', inputCostPerMTok: 5, outputCostPerMTok: 25, contextWindow: 200_000, tier: 'frontier', capabilities: ['tools', 'vision', 'json'] },
 ]
 
 function buildCandidates(): ProviderCandidate[] {
-  const candidates: ProviderCandidate[] = [
-    {
-      id: 'anthropic',
-      // Prompt caching is on by default — the stable system+tools prefix caches.
-      provider: new AnthropicProvider({ apiKey: process.env.ANTHROPIC_API_KEY }),
-      models: ANTHROPIC_MODELS,
-    },
-  ]
+  const candidates: ProviderCandidate[] = []
 
-  if (process.env.OPENAI_API_KEY) {
+  // Primary rail: OpenRouter — one operator-funded key fronting Claude / GPT /
+  // Gemini + open-weight. The Router picks the cheapest model at the request's
+  // quality floor across this whole catalog.
+  if (process.env.OPENROUTER_API_KEY) {
     candidates.push({
-      id: 'openai',
-      provider: new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY }),
-      models: OPENAI_MODELS,
+      id: 'openrouter',
+      provider: createOpenRouterProvider({ apiKey: process.env.OPENROUTER_API_KEY }),
+      models: OPENROUTER_MODELS,
     })
   }
 
-  // UsePod prepaid marketplace as a cheap commodity tier (OpenAI surface).
+  // Resilience floor: UsePod — wallet-funded (x402), NO API key, so it keeps
+  // serving even if the OpenRouter key is throttled or cut. Commodity tier.
   if (process.env.USEPOD_TOKEN) {
     candidates.push({
       id: 'usepod',
@@ -75,6 +80,11 @@ function buildCandidates(): ProviderCandidate[] {
     })
   }
 
+  if (candidates.length === 0) {
+    throw new Error(
+      '[shipyard] no inference candidates configured — set OPENROUTER_API_KEY (and/or USEPOD_TOKEN)',
+    )
+  }
   return candidates
 }
 
@@ -132,8 +142,12 @@ export function createShipyardProvider(
     candidates: buildCandidates(),
     strategy: costOptimized(),
     usageRecorder: supabaseRecorder(),
-    // No fixed baselineModel → baseline falls back to each request's params.model,
-    // which we always set below to the intended model.
+    // Per-request quality floor: route to the cheapest model that's good enough
+    // for the request (short ⇒ economy, tools/general ⇒ standard ⇒ open-weight,
+    // long/complex ⇒ frontier), rather than the globally cheapest.
+    autoTier: true,
+    // Savings are measured against calling the premium model (Sonnet) direct.
+    baselineModel: DEFAULT_MODEL,
   })
 
   return {

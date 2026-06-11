@@ -29,7 +29,7 @@
     "openai": "^6.32.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "shipyard-inference": "file:vendor/shipyard-inference-0.13.2.tgz",
+    "shipyard-inference": "file:vendor/shipyard-inference-0.14.0.tgz",
     "zod": "^4.3.6"
   },
   "devDependencies": {
