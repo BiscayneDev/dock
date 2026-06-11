@@ -73,6 +73,7 @@ import {
   payboxGetRequest,
 } from './paybox'
 import { switchLLMProvider } from './llm-control'
+import { getInferenceSpend } from './inference-spend'
 
 // Recipe tools are imported lazily by the orchestrator since they're
 // not available to the execution agent. See lib/tools/recipes.ts.
@@ -155,6 +156,8 @@ export const integrationTools: Tool[] = [
   payboxGetRequest,
   // LLM runtime control (self-aware provider swap)
   switchLLMProvider,
+  // Self-aware AI spend + savings (billed to the user's Paybox wallet)
+  getInferenceSpend,
 ]
 
 // All tools except recipe management — used by the Execution Agent
