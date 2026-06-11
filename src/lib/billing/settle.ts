@@ -9,22 +9,25 @@ import { createServerClient } from '@/lib/supabase/server'
 import { sendMessage } from '@/lib/telegram/client'
 import { logger } from '@/lib/logger'
 
-// Keyless, passkey-approved meter-then-settle billing. Each request accrues
+// Autonomous meter-then-settle billing. Each request accrues
 // inference_usage.charged_usd (actual + margin, capped at baseline). When a user
-// crosses the threshold *during a chat* (so they're present to approve), we ask
-// Paybox to sign a USDC transfer from their wallet to the treasury — Paybox
-// returns pending_approval, the user taps approve in their Paybox app (passkey),
-// and we broadcast the signed tx. Dock never holds a signing key.
+// crosses the threshold *during a chat*, we transfer that USDC from their Paybox
+// wallet to the treasury on Solana. Paybox wallet signing is non-custodial and
+// requires the user's scoped `pbxk1.` signing key (minted in the Paybox app,
+// stored encrypted in Dock, scoped to the one granted wallet, revocable) — with
+// it + an autonomous grant, Paybox signs IN-PROCESS with no per-op passkey, so
+// settlement is hands-off. (True keyless wallet-sign isn't possible: without the
+// key the request dead-ends at pending_signature.)
 //
 // Safety (migration 008): claim -> settle -> finalize. claim_settlement stamps the
-// billed rows under a per-user advisory lock. On a pre-broadcast failure (no
-// approval in time, denied) we void (rows re-accrue, re-prompt next turn). On an
-// ambiguous post-broadcast failure we freeze the rows for review — never double-charge.
+// billed rows under a per-user advisory lock. On a pre-broadcast failure we void
+// (rows re-accrue, retry next turn). On an ambiguous post-broadcast failure we
+// freeze the rows for review — never double-charge.
 //
-// The approval wait is bounded to fit Solana's ~90s blockhash validity: the tx is
-// built with a recent blockhash, so the user must approve within the window or the
-// signed tx would be stale. We run inside the webhook's after() callback, so the
-// ~55s wait doesn't delay the Telegram response.
+// The signer poll is bounded to keep us well inside Solana's ~90s blockhash
+// validity (in-process signing returns immediately; the bound only guards a
+// pathological stall). We run inside the webhook's after(), so this never delays
+// the Telegram response.
 
 const APPROVAL_WINDOW_MS = 55_000
 
@@ -138,12 +141,11 @@ export async function settleUser(userId: string, chatId: number): Promise<Settle
     credentialId = wallet.credential.id
     address = wallet.credential.metadata.address as string
 
-    // Prompt the user to approve, then run the (bounded) sign + broadcast.
+    // Heads-up, then sign + broadcast. With an autonomous grant + the user's
+    // scoped signing key, Paybox signs in-process — no passkey tap needed.
     await sendMessage({
       chatId,
-      text:
-        `💸 you've used ${fmtUsd(owedUsd)} of inference. open your Paybox app and approve the ` +
-        `wallet request to settle it from your wallet — you've got about a minute.`,
+      text: `💸 settling ${fmtUsd(owedUsd)} of inference from your Paybox wallet…`,
     })
 
     const signer = await payboxSigner({
@@ -196,7 +198,7 @@ export async function settleUser(userId: string, chatId: number): Promise<Settle
       })
       await sendMessage({
         chatId,
-        text: `⌛ didn't get your approval in time — no worries, i'll ask again next time.`,
+        text: `⌛ couldn't settle that just now — no worries, i'll retry next time.`,
       }).catch(() => {})
       return { status: 'voided', settlementId: settlement_id, reason }
     }
