@@ -120,6 +120,12 @@ export default function AdminDashboard() {
         <button onClick={() => setTab('users')} className={tab === 'users' ? 'dock-btn-primary' : 'dock-btn-secondary'} style={{ flex: 1 }}>Users</button>
       </div>
 
+      {/* Shipyard Inference — operator P&L, collection, settlements */}
+      <a href="/admin/shipyard" className="dock-card" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: '0.9rem 1.1rem', marginBottom: '1rem', textDecoration: 'none', color: 'inherit', borderColor: 'color-mix(in srgb, var(--mesh-mint) 45%, transparent)' }}>
+        <span><span style={{ marginRight: '0.5rem' }}>💰</span><span style={{ fontWeight: 700 }}>Shipyard Inference</span><span className="meta-text" style={{ marginLeft: '0.5rem' }}>revenue · margin · settlements</span></span>
+        <span style={{ color: 'var(--mesh-mint)' }}>→</span>
+      </a>
+
       {tab === 'overview' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {/* KPI cards */}
