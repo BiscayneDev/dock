@@ -6,7 +6,9 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "spectrum": "tsx src/spectrum/index.ts",
+    "spectrum:dev": "tsx watch src/spectrum/index.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
@@ -22,6 +24,8 @@
     "@x402/evm": "^2.7.0",
     "@x402/fetch": "^2.7.0",
     "@x402/next": "^2.7.0",
+    "@spectrum-ts/imessage": "^12.8.0",
+    "spectrum-ts": "^12.8.0",
     "cron-parser": "^5.5.0",
     "ethers": "^6.16.0",
     "googleapis": "^171.4.0",
