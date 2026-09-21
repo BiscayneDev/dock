@@ -107,6 +107,32 @@ export async function rememberMemories(
   }
 }
 
+/** Keyword fallback over memory contents (used when embeddings are unavailable). */
+async function keywordSearchMemories(
+  userId: string,
+  query: string,
+  limit: number,
+): Promise<MemorySearchResult[]> {
+  try {
+    const supabase = createServerClient()
+    const { data, error } = await supabase
+      .from('memories')
+      .select('id, type, content, valid_from')
+      .eq('user_id', userId)
+      .is('superseded_at', null)
+      .ilike('content', `%${escapeLike(query)}%`)
+      .order('valid_from', { ascending: false })
+      .limit(limit)
+    if (error) throw error
+    return ((data ?? []) as MemorySearchResult[]).map((m) => ({ ...m, similarity: 0 }))
+  } catch (err) {
+    logger.error('keywordSearchMemories failed', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return []
+  }
+}
+
 /** Semantic search over memories via the match_memories RPC. */
 export async function searchMemories(
   userId: string,
@@ -115,7 +141,10 @@ export async function searchMemories(
 ): Promise<MemorySearchResult[]> {
   try {
     const embedding = await embedText(query)
-    if (!embedding) return []
+    if (!embedding) {
+      // Embedding unavailable — fall back to keyword matching over memory contents
+      return keywordSearchMemories(userId, query, limit)
+    }
 
     const supabase = createServerClient()
     let { data, error } = await supabase.rpc('match_memories', {
@@ -141,7 +170,7 @@ export async function searchMemories(
     logger.error('searchMemories failed', {
       error: err instanceof Error ? err.message : String(err),
       })
-    return []
+    return keywordSearchMemories(userId, query, limit)
   }
 }
 
@@ -174,6 +203,10 @@ export async function supersedeMemory(
   userId: string,
   contentSubstring: string,
 ): Promise<number> {
+  if (contentSubstring.trim().length < 4) {
+    logger.warn('supersedeMemory refused: query too short to match safely')
+    return 0
+  }
   try {
     const supabase = createServerClient()
     const { data, error } = await supabase
