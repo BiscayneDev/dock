@@ -11,13 +11,30 @@ export function getOAuth2Client(): InstanceType<typeof google.auth.OAuth2> {
   )
 }
 
-export function getAuthUrl(scopes: string[]): string {
+export function getAuthUrl(scopes: string[], state?: string): string {
   const client = getOAuth2Client()
   return client.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
     scope: scopes,
+    ...(state ? { state } : {}),
   })
+}
+
+/**
+ * Cheap live check that the freshly granted tokens actually work.
+ * Never claim a connection is complete without this passing.
+ */
+export async function verifyGoogleConnection(accessToken: string, refreshToken: string | null): Promise<boolean> {
+  try {
+    const client = getOAuth2Client()
+    client.setCredentials({ access_token: accessToken, refresh_token: refreshToken })
+    const gmail = google.gmail({ version: 'v1', auth: client })
+    await gmail.users.labels.list({ userId: 'me' })
+    return true
+  } catch {
+    return false
+  }
 }
 
 export async function exchangeCode(code: string): Promise<{

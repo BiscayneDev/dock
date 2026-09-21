@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth/session'
 import {
   exchangeCode as exchangeGoogleCode,
   storeGoogleTokens,
+  verifyGoogleConnection,
 } from '@/lib/integrations/google'
 import {
   exchangeCode as exchangeNotionCode,
@@ -29,19 +30,38 @@ import {
   storePayboxTokens,
 } from '@/lib/integrations/paybox'
 
+import {
+  completeConnectByState,
+  bindSpectrumIdentity,
+} from '@/lib/connect-token'
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ provider: string }> }
 ): Promise<NextResponse> {
+  const { provider } = await params
+  const code = request.nextUrl.searchParams.get('code')
+  const state = request.nextUrl.searchParams.get('state')
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+
+  // --- In-thread connect flow: no web session; the one-use connect token
+  // consumed at the start is bound to the `state` Google echoes back. ---
+  if (provider === 'google' && state && !request.cookies.get('g_oauth_state')) {
+    return handleGoogleConnectCallback(code, state, appUrl)
+  }
+
   const session = await getSession()
   if (!session) {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
     return NextResponse.redirect(`${appUrl}/onboarding`)
   }
 
-  const { provider } = await params
-  const code = request.nextUrl.searchParams.get('code')
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+  // CSRF check for the session flow: state must round-trip from our cookie.
+  if (provider === 'google') {
+    const expectedState = request.cookies.get('g_oauth_state')?.value
+    if (!expectedState || !state || expectedState !== state) {
+      return NextResponse.redirect(`${appUrl}/onboarding?error=oauth_state_mismatch`)
+    }
+  }
 
   if (!code) {
     return NextResponse.redirect(`${appUrl}/dashboard?error=no_code`)
@@ -156,5 +176,107 @@ export async function GET(
     const { logger } = await import('@/lib/logger')
     logger.error(`OAuth callback error for ${provider}`, { error: message })
     return NextResponse.redirect(`${appUrl}/onboarding?error=oauth_failed`)
+  }
+}
+
+/**
+ * Complete an in-thread (connect-token) Google flow: verify the live
+ * connection BEFORE claiming success, then confirm in-thread and resume
+ * the original request (telegram directly; imessage via the Spectrum
+ * process's resume poll).
+ */
+async function handleGoogleConnectCallback(
+  code: string | null,
+  state: string,
+  appUrl: string
+): Promise<NextResponse> {
+  const { logger } = await import('@/lib/logger')
+
+  if (!code) {
+    return NextResponse.redirect(`${appUrl}/onboarding?error=connect_no_code`)
+  }
+
+  const connect = await completeConnectByState(state)
+  if (!connect) {
+    return NextResponse.redirect(`${appUrl}/onboarding?error=connect_state_invalid`)
+  }
+
+  try {
+    const result = await exchangeGoogleCode(code)
+
+    // Bind the chat identity to a Dock user before storing tokens.
+    let userId: string | null = null
+    if (connect.platform === 'imessage') {
+      userId = await bindSpectrumIdentity(connect.chatId)
+    } else {
+      const { getOrCreateUserByTelegramId } = await import('@/lib/connect-user')
+      userId = await getOrCreateUserByTelegramId(BigInt(connect.chatId))
+    }
+    if (!userId) {
+      logger.error('connect flow: failed to bind identity', { platform: connect.platform })
+      return NextResponse.redirect(`${appUrl}/onboarding?error=connect_identity_failed`)
+    }
+
+    await storeGoogleTokens(
+      userId,
+      result.accessToken,
+      result.refreshToken,
+      result.expiresAt,
+      ['gmail.readonly', 'gmail.send', 'gmail.modify', 'calendar.readonly', 'calendar.events'],
+      result.email
+    )
+
+    // Never claim connected until a live call against the fresh tokens passes.
+    const verified = await verifyGoogleConnection(result.accessToken, result.refreshToken)
+    if (!verified) {
+      logger.error('connect flow: live verification failed', { platform: connect.platform })
+      await notifyConnectFailure(connect)
+      return NextResponse.redirect(`${appUrl}/onboarding?error=connect_verification_failed`)
+    }
+
+    await notifyConnectSuccess(connect)
+    return NextResponse.redirect(`${appUrl}/onboarding?connected=google&via=chat`)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    logger.error('connect flow callback error', { error: message })
+    await notifyConnectFailure(connect)
+    return NextResponse.redirect(`${appUrl}/onboarding?error=connect_failed`)
+  }
+}
+
+interface ConnectOutcome {
+  platform: 'telegram' | 'imessage'
+  chatId: string
+  pendingRequest: string | null
+}
+
+async function notifyConnectSuccess(connect: ConnectOutcome): Promise<void> {
+  if (connect.platform === 'telegram') {
+    const { sendMessage } = await import('@/lib/telegram/client')
+    await sendMessage({ chatId: Number(connect.chatId), text: 'google connected ✓' })
+    if (connect.pendingRequest) {
+      const { handleTelegramUpdate } = await import('@/lib/orchestrator')
+      await handleTelegramUpdate({
+        message: {
+          message_id: 0,
+          chat: { id: Number(connect.chatId), type: 'private' },
+          date: Math.floor(Date.now() / 1000),
+          text: connect.pendingRequest,
+          from: { id: Number(connect.chatId), is_bot: false, first_name: '' },
+        },
+      } as never)
+    }
+  }
+  // imessage: the Spectrum process polls claimPendingResume(chatGuid) and
+  // sends the confirmation + resumed answer itself.
+}
+
+async function notifyConnectFailure(connect: ConnectOutcome): Promise<void> {
+  if (connect.platform === 'telegram') {
+    const { sendMessage } = await import('@/lib/telegram/client')
+    await sendMessage({
+      chatId: Number(connect.chatId),
+      text: "google connect didn't go through — try again and i'll send a fresh link",
+    })
   }
 }
