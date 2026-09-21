@@ -2,22 +2,29 @@
 
 Dock's iMessage front door is powered by [Spectrum](https://photon.codes/docs/spectrum-ts) (Photon). iMessage is the primary channel; Telegram remains channel #2.
 
+The entry point (`src/spectrum/index.ts`) is a **standalone process** — no Next.js, no `@/` aliases. It calls Shipyard Inference's OpenAI-compatible HTTP gateway directly via `fetch`.
+
 ## Setup
 
-1. Fill in `.env` with `SPECTRUM_PROJECT_ID` and `SPECTRUM_PROJECT_SECRET` from the [Photon dashboard](https://app.photon.codes).
+1. Fill in `.env`:
 
-2. Install dependencies and run:
-
-```bash
-npm install
-npx tsx src/spectrum/index.ts
+```
+SPECTRUM_PROJECT_ID=958b9de0-be41-4251-97ba-aa83894db907
+SPECTRUM_PROJECT_SECRET=<from Photon dashboard>
+SHIPYARD_GATEWAY_URL=https://shipyard-inference.vercel.app
+SHIPYARD_API_KEY=<from the gateway>
 ```
 
-Or with bun:
+2. Get a Shipyard API key:
 
 ```bash
-bun install
-bun run start
+curl -X POST https://shipyard-inference.vercel.app/api/keys -H 'Content-Type: application/json' -d '{}'
+```
+
+3. Run:
+
+```bash
+npx tsx src/spectrum/index.ts
 ```
 
 ## Architecture
@@ -25,22 +32,28 @@ bun run start
 ```
 iMessage (+1 628 264-7754)
   → Spectrum (Photon) bridge
-    → Dock LLM layer (src/lib/llm)
-      → Shipyard Inference Router
-        → Anthropic / OpenAI / UsePod (cheapest capable)
-        → Per-call USDC settlement (x402)
-        → Savings telemetry → Supabase
+    → fetch POST /v1/chat/completions
+      → Shipyard Inference Gateway
+        → Router: cheapest capable model (Anthropic / OpenAI / UsePod)
+        → Per-call USDC settlement (x402 on Solana)
+        → Savings telemetry
 ```
 
-All model calls route through Shipyard Inference — cost-aware routing, prompt caching, and per-call USDC settlement. The iMessage user never picks a model; the router picks the cheapest one that can handle the request.
+No Next.js bundler, no vendored tgz, no `@/` aliases. Just `spectrum-ts` + `@spectrum-ts/imessage` + `fetch`. The gateway is Shipyard — that's the architecture.
 
 ## Spectrum Cloud project
 
-- **Project:** "Dock" on Spectrum Cloud (free tier, 10 users)
+- **Project:** Dock (free tier, 10 users)
 - **Project ID:** `958b9de0-be41-4251-97ba-aa83894db907`
-- **Managed iMessage line:** +1 (628) 264-7754 (shared free line; only replies to numbers added to the project)
+- **Managed iMessage line:** +1 (628) 264-7754 (shared free line; replies only to numbers added to the project)
 - **Photon dashboard:** https://app.photon.codes
 
 ## Adding iMessage contacts
 
 Only numbers added to the Spectrum Cloud project can receive replies. Add contacts from the Photon dashboard or via the `photon` CLI.
+
+## Next steps
+
+- [ ] Persist conversation history to Supabase (currently in-memory)
+- [ ] Add tool access (email, calendar, GitHub, Notion) from iMessage
+- [ ] Per-user Shipyard API keys (so each user's calls settle from their own wallet)
