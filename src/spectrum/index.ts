@@ -14,7 +14,7 @@
  */
 
 import { Spectrum } from 'spectrum-ts'
-import { imessage } from '@spectrum-ts/imessage'
+import { imessage, nativeContactCard } from '@spectrum-ts/imessage'
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
@@ -92,7 +92,14 @@ interface SpectrumMessage {
 interface SpectrumSpace {
   guid: string
   send(text: string): Promise<void>
+  send(builder: ReturnType<typeof nativeContactCard>): Promise<void>
 }
+
+// Track which chats we've already sent the onboarding contact card to.
+const onboarded = new Set<string>()
+
+// On-demand triggers for the contact card.
+const CONTACT_CARD_TRIGGERS = ['contact card', 'my card', 'share card', 'your card', 'add me', 'save contact']
 
 async function main() {
 const app = await Spectrum({
@@ -116,6 +123,28 @@ for await (const [space, message] of app.messages) {
   if (!text) continue
 
   console.log(`imessage ← ${sp.guid}: ${text.slice(0, 80)}`)
+
+  // On-demand contact card — user asks for it.
+  if (CONTACT_CARD_TRIGGERS.some((t) => text.toLowerCase().includes(t))) {
+    try {
+      await sp.send(nativeContactCard())
+      console.log(`imessage → ${sp.guid}: shared contact card (on request)`)
+    } catch (err) {
+      console.error('Failed to share contact card:', err instanceof Error ? err.message : String(err))
+    }
+    continue
+  }
+
+  // First-message onboarding — share contact card once per chat.
+  if (!onboarded.has(sp.guid)) {
+    onboarded.add(sp.guid)
+    try {
+      await sp.send(nativeContactCard())
+      console.log(`imessage → ${sp.guid}: shared contact card (onboarding)`)
+    } catch (err) {
+      console.error('Onboarding contact card failed:', err instanceof Error ? err.message : String(err))
+    }
+  }
 
   // Load + update history
   let history = conversations.get(sp.guid) ?? []
