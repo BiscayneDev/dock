@@ -14,13 +14,13 @@ const geistMono = Geist_Mono({
 
 const SITE_URL = "https://getdinghy.sh"
 const TITLE = "Dinghy — Your AI First Mate"
-const DESCRIPTION = "AI assistant that manages your email, calendar, GitHub, Notion, and crypto wallets through natural conversation in Telegram. No app switching. Just chat."
+const DESCRIPTION = "dinghy is a first mate that lives in imessage. you text it like a person. it does the work."
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#d6dce8",
+  themeColor: "#050a18",
 }
 
 export const metadata: Metadata = {
