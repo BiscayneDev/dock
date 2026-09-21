@@ -29,6 +29,16 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
+## Memory
+
+Dock has a persistent memory layer on top of the raw message history:
+
+- **Raw messages** live in Supabase and are the source of truth — rows are never deleted. Older messages are marked `compacted` during summarization but stay searchable.
+- **Background fact extractor**: every ~10 messages, a lightweight extractor pulls durable facts out of the conversation and writes them to the `memories` table (new facts supersede outdated ones).
+- **Prompt injection**: relevant memories plus the user profile are injected into each system prompt, so the agent remembers across sessions.
+- **Agent tools**: the agent can call `memory_search` and `memory_forget` on its own.
+- **Embeddings** use OpenAI `text-embedding-3-small`, which requires `OPENAI_API_KEY`.
+
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
