@@ -54,15 +54,19 @@ Everything below is **existing, working code** in `src/`:
 - Scopes: keep the current five (`gmail.readonly`, `gmail.send`, `gmail.modify`, `calendar.readonly`, `calendar.events`). Least-privilege justification: `gmail.modify` covers label/archive + send/readonly needs; dropping it would break `gmail_label`/`gmail_archive`.
 - **Consent screen / testing:** if publishing status is *Testing*, every user must be a test user. Add all 10 beta members' Google addresses under *OAuth consent screen → Audience → Test users*. Gmail scopes are **restricted** — while in Testing, refresh tokens expire after 7 days; either keep Testing + re-auth weekly, or request verification/`internal` status before the 10-seat rollout. Flag to Halsey before either.
 
-## 5. Token storage — DECISION REQUIRED (not chosen silently)
+## 5. Token storage — CONFIRMED by Halsey (2026-09-21)
 
-Blueprint says **PayBox**; PayBox credentials are currently unavailable. Do **not** migrate anything until Halsey approves one of:
+**Decision: Option A — keep Supabase `oauth_tokens` (status quo). CONFIRMED for this build.** Halsey approved storing Google refresh tokens in the existing encrypted Supabase `oauth_tokens` path (`src/lib/crypto.ts` AES-256-GCM at rest, auto-refresh in `getAuthedClient()`). **PayBox (option B) remains the later migration target** — migrating later touches only `storeGoogleTokens`/`getDecryptedGoogleTokens`, not the connect flow.
+
+(Options context preserved below; option A is the confirmed choice.)
+
+Blueprint says **PayBox**; PayBox credentials are currently unavailable. ~~Do **not** migrate anything until Halsey approves one of~~ Options were:
 
 - **A. Keep Supabase `oauth_tokens` (status quo).** Already encrypted (`src/lib/crypto.ts`), already working, RLS-capable. Tradeoff: refresh tokens live in the same Postgres as app data; a service-role-key leak exposes all users' mail access. *This is the current code path — no change needed.*
 - **B. PayBox vault (blueprint target).** Store refresh tokens keyed by user in PayBox; Supabase keeps only a non-sensitive pointer. Blocked on PayBox credentials/access. Cleanest end state.
 - **C. Local macOS Keychain / Hermes vault per user** — only viable for Halsey's own single-user deployment, not 10 beta seats.
 
-Recommendation: ship on **A** now (it is the existing audited path), file B as the migration once PayBox creds land. **Explicit approval from Halsey required before storing any refresh token in Supabase for beta users** — if A is not approved, the connect flow ships but tokens cannot persist, which defeats the feature; hence this decision gates implementation, not just polish.
+Recommendation was: ship on **A** now (the existing audited path), file B as the migration once PayBox creds land. **Halsey confirmed A on 2026-09-21 via Instinct** — refresh tokens may persist in Supabase for beta users under the existing encrypted path.
 
 ## 6. Tests (to write with implementation)
 
