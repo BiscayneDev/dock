@@ -22,6 +22,7 @@ import {
   saveMessage,
   createConnectLink,
   claimPendingResume,
+  listUnresumedResumeChats,
 } from './store'
 
 // ── Config ─────────────────────────────────────────────────────────────────
@@ -145,10 +146,15 @@ for await (const [space, message] of app.messages) {
 
   console.log(`imessage ← ${sp.guid}: ${text.slice(0, 80)}`)
 
-  // Track active chats for the resume poll.
+  // Track active chats for the resume poll. Capture the sender handle when
+  // Photon provides one (used for identity diagnostics/collision audits).
   spaceCache.set(sp.guid, sp)
   activeChats.add(sp.guid)
-  await ensureIdentity(sp.guid).catch((err) =>
+  const senderHandle =
+    (msg as { sender?: { handle?: string } }).sender?.handle ??
+    (msg as { from?: string }).from ??
+    null
+  await ensureIdentity(sp.guid, senderHandle).catch((err) =>
     console.error('identity ensure failed:', err instanceof Error ? err.message : String(err))
   )
 
@@ -210,10 +216,13 @@ for await (const [space, message] of app.messages) {
 
 // Resume poll: when the OAuth callback completes for an iMessage chat, the
 // token row is marked completed; here we claim it, confirm in-thread, and
-// re-run the original request through the gateway.
+// re-run the original request through the gateway. Chats come from the DB
+// (listUnresumedResumeChats), so resume works across process restarts —
+// a fresh instance picks up completed-but-unresumed connects immediately.
 setInterval(() => {
   void (async () => {
-    for (const guid of activeChats) {
+    const chats = new Set([...activeChats, ...(await listUnresumedResumeChats().catch(() => [] as string[]))])
+    for (const guid of chats) {
       try {
         const pending = await claimPendingResume(guid)
         if (!pending) continue

@@ -31,17 +31,29 @@ function db(): SupabaseClient {
 
 // ── Identity ────────────────────────────────────────────────────────────────
 
-/** Make sure this chat guid has an identity row. Returns its user_id or null. */
-export async function ensureIdentity(chatGuid: string): Promise<string | null> {
+/**
+ * Make sure this chat guid has an identity row. `handle` is the sender
+ * identifier (phone/email-style) when Photon provides one — stored for
+ * diagnostics/collision auditing; chat_guid remains the stable join key.
+ * Returns the bound user_id or null (unbound until first connect).
+ */
+export async function ensureIdentity(chatGuid: string, handle?: string | null): Promise<string | null> {
   const supabase = db()
   const { data: existing } = await supabase
     .from('spectrum_identities')
-    .select('user_id')
+    .select('id, user_id, handle')
     .eq('chat_guid', chatGuid)
     .maybeSingle()
-  if (existing) return (existing.user_id as string | null) ?? null
+  if (existing) {
+    if (handle && existing.handle !== handle) {
+      await supabase.from('spectrum_identities').update({ handle }).eq('chat_guid', chatGuid)
+    }
+    return (existing.user_id as string | null) ?? null
+  }
 
-  await supabase.from('spectrum_identities').upsert({ chat_guid: chatGuid }, { onConflict: 'chat_guid' })
+  await supabase
+    .from('spectrum_identities')
+    .upsert({ chat_guid: chatGuid, handle: handle ?? null }, { onConflict: 'chat_guid' })
   return null
 }
 
@@ -125,6 +137,23 @@ export async function createConnectLink(chatGuid: string, pendingRequest: string
   if (error) throw new Error(`Failed to persist connect token: ${error.message}`)
 
   return `${APP_URL}/api/integrations/google/auth?connect=${encodeURIComponent(token)}`
+}
+
+/**
+ * Resume poll source of truth — chats with a completed-but-unresumed connect.
+ * Querying the DB (not an in-memory set) makes resume survive process
+ * restarts: a fresh Spectrum instance picks up pending resumes immediately.
+ */
+export async function listUnresumedResumeChats(): Promise<string[]> {
+  const supabase = db()
+  const { data } = await supabase
+    .from('connect_tokens')
+    .select('chat_id')
+    .eq('platform', 'imessage')
+    .not('completed_at', 'is', null)
+    .is('resumed_at', null)
+    .not('pending_request', 'is', null)
+  return [...new Set(((data ?? []) as { chat_id: string }[]).map((r) => r.chat_id))]
 }
 
 /**
