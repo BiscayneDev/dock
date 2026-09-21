@@ -29,18 +29,21 @@ export async function fetchConversationHistory(userId: string): Promise<ChatMess
     .from('messages')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
+    .eq('compacted', false)
 
   // If over threshold, summarize older messages
   if ((count ?? 0) > SUMMARIZE_THRESHOLD) {
     await summarizeOldMessages(userId)
   }
 
-  // Fetch the NEWEST N messages (descending), then reverse for chronological order.
+  // Fetch the NEWEST N active messages (descending), then reverse for chronological order.
   // This ensures the agent always has recent context even if summarization fails.
+  // Compacted rows are excluded from live context but remain searchable via memory_search.
   const { data, error } = await supabase
     .from('messages')
     .select('id, role, content, tool_calls, tool_results, created_at')
     .eq('user_id', userId)
+    .eq('compacted', false)
     .order('created_at', { ascending: false })
     .limit(MAX_CONTEXT_MESSAGES)
 
@@ -60,6 +63,7 @@ async function summarizeOldMessages(userId: string): Promise<void> {
     .from('messages')
     .select('id, role, content, created_at')
     .eq('user_id', userId)
+    .eq('compacted', false)
     .order('created_at', { ascending: true })
     .limit(SUMMARIZE_COUNT)
 
@@ -90,12 +94,12 @@ async function summarizeOldMessages(userId: string): Promise<void> {
     const summary = response.content
     if (!summary) return
 
-    // Delete the old messages
-    const idsToDelete = oldMessages.map((m) => m.id)
+    // Mark old messages as compacted (rows remain for memory_search recall)
+    const idsToCompact = oldMessages.map((m) => m.id)
     await supabase
       .from('messages')
-      .delete()
-      .in('id', idsToDelete)
+      .update({ compacted: true })
+      .in('id', idsToCompact)
 
     // Insert synthetic summary message
     await supabase
