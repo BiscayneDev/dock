@@ -15,6 +15,14 @@
 
 import { Spectrum } from 'spectrum-ts'
 import { imessage, nativeContactCard } from '@spectrum-ts/imessage'
+import {
+  ensureIdentity,
+  isGoogleConnected,
+  loadHistory,
+  saveMessage,
+  createConnectLink,
+  claimPendingResume,
+} from './store'
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
@@ -36,14 +44,13 @@ if (!API_KEY) {
 }
 
 // ── Conversation memory ──────────────────────────────────────────────────────
-// In-memory per iMessage chat guid. Persist to Supabase in production.
+// History persists in Supabase (spectrum_messages) — see ./store.ts.
 
 interface Message {
   role: 'user' | 'assistant' | 'system'
   content: string
 }
 
-const conversations = new Map<string, Message[]>()
 const MAX_HISTORY = 20
 
 const SYSTEM_PROMPT =
@@ -51,13 +58,19 @@ const SYSTEM_PROMPT =
   'Right now you can hold a text conversation, share your contact card when asked, ' +
   'and remember context within the current conversation. There is also a waitlist ' +
   'site at getdinghy.sh where people can sign up for the beta. ' +
-  'Email, calendar, GitHub, Notion, and other integrations are not connected yet — ' +
-  'the connection flow is being built. If the user asks about email or calendar, ' +
-  'say the connection flow is being built and that you will send the connect link ' +
-  'when it is ready. Do not promise an integration that does not exist. ' +
+  'Gmail and Google Calendar connect through a one-tap link you can send in the ' +
+  'chat — but the connect-link message itself (not you) handles that: when the ' +
+  "user's message triggered one, you will not even be called. If the user asks " +
+  'about email or calendar and no link was sent, say they are not connected yet ' +
+  'and that they can ask again to get a connect link. Do not promise any other ' +
+  'integration — GitHub, Notion, and others are not connected. ' +
   "You're direct, concise, and helpful. You don't waste words on pleasantries. " +
   'In a fresh chat, open with the question: "what\'s eating your time this week?" ' +
   'and work from their answer.'
+
+// Messages that indicate the user wants Gmail/Calendar work.
+const GOOGLE_INTENT =
+  /\b(gmail|e-?mails?|inbox|calendar|calender|schedule(d)?|meetings?|appointments?|events? this week|my day)\b/i
 
 // ── Shipyard gateway call ───────────────────────────────────────────────────
 
@@ -103,6 +116,8 @@ interface SpectrumSpace {
 
 // Track which chats we've already sent the onboarding contact card to.
 const onboarded = new Set<string>()
+// Chats seen this process lifetime — the resume poll iterates these.
+const activeChats = new Set<string>()
 
 // On-demand triggers for the contact card.
 const CONTACT_CARD_TRIGGERS = ['contact card', 'my card', 'share card', 'your card', 'add me', 'save contact', 'contact details', 'save your contact', 'save your details', 'your contact']
@@ -130,6 +145,13 @@ for await (const [space, message] of app.messages) {
 
   console.log(`imessage ← ${sp.guid}: ${text.slice(0, 80)}`)
 
+  // Track active chats for the resume poll.
+  spaceCache.set(sp.guid, sp)
+  activeChats.add(sp.guid)
+  await ensureIdentity(sp.guid).catch((err) =>
+    console.error('identity ensure failed:', err instanceof Error ? err.message : String(err))
+  )
+
   // On-demand contact card — user asks for it.
   if (CONTACT_CARD_TRIGGERS.some((t) => text.toLowerCase().includes(t))) {
     try {
@@ -152,23 +174,74 @@ for await (const [space, message] of app.messages) {
     }
   }
 
-  // Load + update history
-  let history = conversations.get(sp.guid) ?? []
+  // Gmail/Calendar requested while unconnected → send the one-use connect
+  // link in-thread. The original request rides in the token and is resumed
+  // automatically after the callback verifies the connection.
+  if (GOOGLE_INTENT.test(text) && !(await isGoogleConnected(sp.guid).catch(() => false))) {
+    try {
+      const link = await createConnectLink(sp.guid, text)
+      await saveMessage(sp.guid, 'user', text)
+      await sp.send(
+        `email + calendar aren't connected yet — connect google and i'll take it from there:\n${link}`
+      )
+      console.log(`imessage → ${sp.guid}: sent google connect link`)
+    } catch (err) {
+      console.error('Connect link failed:', err instanceof Error ? err.message : String(err))
+      await sp.send("couldn't start the connect flow — try again in a moment.")
+    }
+    continue
+  }
+
+  // Load persistent history, then update it.
+  let history = await loadHistory(sp.guid, MAX_HISTORY)
   history.push({ role: 'user', content: text })
-  if (history.length > MAX_HISTORY) history = history.slice(-MAX_HISTORY)
+  void saveMessage(sp.guid, 'user', text)
 
   try {
     const reply = await chat(history)
     await sp.send(reply)
-    history.push({ role: 'assistant', content: reply })
-    conversations.set(sp.guid, history)
+    await saveMessage(sp.guid, 'assistant', reply)
     console.log(`imessage → ${sp.guid}: ${reply.slice(0, 80)}`)
   } catch (err) {
     console.error('Gateway call failed:', err instanceof Error ? err.message : String(err))
     await sp.send('Something went wrong on my end. Try again in a moment.')
   }
 }
+
+// Resume poll: when the OAuth callback completes for an iMessage chat, the
+// token row is marked completed; here we claim it, confirm in-thread, and
+// re-run the original request through the gateway.
+setInterval(() => {
+  void (async () => {
+    for (const guid of activeChats) {
+      try {
+        const pending = await claimPendingResume(guid)
+        if (!pending) continue
+        console.log(`imessage → ${guid}: resuming pending request after connect`)
+        const history = await loadHistory(guid, MAX_HISTORY)
+        history.push({ role: 'user', content: pending })
+        const reply = await chat(history)
+        await sp_sendTo(guid, `google connected ✓\n\n${reply}`)
+        await saveMessage(guid, 'user', pending)
+        await saveMessage(guid, 'assistant', reply)
+      } catch (err) {
+        console.error('Resume poll failed:', err instanceof Error ? err.message : String(err))
+      }
+    }
+  })()
+}, 15_000)
 }
+
+/** Send to a known chat guid outside the message loop (resume path). */
+async function sp_sendTo(guid: string, text: string): Promise<void> {
+  // Spectrum spaces are only reachable inside the message loop; resume
+  // replies are sent via the app-level space cache populated on first message.
+  const space = spaceCache.get(guid)
+  if (!space) throw new Error(`no space cached for ${guid}`)
+  await space.send(text)
+}
+
+const spaceCache = new Map<string, SpectrumSpace>()
 
 main().catch((err) => {
   console.error('Dinghy Spectrum failed to start:', err)
