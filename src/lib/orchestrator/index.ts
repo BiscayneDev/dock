@@ -194,10 +194,10 @@ async function handleMessageInner(chatId: number, telegramId: number, initialTex
   const { sendRapidFire } = await import('@/lib/telegram/message-splitter')
   await sendRapidFire(chatId, response)
 
-  // Background: extract user preferences every ~10 messages
+  // Background: extract memories every ~10 messages
   if ((messageCount ?? 0) > 0 && (messageCount ?? 0) % 10 === 0) {
-    import('@/lib/orchestrator/preference-extractor')
-      .then((mod) => mod.extractPreferences(user.id))
+    import('@/lib/memory/extractor')
+      .then((mod) => mod.extractMemories(user.id))
       .catch(() => {
         // Non-critical — silently ignore
       })
