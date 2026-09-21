@@ -220,7 +220,7 @@ async function handleGoogleConnectCallback(
     }
     if (!userId) {
       // Code already consumed — cannot retry. Mark terminal.
-      await markConnectTerminal(connect.id)
+      await markConnectTerminal(connect.id, { failed: true })
       logger.error('connect flow: failed to bind identity', { platform: connect.platform })
       await notifyConnectFailure(connect)
       return NextResponse.redirect(`${appUrl}/onboarding?error=connect_identity_failed`)
@@ -240,7 +240,7 @@ async function handleGoogleConnectCallback(
     if (!verified) {
       // Code consumed — cannot retry with same consent. Mark terminal and
       // tell the user to start a fresh connect from their chat.
-      await markConnectTerminal(connect.id)
+      await markConnectTerminal(connect.id, { failed: true })
       logger.error('connect flow: live verification failed', { platform: connect.platform })
       await notifyConnectFailure(connect)
       return NextResponse.redirect(`${appUrl}/onboarding?error=connect_verification_failed`)
@@ -253,7 +253,7 @@ async function handleGoogleConnectCallback(
   } catch (err) {
     // Code may or may not have been consumed — either way, the auth code is
     // single-use and a retry with the same state would fail. Mark terminal.
-    await markConnectTerminal(connect.id)
+    await markConnectTerminal(connect.id, { failed: true })
     const message = err instanceof Error ? err.message : String(err)
     logger.error('connect flow callback error', { error: message })
     await notifyConnectFailure(connect)

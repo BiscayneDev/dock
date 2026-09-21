@@ -22,6 +22,7 @@ import {
   saveMessage,
   createConnectLink,
   claimPendingResume,
+  ackResume,
   listUnresumedResumeChats,
 } from './store'
 
@@ -125,8 +126,8 @@ const CONTACT_CARD_TRIGGERS = ['contact card', 'my card', 'share card', 'your ca
 
 async function main() {
 const app = await Spectrum({
-  projectId: PROJECT_ID,
-  projectSecret: PROJECT_SECRET,
+  projectId: PROJECT_ID!,
+  projectSecret: PROJECT_SECRET!,
   providers: [imessage.config()],
 })
 
@@ -137,7 +138,7 @@ console.log(`  Gateway: ${GATEWAY_URL}`)
 
 for await (const [space, message] of app.messages) {
   const msg = message as SpectrumMessage
-  const sp = space as SpectrumSpace
+  const sp = space as unknown as SpectrumSpace
 
   if (msg.content.type !== 'text' || !msg.content.text) continue
 
@@ -151,10 +152,6 @@ for await (const [space, message] of app.messages) {
   spaceCache.set(sp.guid, sp)
   activeChats.add(sp.guid)
 
-  // Flush any deferred messages (cold-restart resume) before processing.
-  await flushDeferred(sp.guid, sp).catch((err) =>
-    console.error('Deferred flush failed:', err instanceof Error ? err.message : String(err))
-  )
   const senderHandle =
     (msg as { sender?: { handle?: string } }).sender?.handle ??
     (msg as { from?: string }).from ??
@@ -220,64 +217,61 @@ for await (const [space, message] of app.messages) {
 }
 
 // Resume poll: when the OAuth callback completes for an iMessage chat, the
-// token row is marked completed; here we claim it, confirm in-thread, and
-// re-run the original request through the gateway. Chats come from the DB
-// (listUnresumedResumeChats), so resume works across process restarts —
-// a fresh instance picks up completed-but-unresumed connects immediately.
+// token row is completed; here we take a delivery LEASE, send the
+// confirmation + re-run the original request, and only then ACK (resumed_at).
+// Crash between claim and send: the lease expires (60s) and any poller —
+// including a freshly restarted process — re-claims and retries, so delivery
+// is at-least-once and never lost. Chats come from the DB
+// (listUnresumedResumeChats), so a cold restart picks up pending resumes
+// immediately without waiting for an inbound message.
+async function deliverResume(guid: string): Promise<void> {
+  const claimed = await claimPendingResume(guid)
+  if (!claimed) return
+  console.log(`imessage → ${guid}: resuming pending request after connect`)
+  try {
+    const history = await loadHistory(guid, MAX_HISTORY)
+    history.push({ role: 'user', content: claimed.pendingRequest })
+    const reply = await chat(history)
+    const space = spaceCache.get(guid)
+    if (!space) {
+      // Cannot deliver yet (no cached space). Leave the lease to expire —
+      // a later poll (this process or a restarted one) retries. If the user
+      // texts first, the space cache fills and the next poll delivers.
+      console.log(`imessage: ${guid} not cached — resume lease will expire and retry`)
+      return
+    }
+    await space.send(`google connected ✓\n\n${reply}`)
+    await ackResume(claimed.id) // ack ONLY after a successful send
+    await saveMessage(guid, 'user', claimed.pendingRequest)
+    await saveMessage(guid, 'assistant', reply)
+  } catch (err) {
+    // Send/gateway failure: leave the lease un-acked — it expires and retries.
+    console.error('Resume delivery failed (will retry after lease):', err instanceof Error ? err.message : String(err))
+  }
+}
+
 setInterval(() => {
   void (async () => {
     const chats = new Set([...activeChats, ...(await listUnresumedResumeChats().catch(() => [] as string[]))])
     for (const guid of chats) {
       try {
-        const pending = await claimPendingResume(guid)
-        if (!pending) continue
-        console.log(`imessage → ${guid}: resuming pending request after connect`)
-        const history = await loadHistory(guid, MAX_HISTORY)
-        history.push({ role: 'user', content: pending })
-        const reply = await chat(history)
-        await sp_sendTo(guid, `google connected ✓\n\n${reply}`)
-        await saveMessage(guid, 'user', pending)
-        await saveMessage(guid, 'assistant', reply)
+        await deliverResume(guid)
       } catch (err) {
         console.error('Resume poll failed:', err instanceof Error ? err.message : String(err))
       }
     }
   })()
 }, 15_000)
-}
 
-/** Send to a known chat guid outside the message loop (resume path).
- *
- * If the chat's space is in the in-memory cache (warm process), send immediately.
- * If not (cold restart), queue the message — it will be flushed on the next
- * inbound message from that chat, so the user sees the confirmation when they
- * next text, without losing the resume. Never throws. */
-const deferredQueue = new Map<string, string[]>()
-
-async function sp_sendTo(guid: string, text: string): Promise<void> {
-  const space = spaceCache.get(guid)
-  if (space) {
-    await space.send(text)
-    return
+// Cold-restart sweep: attempt deliveries immediately on boot, not just on
+// the first 15s tick.
+void (async () => {
+  try {
+    for (const guid of await listUnresumedResumeChats()) await deliverResume(guid)
+  } catch (err) {
+    console.error('Resume sweep failed:', err instanceof Error ? err.message : String(err))
   }
-  // Cold restart — the space isn't cached. Queue so the next inbound message
-  // from this chat flushes it before processing. This is a safe fallback:
-  // the user sees "google connected ✓" on their next text, not a lost message.
-  const q = deferredQueue.get(guid) ?? []
-  q.push(text)
-  deferredQueue.set(guid, q)
-  console.log(`imessage: queued ${q.length} deferred message(s) for ${guid} (cold restart)`)
-}
-
-/** Flush any deferred messages for a chat before processing a new inbound message. */
-async function flushDeferred(guid: string, space: SpectrumSpace): Promise<void> {
-  const q = deferredQueue.get(guid)
-  if (!q || q.length === 0) return
-  for (const msg of q) {
-    await space.send(msg)
-  }
-  deferredQueue.delete(guid)
-  console.log(`imessage → ${guid}: flushed ${q.length} deferred message(s)`)
+})()
 }
 
 const spaceCache = new Map<string, SpectrumSpace>()

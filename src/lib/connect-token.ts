@@ -154,6 +154,7 @@ export async function claimConnectByState(
     .not('used_at', 'is', null)
     .is('completed_at', null)
     .is('claimed_at', null)
+    .is('terminal_at', null) // terminal rows can never be re-claimed
     .select('id, platform, chat_id, pending_request')
     .maybeSingle()
 
@@ -174,19 +175,29 @@ export async function releaseConnectClaim(tokenRowId: string): Promise<void> {
     .update({ claimed_at: null })
     .eq('id', tokenRowId)
     .is('completed_at', null)
+    .is('terminal_at', null)
 }
 
 /**
- * Mark a connect attempt terminal — used after the authorization code has been
- * consumed (single-use). The same state cannot retry; the user must start a
- * fresh connect token from their chat. Sets `completed_at` to prevent
- * re-claiming and signals the attempt is done (failed).
+ * Mark a connect attempt terminal — used after the authorization code has
+ * been consumed (single-use codes can't retry). One atomic write sets BOTH
+ * terminal_at and completed_at: the row leaves the claimable state in the
+ * same statement that marks it terminal, so no query-invariant gap exists.
+ * The same state cannot retry; the user starts a fresh connect token.
  */
-export async function markConnectTerminal(tokenRowId: string): Promise<void> {
+export async function markConnectTerminal(
+  tokenRowId: string,
+  opts?: { failed?: boolean }
+): Promise<void> {
+  const now = new Date().toISOString()
   const supabase = createServerClient()
   await supabase
     .from('connect_tokens')
-    .update({ terminal_at: new Date().toISOString() })
+    .update(
+      opts?.failed
+        ? { terminal_at: now, completed_at: now, claimed_at: null }
+        : { terminal_at: now }
+    )
     .eq('id', tokenRowId)
     .is('terminal_at', null)
 }
@@ -202,28 +213,46 @@ export async function completeConnect(tokenRowId: string): Promise<void> {
 }
 
 /**
- * imessage resume — called by the Spectrum process's poll. Atomically claims
- * the oldest completed-but-unresumed token for this chat guid.
+ * imessage resume — LEASE-BASED claim (lossless across restarts).
+ * Atomically takes a delivery lease on the oldest completed-but-undelivered
+ * token for this chat. `resumed_at` is NOT set here — it is the delivery
+ * acknowledgement, written only after space.send() succeeds (ackResume()).
+ * A lease older than `leaseMs` is stealable, so a crash between claim and
+ * send is retried by the next poll (same or restarted process).
  */
+export const RESUME_LEASE_MS = 60 * 1000
+
 export async function claimPendingResume(
   chatGuid: string
-): Promise<{ pendingRequest: string } | null> {
+): Promise<{ id: string; pendingRequest: string } | null> {
   const supabase = createServerClient()
   const { data, error } = await supabase
     .from('connect_tokens')
-    .update({ resumed_at: new Date().toISOString() })
+    .update({ delivery_claimed_at: new Date().toISOString() })
     .eq('platform', 'imessage')
     .eq('chat_id', chatGuid)
     .not('completed_at', 'is', null)
     .is('resumed_at', null)
+    .is('terminal_at', null)
     .not('pending_request', 'is', null)
+    .or(`delivery_claimed_at.is.null,delivery_claimed_at.lt.${new Date(Date.now() - RESUME_LEASE_MS).toISOString()}`)
     .order('completed_at', { ascending: false })
     .limit(1)
-    .select('pending_request')
+    .select('id, pending_request')
     .maybeSingle()
 
   if (error || !data || !data.pending_request) return null
-  return { pendingRequest: data.pending_request as string }
+  return { id: data.id as string, pendingRequest: data.pending_request as string }
+}
+
+/** Delivery acknowledgement — the ONLY writer of resumed_at. */
+export async function ackResume(tokenRowId: string): Promise<void> {
+  const supabase = createServerClient()
+  await supabase
+    .from('connect_tokens')
+    .update({ resumed_at: new Date().toISOString(), delivery_claimed_at: null })
+    .eq('id', tokenRowId)
+    .is('resumed_at', null)
 }
 
 /**

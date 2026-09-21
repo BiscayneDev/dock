@@ -19,8 +19,10 @@ import {
   completeConnect,
   markConnectTerminal,
   claimPendingResume,
+  ackResume,
 } from '@/lib/connect-token'
 import { encodeSessionCookie, decodeSessionCookie } from '@/lib/auth/session'
+import { bindSpectrumIdentity } from '@/lib/connect-token'
 
 type Chain = {
   update: Mock
@@ -28,20 +30,28 @@ type Chain = {
   is: Mock
   gt: Mock
   not: Mock
+  or?: Mock
   select: Mock
   order: Mock
   limit: Mock
   maybeSingle: Mock
   insert: Mock
+  single: Mock
 }
 
 function chain(final: { data: unknown; error: unknown }): Chain {
   const c: Record<string, Mock> = {}
-  for (const m of ['update', 'eq', 'is', 'gt', 'not', 'select', 'order', 'limit', 'insert']) {
+  for (const m of ['update', 'eq', 'is', 'gt', 'not', 'or', 'select', 'order', 'limit', 'insert', 'upsert']) {
     c[m] = vi.fn().mockReturnThis()
   }
   c.maybeSingle = vi.fn().mockResolvedValue(final)
+  c.single = vi.fn().mockResolvedValue(final)
   return c as unknown as Chain
+}
+
+/** Table-aware from(): different chains per table (bindSpectrumIdentity flow). */
+function tableChains(tables: Record<string, Chain>) {
+  return vi.fn((table: string) => tables[table] ?? chain({ data: null, error: null }))
 }
 
 beforeEach(() => {
@@ -179,14 +189,17 @@ describe('session cookie signing (finding 1)', () => {
   })
 })
 
-describe('claimPendingResume', () => {
-  it('returns the pending request for a completed, unresumed token', async () => {
-    const c = chain({ data: { pending_request: 'what meetings do I have' }, error: null })
+describe('claimPendingResume (lease-based, finding 2)', () => {
+  it('claims with a delivery lease — resumed_at is NOT written at claim time', async () => {
+    const c = chain({ data: { id: 'row-9', pending_request: 'what meetings do I have' }, error: null })
     fromMock.mockReturnValue(c)
 
-    expect(await claimPendingResume('guid-1')).toEqual({ pendingRequest: 'what meetings do I have' })
-    expect(c.eq).toHaveBeenCalledWith('platform', 'imessage')
-    expect(c.eq).toHaveBeenCalledWith('chat_id', 'guid-1')
+    expect(await claimPendingResume('guid-1')).toEqual({ id: 'row-9', pendingRequest: 'what meetings do I have' })
+    expect(c.update).toHaveBeenCalledWith(expect.objectContaining({ delivery_claimed_at: expect.any(String) }))
+    expect(c.update).not.toHaveBeenCalledWith(expect.objectContaining({ resumed_at: expect.anything() }))
+    // stealable lease: null OR expired
+    expect(c.or).toHaveBeenCalledWith(expect.stringContaining('delivery_claimed_at.lt.'))
+    expect(c.is).toHaveBeenCalledWith('resumed_at', null)
   })
 
   it('returns null when nothing is pending', async () => {
@@ -195,22 +208,73 @@ describe('claimPendingResume', () => {
   })
 })
 
-describe('markConnectTerminal (finding 4 — post-exchange terminal)', () => {
-  it('sets terminal_at on a claimed row (cannot be re-claimed)', async () => {
+describe('resume ack + two-restart losslessness (finding 2)', () => {
+  it('ackResume sets resumed_at only after delivery; claim never does', async () => {
     const c = chain({ data: null, error: null })
     fromMock.mockReturnValue(c)
-    await markConnectTerminal('row-1')
-    expect(c.update).toHaveBeenCalledWith(expect.objectContaining({ terminal_at: expect.any(String) }))
+    await ackResume('row-9')
+    expect(c.update).toHaveBeenCalledWith(expect.objectContaining({ resumed_at: expect.any(String), delivery_claimed_at: null }))
+    expect(c.is).toHaveBeenCalledWith('resumed_at', null)
+  })
+
+  it('two-restart: claim → (restart, no send) → expired lease is stealable and re-claimable', async () => {
+    // Process A claims (lease taken, no ack).
+    const claimA = chain({ data: { id: 'row-9', pending_request: 'check my email' }, error: null })
+    fromMock.mockReturnValue(claimA)
+    expect(await claimPendingResume('guid-1')).not.toBeNull()
+
+    // Process A dies before sending. Process B boots and polls again.
+    const claimB = chain({ data: { id: 'row-9', pending_request: 'check my email' }, error: null })
+    fromMock.mockReturnValue(claimB)
+    const re = await claimPendingResume('guid-1')
+    expect(re).toEqual({ id: 'row-9', pendingRequest: 'check my email' })
+    // The re-claim guard admits expired leases: `.or(delivery_claimed_at.is.null, delivery_claimed_at.lt.<cutoff>)`
+    expect(claimB.or).toHaveBeenCalledWith(
+      expect.stringMatching(/^delivery_claimed_at\.is\.null,delivery_claimed_at\.lt\.\d{4}-/)
+    )
+    // And still does not mark resumed_at — ack happens only after a real send.
+    expect(claimB.update).not.toHaveBeenCalledWith(expect.objectContaining({ resumed_at: expect.anything() }))
+
+    // Delivery succeeded on process B → ack finalizes.
+    const ackChain = chain({ data: null, error: null })
+    fromMock.mockReturnValue(ackChain)
+    await ackResume('row-9')
+    expect(ackChain.update).toHaveBeenCalledWith(expect.objectContaining({ resumed_at: expect.any(String) }))
+  })
+})
+
+describe('markConnectTerminal (finding 4/round-2 — atomic terminal transition)', () => {
+  it('failed terminal sets terminal_at + completed_at + clears claim in ONE atomic write', async () => {
+    const c = chain({ data: null, error: null })
+    fromMock.mockReturnValue(c)
+    await markConnectTerminal('row-1', { failed: true })
+    const arg = c.update.mock.calls[0][0]
+    expect(arg).toEqual({ terminal_at: expect.any(String), completed_at: expect.any(String), claimed_at: null })
     expect(c.is).toHaveBeenCalledWith('terminal_at', null)
   })
 
-  it('double-terminal is idempotent (guarded by terminal_at is null)', async () => {
+  it('non-failed terminal sets terminal_at only', async () => {
     const c = chain({ data: null, error: null })
     fromMock.mockReturnValue(c)
     await markConnectTerminal('row-1')
-    await markConnectTerminal('row-1')
-    // Both calls use the same guard — second is a no-op (terminal_at already set)
-    expect(c.update).toHaveBeenCalledTimes(2)
+    expect(c.update).toHaveBeenCalledWith({ terminal_at: expect.any(String) })
+  })
+
+  it('re-claim after terminal is rejected by the query invariant', async () => {
+    // markConnectTerminal wrote terminal_at; claimConnectByState filters terminal_at IS NULL.
+    const terminalWrite = chain({ data: null, error: null })
+    fromMock.mockReturnValue(terminalWrite)
+    await markConnectTerminal('row-1', { failed: true })
+    const claimChain = chain({ data: null, error: null }) // row matches no guard → no row returned
+    fromMock.mockReturnValue(claimChain)
+    expect(await claimConnectByState('c'.repeat(48))).toBeNull()
+    expect(claimChain.is).toHaveBeenCalledWith('terminal_at', null)
+  })
+
+  it('release after terminal is rejected', async () => {
+    const c = chain({ data: null, error: null })
+    fromMock.mockReturnValue(c)
+    await releaseConnectClaim('row-1')
     expect(c.is).toHaveBeenCalledWith('terminal_at', null)
   })
 })

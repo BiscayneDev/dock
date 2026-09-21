@@ -157,24 +157,43 @@ export async function listUnresumedResumeChats(): Promise<string[]> {
 }
 
 /**
- * Resume poll: atomically claim the oldest completed-but-unresumed connect
- * for this chat. Returns the original request, or null.
+ * Resume poll: LEASE-BASED claim (lossless across restarts). Atomically
+ * takes a delivery lease on the oldest completed-but-undelivered token.
+ * `resumed_at` is NOT written here — it is the delivery acknowledgement,
+ * set only by ackResume() after space.send() succeeds. An expired lease is
+ * stealable, so a crash between claim and send is retried by the next poll.
  */
-export async function claimPendingResume(chatGuid: string): Promise<string | null> {
+export const RESUME_LEASE_MS = 60 * 1000
+
+export async function claimPendingResume(
+  chatGuid: string
+): Promise<{ id: string; pendingRequest: string } | null> {
   const supabase = db()
   const { data, error } = await supabase
     .from('connect_tokens')
-    .update({ resumed_at: new Date().toISOString() })
+    .update({ delivery_claimed_at: new Date().toISOString() })
     .eq('platform', 'imessage')
     .eq('chat_id', chatGuid)
     .not('completed_at', 'is', null)
     .is('resumed_at', null)
+    .is('terminal_at', null)
     .not('pending_request', 'is', null)
+    .or(`delivery_claimed_at.is.null,delivery_claimed_at.lt.${new Date(Date.now() - RESUME_LEASE_MS).toISOString()}`)
     .order('completed_at', { ascending: false })
     .limit(1)
-    .select('pending_request')
+    .select('id, pending_request')
     .maybeSingle()
 
   if (error || !data || !data.pending_request) return null
-  return data.pending_request as string
+  return { id: data.id as string, pendingRequest: data.pending_request as string }
+}
+
+/** Delivery acknowledgement — the ONLY writer of resumed_at. */
+export async function ackResume(tokenRowId: string): Promise<void> {
+  const supabase = db()
+  await supabase
+    .from('connect_tokens')
+    .update({ resumed_at: new Date().toISOString(), delivery_claimed_at: null })
+    .eq('id', tokenRowId)
+    .is('resumed_at', null)
 }

@@ -18,3 +18,16 @@ create policy "Service role can manage allowlist"
   to service_role
   using (true)
   with check (true);
+
+-- Provisioning (run in Supabase SQL editor, or add rows here before applying):
+-- Halsey's iMessage chat GUID(s) are read from the Mac mini running the
+-- Spectrum process (its log prints `imessage ← <guid>` per inbound message),
+-- then inserted as:
+--
+-- insert into public.beta_allowlist (chat_guid, note)
+-- values ('iMessage;-;+1XXXXXXXXXX', 'Halsey — beta owner')
+-- on conflict (chat_guid) do nothing;
+--
+-- Each of the 10 beta members gets one row with their guid + name in `note`.
+-- The insert is intentionally commented out: a placeholder guid must never
+-- ship active in a migration.
