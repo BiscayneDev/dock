@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger'
 import { runAgentLoop } from '@/lib/llm/agent-loop'
 import { buildSystemPrompt } from './system-prompt'
 import { fetchConversationHistory, persistMessage } from './memory'
+import { searchMemories, getActiveMemories } from '@/lib/memory/store'
 import { integrationTools, getOrchestratorTools } from '@/lib/tools/index'
 import {
   sendMessage,
@@ -151,6 +152,19 @@ async function handleMessageInner(chatId: number, telegramId: number, initialTex
   // Build system prompt with personality and context
   const connectedIntegrations = Object.keys(ctx.tokens)
   const userPrefs = (user as unknown as Record<string, unknown>).preferences as Record<string, unknown> | undefined
+
+  // Memory injection must never block or fail the reply path
+  const [relevantResult, profileResult] = await Promise.allSettled([
+    searchMemories(user.id, text, 8),
+    getActiveMemories(user.id, 30),
+  ])
+  const relevantMemories = relevantResult.status === 'fulfilled'
+    ? relevantResult.value?.map((m) => ({ content: m.content, valid_from: m.valid_from }))
+    : undefined
+  const profileMemories = profileResult.status === 'fulfilled'
+    ? profileResult.value?.map((m) => ({ content: m.content, type: m.type, valid_from: m.valid_from }))
+    : undefined
+
   const systemPrompt = buildSystemPrompt({
     datetime: new Date().toISOString(),
     timezone: user.timezone ?? 'UTC',
@@ -159,6 +173,8 @@ async function handleMessageInner(chatId: number, telegramId: number, initialTex
     userPreferences: userPrefs ?? undefined,
     isFirstMessage: isFirstMessage && connectedIntegrations.length > 0,
     messageCount: messageCount ?? 0,
+    relevantMemories,
+    profileMemories,
   })
 
   // Get tools (including recipe tools + user's MCP tools)
