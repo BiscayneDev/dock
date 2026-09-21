@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { WaitlistSection } from './waitlist-section'
 
 const CAPABILITIES = [
   { title: 'Email', desc: 'Search, read, draft, send, and archive emails', icon: 'M4 7L10.2 11.65C11.27 12.45 12.73 12.45 13.8 11.65L20 7M3 5h18v14H3z' },
@@ -146,6 +147,9 @@ export default function LandingPage() {
             ))}
           </div>
         </section>
+
+        {/* Private Beta — Waitlist */}
+        <WaitlistSection />
 
         {/* Footer */}
         <footer style={{ maxWidth: '54rem', margin: '3rem auto 0', padding: '2rem 1.5rem', borderTop: '1.5px solid var(--ink)', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
