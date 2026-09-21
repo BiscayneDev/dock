@@ -1,46 +1,92 @@
 /**
- * Dock's iMessage front door via Spectrum (Photon).
+ * Dock — iMessage front door via Spectrum (Photon).
  *
- * This is the Spectrum entry point — it bridges iMessage conversations to
- * Dock's existing LLM layer (src/lib/llm), which routes all model calls
- * through Shipyard Inference (cost-aware routing, prompt caching, savings
- * telemetry). Telegram remains channel #2; iMessage is the primary front
- * door.
+ * Standalone entry point: no Next.js, no @/ aliases, no vendored tgz.
+ * Calls Shipyard Inference's OpenAI-compatible HTTP gateway directly.
  *
- * Spectrum Cloud project: "Dock" (958b9de0-be41-4251-97ba-aa83894db907)
- * Managed iMessage line: +1 (628) 264-7754
+ * Run: npx tsx src/spectrum/index.ts
  *
- * Run with: npx tsx src/spectrum/index.ts
- * (or `bun run start` if using bun)
+ * Env:
+ *   SPECTRUM_PROJECT_ID     — Photon project ID
+ *   SPECTRUM_PROJECT_SECRET  — Photon project secret
+ *   SHIPYARD_GATEWAY_URL    — Shipyard Inference gateway (default: https://shipyard-inference.vercel.app)
+ *   SHIPYARD_API_KEY        — Gateway API key (sk-shipyard-…)
  */
 
 import { Spectrum } from 'spectrum-ts'
 import { imessage } from '@spectrum-ts/imessage'
-import { getLLMProvider } from '@/lib/llm'
-import type { ChatMessage } from '@/lib/llm/types'
-import { logger } from '@/lib/logger'
 
-// Conversation memory — keyed by iMessage chat guid.
-// In production this should persist to Supabase; for now it's in-memory.
-const conversations = new Map<string, ChatMessage[]>()
+// ── Config ─────────────────────────────────────────────────────────────────
 
+const PROJECT_ID = process.env.SPECTRUM_PROJECT_ID
+const PROJECT_SECRET = process.env.SPECTRUM_PROJECT_SECRET
+const GATEWAY_URL = process.env.SHIPYARD_GATEWAY_URL ?? 'https://shipyard-inference.vercel.app'
+const API_KEY = process.env.SHIPYARD_API_KEY
+
+if (!PROJECT_ID || !PROJECT_SECRET) {
+  console.error('SPECTRUM_PROJECT_ID and SPECTRUM_PROJECT_SECRET are required.')
+  console.error('Get them from the Photon dashboard: https://app.photon.codes')
+  process.exit(1)
+}
+
+if (!API_KEY) {
+  console.error('SHIPYARD_API_KEY is required. Get one from the Shipyard gateway:')
+  console.error(`  curl -X POST ${GATEWAY_URL}/api/keys -H 'Content-Type: application/json' -d '{}'`)
+  process.exit(1)
+}
+
+// ── Conversation memory ──────────────────────────────────────────────────────
+// In-memory per iMessage chat guid. Persist to Supabase in production.
+
+interface Message {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+}
+
+const conversations = new Map<string, Message[]>()
 const MAX_HISTORY = 20
 
-const SYSTEM_PROMPT = `You are Dock, a personal AI assistant accessible via iMessage.
+const SYSTEM_PROMPT =
+  'You are Dock, a personal AI assistant accessible via iMessage. ' +
+  'You help with email, calendar, GitHub, Notion, crypto, and anything else the user needs. ' +
+  "You're direct, concise, and helpful. You don't waste words on pleasantries. " +
+  'All your model calls route through Shipyard Inference — cost-aware routing across providers, ' +
+  'per-call USDC settlement, and automatic failover. The user never thinks about which model you use.'
 
-You help with email, calendar, GitHub, Notion, crypto, and anything else the user needs.
-You're direct, concise, and helpful. You don't waste words on pleasantries.
+// ── Shipyard gateway call ───────────────────────────────────────────────────
 
-All your model calls route through Shipyard Inference — cost-aware routing across
-providers, per-call USDC settlement, and automatic failover. The user never thinks
-about which model you're using; you just use the cheapest one that can do the job.
+async function chat(history: Message[]): Promise<string> {
+  const messages = [{ role: 'system' as const, content: SYSTEM_PROMPT }, ...history]
 
-When the user asks something you can't do from iMessage, tell them to use the web
-dashboard at dock for full tool access.`
+  const res = await fetch(`${GATEWAY_URL}/v1/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'auto',
+      messages,
+      stream: false,
+    }),
+  })
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Gateway ${res.status}: ${body || res.statusText}`)
+  }
+
+  const data = (await res.json()) as {
+    choices: { message: { content: string | null } }[]
+  }
+
+  return data.choices?.[0]?.message?.content ?? '(no response)'
+}
+
+// ── Spectrum bridge ─────────────────────────────────────────────────────────
 
 interface SpectrumMessage {
   content: { type: string; text?: string }
-  from: { handle?: string; name?: string }
 }
 
 interface SpectrumSpace {
@@ -48,80 +94,41 @@ interface SpectrumSpace {
   send(text: string): Promise<void>
 }
 
-export async function createDockSpectrum() {
-  const projectId = process.env.SPECTRUM_PROJECT_ID
-  const projectSecret = process.env.SPECTRUM_PROJECT_SECRET
+const app = await Spectrum({
+  projectId: PROJECT_ID,
+  projectSecret: PROJECT_SECRET,
+  providers: [imessage.config()],
+})
 
-  if (!projectId || !projectSecret) {
-    throw new Error(
-      'SPECTRUM_PROJECT_ID and SPECTRUM_PROJECT_SECRET are required. ' +
-        'Get them from the Photon dashboard (https://app.photon.codes).',
-    )
-  }
+console.log('Dock iMessage front door is live')
+console.log(`  Project: ${PROJECT_ID}`)
+console.log(`  Line: +1 (628) 264-7754`)
+console.log(`  Gateway: ${GATEWAY_URL}`)
 
-  const app = await Spectrum({
-    projectId,
-    projectSecret,
-    providers: [imessage.config()],
-  })
+for await (const [space, message] of app.messages) {
+  const msg = message as SpectrumMessage
+  const sp = space as SpectrumSpace
 
-  logger.info('Dock Spectrum iMessage front door is live', {
-    projectId,
-    line: '+1 (628) 264-7754',
-    providers: ['imessage'],
-  })
+  if (msg.content.type !== 'text' || !msg.content.text) continue
 
-  // Main message loop — each incoming iMessage is routed through the LLM layer.
-  for await (const [space, message] of app.messages) {
-    const msg = message as SpectrumMessage
-    const sp = space as SpectrumSpace
+  const text = msg.content.text.trim()
+  if (!text) continue
 
-    // Only handle text messages for now.
-    if (msg.content.type !== 'text' || !msg.content.text) continue
+  console.log(`imessage ← ${sp.guid}: ${text.slice(0, 80)}`)
 
-    const text = msg.content.text.trim()
-    if (!text) continue
+  // Load + update history
+  let history = conversations.get(sp.guid) ?? []
+  history.push({ role: 'user', content: text })
+  if (history.length > MAX_HISTORY) history = history.slice(-MAX_HISTORY)
 
-    const senderName = msg.from?.name ?? msg.from?.handle ?? 'unknown'
-    logger.info('imessage inbound', { from: senderName, guid: sp.guid })
-
-    // Load or initialize conversation history.
-    let history = conversations.get(sp.guid) ?? []
-    history.push({ role: 'user', content: text })
-
-    // Trim to keep context manageable.
-    if (history.length > MAX_HISTORY) {
-      history = history.slice(-MAX_HISTORY)
-    }
-
-    try {
-      const provider = getLLMProvider({ userId: `imessage:${sp.guid}` })
-      const response = await provider.chat({
-        system: SYSTEM_PROMPT,
-        messages: history,
-        tools: [],
-        model: undefined, // Let the router pick the cheapest capable model.
-      })
-
-      const reply = response.content ?? '(no response)'
-      await sp.send(reply)
-
-      // Store the assistant's reply in history.
-      history.push({ role: 'assistant', content: reply })
-      conversations.set(sp.guid, history)
-    } catch (err) {
-      logger.error('imessage LLM call failed', {
-        error: err instanceof Error ? err.message : String(err),
-      })
-      await sp.send(
-        'Something went wrong on my end. Try again in a moment — if it keeps happening, reach Halsey.',
-      )
-    }
+  try {
+    const reply = await chat(history)
+    await sp.send(reply)
+    history.push({ role: 'assistant', content: reply })
+    conversations.set(sp.guid, history)
+    console.log(`imessage → ${sp.guid}: ${reply.slice(0, 80)}`)
+  } catch (err) {
+    console.error('Gateway call failed:', err instanceof Error ? err.message : String(err))
+    await sp.send('Something went wrong on my end. Try again in a moment.')
   }
 }
-
-// Entry point when run directly.
-createDockSpectrum().catch((err) => {
-  console.error('Dock Spectrum failed to start:', err)
-  process.exit(1)
-})
