@@ -9,6 +9,11 @@ const EMBEDDINGS_BASE_URL = process.env.EMBEDDINGS_BASE_URL
 const EMBEDDINGS_API_KEY = process.env.EMBEDDINGS_API_KEY ?? process.env.OPENAI_API_KEY
 const EMBEDDINGS_MODEL = process.env.EMBEDDINGS_MODEL ?? 'text-embedding-3-small'
 
+/** The embedding model this deployment currently uses (tagged on every row). */
+export function currentEmbeddingModel(): string {
+  return EMBEDDINGS_MODEL
+}
+
 let client: OpenAI | null = null
 
 function getClient(): OpenAI {

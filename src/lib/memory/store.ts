@@ -1,6 +1,6 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
-import { embedText } from './embeddings'
+import { embedText, currentEmbeddingModel } from './embeddings'
 
 export interface MemorizableFact {
   content: string
@@ -85,7 +85,10 @@ export async function rememberMemories(
           content: fact.content,
         }
         if (fact.sourceMessageId) row.source_message_id = fact.sourceMessageId
-        if (embedding) row.embedding = embedding
+        if (embedding) {
+          row.embedding = embedding
+          row.embedding_model = currentEmbeddingModel()
+        }
 
         const { error: insertError } = await supabase
           .from('memories')
@@ -133,6 +136,76 @@ async function keywordSearchMemories(
   }
 }
 
+/**
+ * Detect an embedding-model switch: if existing vectors were produced by a
+ * different model than the current one, comparing them by cosine distance is
+ * meaningless. Returns the stale model name, or null when consistent.
+ */
+async function detectStaleEmbeddingModel(supabase: ReturnType<typeof createServerClient>): Promise<string | null> {
+  try {
+    const { data } = await supabase
+      .from('memories')
+      .select('embedding_model')
+      .not('embedding', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+    const stored = (data ?? [])[0]?.embedding_model as string | null | undefined
+    if (stored && stored !== currentEmbeddingModel()) return stored
+    return null
+  } catch {
+    return null // detection is best-effort; never block search
+  }
+}
+
+// Prevent concurrent re-embed passes (multiple simultaneous requests).
+let reembedInFlight = false
+
+const REEMBED_BATCH_SIZE = 200
+
+/**
+ * Re-embed all memories tagged with a stale model using the current model,
+ * then retag them. Fire-and-forget: search falls back to keyword results
+ * while this runs. Never throws.
+ */
+async function reembedStaleMemories(staleModel: string): Promise<void> {
+  if (reembedInFlight) return
+  reembedInFlight = true
+  try {
+    const supabase = createServerClient()
+    const { data: stale } = await supabase
+      .from('memories')
+      .select('id, content')
+      .eq('embedding_model', staleModel)
+      .not('embedding', 'is', null)
+      .limit(REEMBED_BATCH_SIZE)
+    if (!stale || stale.length === 0) return
+
+    logger.warn('Embedding model changed — re-embedding memories', {
+      staleModel,
+      currentModel: currentEmbeddingModel(),
+      count: stale.length,
+    })
+
+    let fixed = 0
+    for (const m of stale) {
+      const embedding = await embedText(m.content)
+      if (!embedding) continue
+      const { error } = await supabase
+        .from('memories')
+        .update({ embedding, embedding_model: currentEmbeddingModel() })
+        .eq('id', m.id)
+      if (!error) fixed += 1
+    }
+    logger.warn('Re-embed pass complete', { fixed, total: stale.length })
+  } catch (err) {
+    logger.error('reembedStaleMemories failed', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+  } finally {
+    reembedInFlight = false
+  }
+}
+
 /** Semantic search over memories via the match_memories RPC. */
 export async function searchMemories(
   userId: string,
@@ -147,6 +220,15 @@ export async function searchMemories(
     }
 
     const supabase = createServerClient()
+
+    // Model-switch guard: existing vectors from a different model would make
+    // cosine search meaningless. Serve keyword results and heal in background.
+    const staleModel = await detectStaleEmbeddingModel(supabase)
+    if (staleModel) {
+      void reembedStaleMemories(staleModel)
+      return keywordSearchMemories(userId, query, limit)
+    }
+
     let { data, error } = await supabase.rpc('match_memories', {
       p_user_id: userId,
       p_embedding: embedding,
