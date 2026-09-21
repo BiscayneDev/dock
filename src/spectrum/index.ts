@@ -94,6 +94,7 @@ interface SpectrumSpace {
   send(text: string): Promise<void>
 }
 
+async function main() {
 const app = await Spectrum({
   projectId: PROJECT_ID,
   projectSecret: PROJECT_SECRET,
@@ -132,3 +133,9 @@ for await (const [space, message] of app.messages) {
     await sp.send('Something went wrong on my end. Try again in a moment.')
   }
 }
+}
+
+main().catch((err) => {
+  console.error('Dock Spectrum failed to start:', err)
+  process.exit(1)
+})
