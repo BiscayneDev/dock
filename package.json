@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "spectrum": "tsx src/spectrum/index.ts",
-    "spectrum:dev": "tsx watch src/spectrum/index.ts"
+    "spectrum:dev": "tsx watch src/spectrum/index.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

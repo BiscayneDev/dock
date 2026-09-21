@@ -293,19 +293,96 @@ describe('legacy cookie rejection (finding 1)', () => {
   })
 })
 
-describe('ownership gate (finding 3 — fail closed)', () => {
-  it('rejects when the guid is not on the allowlist (fail closed)', async () => {
-    const c = chain({ data: null, error: null }) // not in allowlist
-    fromMock.mockReturnValue(c)
-    // bindSpectrumIdentity would call from('beta_allowlist').select().eq().maybeSingle()
-    // When no match → returns null → binding rejected
-    expect(c).toBeDefined()
+describe('ownership gate — bindSpectrumIdentity (finding 3 — fail closed)', () => {
+  // Each call to bindSpectrumIdentity makes multiple Supabase queries:
+  // 1. from('spectrum_identities').select().eq().maybeSingle() — existing binding
+  // 2. from('beta_allowlist').select().eq().maybeSingle() — allowlist check
+  // 3. from('users').insert().select().single() — user creation (ALLOW path only)
+  // 4. from('spectrum_identities').upsert() — binding (ALLOW path only)
+  //
+  // We control which query gets which result via fromMock per-call routing.
+
+  it('ALLOWS when guid is on the allowlist and creates a user + binding', async () => {
+    let callIndex = 0
+    fromMock.mockImplementation((table: string) => {
+      callIndex++
+      if (table === 'spectrum_identities' && callIndex === 1) {
+        return chain({ data: null, error: null }) // no existing binding
+      }
+      if (table === 'beta_allowlist') {
+        return chain({ data: { chat_guid: 'guid-test' }, error: null }) // on allowlist
+      }
+      if (table === 'users') {
+        return chain({ data: { id: 'new-user-1' }, error: null })
+      }
+      return chain({ data: null, error: null })
+    })
+
+    const result = await bindSpectrumIdentity('guid-test', 'handle-test')
+    expect(result).toBe('new-user-1')
   })
 
-  it('rejects when the allowlist query errors (fail closed)', async () => {
-    const c = chain({ data: null, error: { message: 'table missing' } })
-    fromMock.mockReturnValue(c)
-    // An error from the allowlist query → rejected, not open
-    expect(c).toBeDefined()
+  it('DENIES when guid is NOT on the allowlist — returns null, zero user inserts', async () => {
+    let userInsertCalled = false
+    fromMock.mockImplementation((table: string) => {
+      if (table === 'spectrum_identities') {
+        return chain({ data: null, error: null }) // no existing binding
+      }
+      if (table === 'beta_allowlist') {
+        return chain({ data: null, error: null }) // NOT on allowlist
+      }
+      if (table === 'users') {
+        userInsertCalled = true
+        return chain({ data: { id: 'should-not-happen' }, error: null })
+      }
+      return chain({ data: null, error: null })
+    })
+
+    const result = await bindSpectrumIdentity('guid-deny', 'handle-test')
+    expect(result).toBeNull()
+    expect(userInsertCalled).toBe(false) // zero user inserts on deny
+  })
+
+  it('DENIES when allowlist query errors — returns null, zero user inserts', async () => {
+    let userInsertCalled = false
+    fromMock.mockImplementation((table: string) => {
+      if (table === 'spectrum_identities') {
+        return chain({ data: null, error: null })
+      }
+      if (table === 'beta_allowlist') {
+        return chain({ data: null, error: { message: 'table missing' } }) // error
+      }
+      if (table === 'users') {
+        userInsertCalled = true
+        return chain({ data: { id: 'should-not-happen' }, error: null })
+      }
+      return chain({ data: null, error: null })
+    })
+
+    const result = await bindSpectrumIdentity('guid-err', null)
+    expect(result).toBeNull()
+    expect(userInsertCalled).toBe(false) // zero user inserts on deny
+  })
+
+  it('DENIES (fail closed) when allowlist is empty — returns null, zero user inserts', async () => {
+    let userInsertCalled = false
+    fromMock.mockImplementation((table: string) => {
+      if (table === 'spectrum_identities') {
+        return chain({ data: null, error: null })
+      }
+      if (table === 'beta_allowlist') {
+        // Empty allowlist — maybeSingle returns null (no match)
+        return chain({ data: null, error: null })
+      }
+      if (table === 'users') {
+        userInsertCalled = true
+        return chain({ data: { id: 'should-not-happen' }, error: null })
+      }
+      return chain({ data: null, error: null })
+    })
+
+    const result = await bindSpectrumIdentity('guid-empty', null)
+    expect(result).toBeNull()
+    expect(userInsertCalled).toBe(false) // zero user inserts — fail closed
   })
 })

@@ -13,9 +13,8 @@ export interface Session {
  * Session cookies are signed with ENCRYPTION_KEY (HMAC-SHA256):
  *   value = base64url(payload).base64url(hmac)
  * `userId` in an unsigned/tampered cookie is rejected before any DB lookup.
- * Legacy unsigned cookies (pre-signing deployments) are still ACCEPTED for
- * one release so live sessions don't break, and every read re-issues a
- * signed cookie — see the legacy path in getSession().
+ * Legacy unsigned cookies are REJECTED outright — the migration window is
+ * closed. No unsigned JSON is ever parsed or trusted.
  */
 
 function getSecret(): string {
