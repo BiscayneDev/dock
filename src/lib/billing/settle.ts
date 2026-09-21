@@ -14,7 +14,7 @@ import { logger } from '@/lib/logger'
 // crosses the threshold *during a chat*, we transfer that USDC from their Paybox
 // wallet to the treasury on Solana. Paybox wallet signing is non-custodial and
 // requires the user's scoped `pbxk1.` signing key (minted in the Paybox app,
-// stored encrypted in Dock, scoped to the one granted wallet, revocable) — with
+// stored encrypted in Dinghy, scoped to the one granted wallet, revocable) — with
 // it + an autonomous grant, Paybox signs IN-PROCESS with no per-op passkey, so
 // settlement is hands-off. (True keyless wallet-sign isn't possible: without the
 // key the request dead-ends at pending_signature.)

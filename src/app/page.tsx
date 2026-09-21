@@ -52,7 +52,7 @@ export default function LandingPage() {
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 21h14M12 21v-12M8 6c1.5 0 4-3 4-3s2.5 3 4 3" />
             </svg>
-            <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: '1.15rem', letterSpacing: '-0.02em' }}>Dock</span>
+            <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: '1.15rem', letterSpacing: '-0.02em' }}>Dinghy</span>
           </div>
           <div style={{ display: 'flex', gap: '0.75rem' }}>
             <Link href="/onboarding" style={{
@@ -87,7 +87,7 @@ export default function LandingPage() {
               Your AI first mate,<br />always on deck.
             </h1>
             <p style={{ fontSize: '1.1rem', lineHeight: 1.5, maxWidth: '28rem', opacity: 0.8 }}>
-              Dock manages your email, calendar, code, and notes through natural conversation in Telegram. No app switching. Just chat.
+              Dinghy manages your email, calendar, code, and notes through natural conversation in Telegram. No app switching. Just chat.
             </p>
             <div style={{ display: 'flex', gap: '0.75rem', marginTop: '2rem', flexWrap: 'wrap' }}>
               <Link href="https://t.me/heydeckhandbot" style={{
@@ -150,7 +150,7 @@ export default function LandingPage() {
         {/* Footer */}
         <footer style={{ maxWidth: '54rem', margin: '3rem auto 0', padding: '2rem 1.5rem', borderTop: '1.5px solid var(--ink)', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
           <p style={{ fontFamily: "'Outfit', sans-serif", fontSize: '0.75rem', fontWeight: 500, opacity: 0.4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Dock — AI-powered productivity through Telegram
+            Dinghy — AI-powered productivity through Telegram
           </p>
           <a href="/privacy" style={{ fontFamily: "'Outfit', sans-serif", fontSize: '0.7rem', opacity: 0.3, color: 'var(--ink)' }}>Privacy Policy</a>
         </footer>

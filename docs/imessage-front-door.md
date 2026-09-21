@@ -1,6 +1,6 @@
-# Dock — iMessage Front Door via Spectrum
+# Dinghy — iMessage Front Door via Spectrum
 
-Dock's iMessage front door is powered by [Spectrum](https://photon.codes/docs/spectrum-ts) (Photon). iMessage is the primary channel; Telegram remains channel #2.
+Dinghy's iMessage front door is powered by [Spectrum](https://photon.codes/docs/spectrum-ts) (Photon). iMessage is the primary channel; Telegram remains channel #2.
 
 The entry point (`src/spectrum/index.ts`) is a **standalone process** — no Next.js, no `@/` aliases. It calls Shipyard Inference's OpenAI-compatible HTTP gateway directly via `fetch`.
 
@@ -43,7 +43,7 @@ No Next.js bundler, no vendored tgz, no `@/` aliases. Just `spectrum-ts` + `@spe
 
 ## Spectrum Cloud project
 
-- **Project:** Dock (free tier, 10 users)
+- **Project:** Dinghy (free tier, 10 users)
 - **Project ID:** `958b9de0-be41-4251-97ba-aa83894db907`
 - **Managed iMessage line:** +1 (628) 264-7754 (shared free line; replies only to numbers added to the project)
 - **Photon dashboard:** https://app.photon.codes

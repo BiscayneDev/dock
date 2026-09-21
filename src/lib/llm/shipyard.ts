@@ -13,7 +13,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 
 /**
- * The model Dock would otherwise have called for a request that doesn't pin one.
+ * The model Dinghy would otherwise have called for a request that doesn't pin one.
  * This is the savings BASELINE — "cheaper than calling <DEFAULT_MODEL> direct."
  */
 const DEFAULT_MODEL = process.env.LLM_MODEL ?? 'claude-sonnet-4-5'
@@ -119,7 +119,7 @@ export interface ShipyardProviderOptions {
 }
 
 /**
- * Dock's `LLMProvider`, backed by the shipyard-inference `Router`: cost-routes
+ * Dinghy's `LLMProvider`, backed by the shipyard-inference `Router`: cost-routes
  * across Anthropic / OpenAI / UsePod to the cheapest capable model, with
  * Anthropic prompt caching on, and records per-request savings (vs the model the
  * call intended) to Supabase. Drop-in — the `chat()` shape is identical, so no

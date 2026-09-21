@@ -72,7 +72,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const response = await fetch(url, {
       method,
       headers: {
-        'User-Agent': 'Dock-Playground/1.0',
+        'User-Agent': 'Dinghy-Playground/1.0',
         'Accept': 'application/json, text/plain, */*',
         ...customHeaders,
       },

@@ -1,5 +1,5 @@
 /**
- * Dock — iMessage front door via Spectrum (Photon).
+ * Dinghy — iMessage front door via Spectrum (Photon).
  *
  * Standalone entry point: no Next.js, no @/ aliases, no vendored tgz.
  * Calls Shipyard Inference's OpenAI-compatible HTTP gateway directly.
@@ -47,7 +47,7 @@ const conversations = new Map<string, Message[]>()
 const MAX_HISTORY = 20
 
 const SYSTEM_PROMPT =
-  'You are Dock, a personal AI assistant accessible via iMessage. ' +
+  'You are Dinghy, a personal AI assistant accessible via iMessage. ' +
   'You help with email, calendar, GitHub, Notion, crypto, and anything else the user needs. ' +
   "You're direct, concise, and helpful. You don't waste words on pleasantries. " +
   'All your model calls route through Shipyard Inference — cost-aware routing across providers, ' +
@@ -108,7 +108,7 @@ const app = await Spectrum({
   providers: [imessage.config()],
 })
 
-console.log('Dock iMessage front door is live')
+console.log('Dinghy iMessage front door is live')
 console.log(`  Project: ${PROJECT_ID}`)
 console.log(`  Line: +1 (628) 264-7754`)
 console.log(`  Gateway: ${GATEWAY_URL}`)
@@ -165,6 +165,6 @@ for await (const [space, message] of app.messages) {
 }
 
 main().catch((err) => {
-  console.error('Dock Spectrum failed to start:', err)
+  console.error('Dinghy Spectrum failed to start:', err)
   process.exit(1)
 })

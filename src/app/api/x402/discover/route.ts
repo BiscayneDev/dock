@@ -4,7 +4,7 @@ import { buildRecipeServiceInfo } from '@/lib/x402/server'
 
 // x402 service discovery endpoint
 // Returns all public paid recipes as x402-compatible services.
-// External AI agents can use this to discover what Dock recipes are available.
+// External AI agents can use this to discover what Dinghy recipes are available.
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(request.url)
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const response = NextResponse.json({
     protocol: 'x402',
     version: '1.0',
-    provider: 'Dock',
+    provider: 'Dinghy',
     description: 'AI-powered automation recipes available via x402 protocol',
     services,
     total: services.length,

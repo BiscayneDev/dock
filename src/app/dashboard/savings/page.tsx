@@ -164,7 +164,7 @@ export default function SavingsPage() {
           {/* Global tally */}
           {g && g.requests > 0 && (
             <div className="dock-card" style={{ borderColor: 'color-mix(in srgb, var(--mesh-cyan) 40%, transparent)' }}>
-              <p className="section-title" style={{ color: 'var(--mesh-cyan)' }}>Across all of Dock</p>
+              <p className="section-title" style={{ color: 'var(--mesh-cyan)' }}>Across all of Dinghy</p>
               <p className="meta-text" style={{ marginTop: '0.25rem' }}>
                 {usd(g.savedUsd)} saved over {g.requests.toLocaleString()} requests
                 {g.baselineUsd > 0 && <> — {g.savedPct.toFixed(0)}% cheaper than direct.</>}

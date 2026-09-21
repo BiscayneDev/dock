@@ -57,7 +57,7 @@ export async function GET(): Promise<ImageResponse> {
               textAlign: 'center',
             }}
           >
-            Dock
+            Dinghy
           </div>
 
           {/* Tagline */}

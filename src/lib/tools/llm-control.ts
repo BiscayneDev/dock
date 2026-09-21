@@ -15,7 +15,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 export const switchLLMProvider: Tool = {
   name: 'switch_llm_provider',
   description:
-    "Switch which LLM provider you (Dock) will use for the user's future messages. " +
+    "Switch which LLM provider you (Dinghy) will use for the user's future messages. " +
     "Options: 'anthropic' (direct Claude API), 'openai' (direct GPT API), 'usepod' " +
     "(wallet-funded proxy that pays Anthropic with the user's USDC balance). " +
     "The change is persisted to the user's preferences and takes effect on their next message.",
