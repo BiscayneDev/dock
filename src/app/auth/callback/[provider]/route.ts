@@ -34,6 +34,7 @@ import {
   claimConnectByState,
   releaseConnectClaim,
   completeConnect,
+  markConnectTerminal,
   bindSpectrumIdentity,
 } from '@/lib/connect-token'
 
@@ -204,6 +205,9 @@ async function handleGoogleConnectCallback(
   }
 
   try {
+    // ⚠️ Once the authorization code is exchanged it is consumed (single-use).
+    // Any failure AFTER this point cannot be retried with the same code.
+    // We mark the attempt terminal and require a fresh connect token.
     const result = await exchangeGoogleCode(code)
 
     // Bind the chat identity to a Dock user before storing tokens.
@@ -215,8 +219,10 @@ async function handleGoogleConnectCallback(
       userId = await getOrCreateUserByTelegramId(BigInt(connect.chatId))
     }
     if (!userId) {
-      await releaseConnectClaim(connect.id)
+      // Code already consumed — cannot retry. Mark terminal.
+      await markConnectTerminal(connect.id)
       logger.error('connect flow: failed to bind identity', { platform: connect.platform })
+      await notifyConnectFailure(connect)
       return NextResponse.redirect(`${appUrl}/onboarding?error=connect_identity_failed`)
     }
 
@@ -232,8 +238,9 @@ async function handleGoogleConnectCallback(
     // Never claim connected until a live call against the fresh tokens passes.
     const verified = await verifyGoogleConnection(result.accessToken, result.refreshToken)
     if (!verified) {
-      // Release the claim: the same consent round-trip can retry within TTL.
-      await releaseConnectClaim(connect.id)
+      // Code consumed — cannot retry with same consent. Mark terminal and
+      // tell the user to start a fresh connect from their chat.
+      await markConnectTerminal(connect.id)
       logger.error('connect flow: live verification failed', { platform: connect.platform })
       await notifyConnectFailure(connect)
       return NextResponse.redirect(`${appUrl}/onboarding?error=connect_verification_failed`)
@@ -244,7 +251,9 @@ async function handleGoogleConnectCallback(
     await notifyConnectSuccess(connect)
     return NextResponse.redirect(`${appUrl}/onboarding?connected=google&via=chat`)
   } catch (err) {
-    await releaseConnectClaim(connect.id)
+    // Code may or may not have been consumed — either way, the auth code is
+    // single-use and a retry with the same state would fail. Mark terminal.
+    await markConnectTerminal(connect.id)
     const message = err instanceof Error ? err.message : String(err)
     logger.error('connect flow callback error', { error: message })
     await notifyConnectFailure(connect)

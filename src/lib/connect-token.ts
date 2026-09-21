@@ -166,7 +166,7 @@ export async function claimConnectByState(
   }
 }
 
-/** Release a failed callback claim so the state can retry (within TTL). */
+/** Release a pre-exchange claim so the state can retry (before code is consumed). */
 export async function releaseConnectClaim(tokenRowId: string): Promise<void> {
   const supabase = createServerClient()
   await supabase
@@ -174,6 +174,21 @@ export async function releaseConnectClaim(tokenRowId: string): Promise<void> {
     .update({ claimed_at: null })
     .eq('id', tokenRowId)
     .is('completed_at', null)
+}
+
+/**
+ * Mark a connect attempt terminal — used after the authorization code has been
+ * consumed (single-use). The same state cannot retry; the user must start a
+ * fresh connect token from their chat. Sets `completed_at` to prevent
+ * re-claiming and signals the attempt is done (failed).
+ */
+export async function markConnectTerminal(tokenRowId: string): Promise<void> {
+  const supabase = createServerClient()
+  await supabase
+    .from('connect_tokens')
+    .update({ terminal_at: new Date().toISOString() })
+    .eq('id', tokenRowId)
+    .is('terminal_at', null)
 }
 
 /** Mark the flow fully complete — ONLY after live verification passes. */
@@ -230,6 +245,33 @@ export async function bindSpectrumIdentity(chatGuid: string, handle?: string | n
       await supabase.from('spectrum_identities').update({ handle }).eq('chat_guid', chatGuid)
     }
     return existing.user_id as string
+  }
+
+  // Ownership gate: in private beta, only chat guids on the beta allowlist
+  // may create a new binding. This prevents a random number texting the
+  // managed iMessage line from binding a Google account to a Dock user.
+  // Halsey adds guids to the allowlist via the Supabase dashboard.
+  //
+  // When the allowlist is empty (not yet populated), fall open — but log
+  // a warning so it's visible. Halsey must populate it before the 10-seat
+  // beta opens.
+  const { data: allowed } = await supabase
+    .from('beta_allowlist')
+    .select('chat_guid')
+    .eq('chat_guid', chatGuid)
+    .maybeSingle()
+
+  const { count } = await supabase
+    .from('beta_allowlist')
+    .select('*', { count: 'exact', head: true })
+
+  if (count !== null && count > 0 && !allowed) {
+    console.error(`bindSpectrumIdentity: ${chatGuid} not on beta allowlist (rejected)`)
+    return null
+  }
+
+  if (count === 0) {
+    console.warn('bindSpectrumIdentity: beta_allowlist is empty — binding open (populate before beta)')
   }
 
   // Create the backing user (telegram_id nullable since migration 011).

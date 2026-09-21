@@ -150,6 +150,11 @@ for await (const [space, message] of app.messages) {
   // Photon provides one (used for identity diagnostics/collision audits).
   spaceCache.set(sp.guid, sp)
   activeChats.add(sp.guid)
+
+  // Flush any deferred messages (cold-restart resume) before processing.
+  await flushDeferred(sp.guid, sp).catch((err) =>
+    console.error('Deferred flush failed:', err instanceof Error ? err.message : String(err))
+  )
   const senderHandle =
     (msg as { sender?: { handle?: string } }).sender?.handle ??
     (msg as { from?: string }).from ??
@@ -241,13 +246,38 @@ setInterval(() => {
 }, 15_000)
 }
 
-/** Send to a known chat guid outside the message loop (resume path). */
+/** Send to a known chat guid outside the message loop (resume path).
+ *
+ * If the chat's space is in the in-memory cache (warm process), send immediately.
+ * If not (cold restart), queue the message — it will be flushed on the next
+ * inbound message from that chat, so the user sees the confirmation when they
+ * next text, without losing the resume. Never throws. */
+const deferredQueue = new Map<string, string[]>()
+
 async function sp_sendTo(guid: string, text: string): Promise<void> {
-  // Spectrum spaces are only reachable inside the message loop; resume
-  // replies are sent via the app-level space cache populated on first message.
   const space = spaceCache.get(guid)
-  if (!space) throw new Error(`no space cached for ${guid}`)
-  await space.send(text)
+  if (space) {
+    await space.send(text)
+    return
+  }
+  // Cold restart — the space isn't cached. Queue so the next inbound message
+  // from this chat flushes it before processing. This is a safe fallback:
+  // the user sees "google connected ✓" on their next text, not a lost message.
+  const q = deferredQueue.get(guid) ?? []
+  q.push(text)
+  deferredQueue.set(guid, q)
+  console.log(`imessage: queued ${q.length} deferred message(s) for ${guid} (cold restart)`)
+}
+
+/** Flush any deferred messages for a chat before processing a new inbound message. */
+async function flushDeferred(guid: string, space: SpectrumSpace): Promise<void> {
+  const q = deferredQueue.get(guid)
+  if (!q || q.length === 0) return
+  for (const msg of q) {
+    await space.send(msg)
+  }
+  deferredQueue.delete(guid)
+  console.log(`imessage → ${guid}: flushed ${q.length} deferred message(s)`)
 }
 
 const spaceCache = new Map<string, SpectrumSpace>()

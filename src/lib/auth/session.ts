@@ -69,24 +69,14 @@ export async function getSession(): Promise<Session | null> {
     return null
   }
 
-  let session: Session | null
-  let legacy = false
-
-  if (sessionCookie.value.includes('.')) {
-    session = decodeSessionCookie(sessionCookie.value)
-  } else {
-    // Legacy unsigned cookie: tamperable userId. Accept for now (existing
-    // logins), verify against the DB below, and transparently re-issue a
-    // signed cookie so legacy sessions age out within one release.
-    legacy = true
-    try {
-      session = JSON.parse(sessionCookie.value) as Session
-    } catch {
-      return null
-    }
+  // Legacy unsigned cookies are no longer accepted — the migration window has
+  // closed. An unsigned cookie is a forgery vector; reject it outright.
+  if (!sessionCookie.value.includes('.')) {
+    return null
   }
 
-  if (!session?.userId) return null
+  const session = decodeSessionCookie(sessionCookie.value)
+  if (!session) return null
 
   // Verify user exists
   const supabase = createServerClient()
@@ -97,14 +87,6 @@ export async function getSession(): Promise<Session | null> {
     .single()
 
   if (!data) return null
-
-  if (legacy) {
-    try {
-      cookieStore.set(SESSION_COOKIE, encodeSessionCookie(session), cookieOptions())
-    } catch {
-      // Read-only cookie context (e.g. RSC render) — next setSession re-signs.
-    }
-  }
 
   return session
 }
