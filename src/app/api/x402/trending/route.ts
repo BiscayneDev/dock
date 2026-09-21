@@ -53,7 +53,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const response = await fetch(url.toString(), {
       headers: {
         'Accept': 'application/json',
-        'User-Agent': 'Dock/1.0 (marketplace)',
+        'User-Agent': 'Dinghy/1.0 (marketplace)',
       },
       signal: controller.signal,
     })

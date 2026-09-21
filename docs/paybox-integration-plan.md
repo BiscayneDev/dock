@@ -6,7 +6,7 @@
 
 ## What changed after reading the docs
 
-The earlier brief assumed Paybox was a **writable backing vault** Dock would push
+The earlier brief assumed Paybox was a **writable backing vault** Dinghy would push
 user OAuth tokens / API keys into (Plan A "secret store", Plan B "KMS / envelope
 encryption"), making it the store of record behind `oauth_tokens` + `crypto.ts`.
 
@@ -14,25 +14,25 @@ encryption"), making it the store of record behind `oauth_tokens` + `crypto.ts`.
 
 - There is **no programmatic vaulting / write API**. "Credential vaulting, client
   management, approvals, and audit are done by the user in the Paybox app — they
-  are not a public API" (`/api-reference`). Dock cannot stuff Google/Notion/etc.
+  are not a public API" (`/api-reference`). Dinghy cannot stuff Google/Notion/etc.
   refresh tokens into Paybox automatically.
 - The entire developer surface is **OAuth 2.1 (authorize) → MCP (act)**. An agent
   never receives a raw credential — it gets a **scoped output**: a one-time
   virtual card, a signature, or a short-lived secret token.
 - Credentials are user-curated and of three kinds: **card** (Basis Theory),
   **wallet** (MoonX MPC), **secret** (envelope-encrypted). Not an arbitrary KV
-  secret store Dock can read/write by key.
+  secret store Dinghy can read/write by key.
 
 So Plans A and B from the old brief are **infeasible** and are dropped. Paybox
-does not replace Dock's `oauth_tokens` ciphertext-in-Postgres model.
+does not replace Dinghy's `oauth_tokens` ciphertext-in-Postgres model.
 
-## What Paybox actually is (and where it fits in Dock)
+## What Paybox actually is (and where it fits in Dinghy)
 
-A **passkey-gated credential vault for AI agents**. The right framing for Dock is:
-Paybox is a new **agent-capability provider** — it gives Dock's agent the ability
+A **passkey-gated credential vault for AI agents**. The right framing for Dinghy is:
+Paybox is a new **agent-capability provider** — it gives Dinghy's agent the ability
 to **pay, sign, reveal secrets, and swap** on behalf of the user, each operation
 scoped by a user-approved grant and gated by a passkey step-up. This sits
-naturally alongside Dock's existing money/crypto surface (`openwallet` +
+naturally alongside Dinghy's existing money/crypto surface (`openwallet` +
 `src/lib/tools/wallet.ts`, `/api/payments`, x402) and the agent loop — **not**
 behind the credential-encryption seam.
 
@@ -66,17 +66,17 @@ behind the credential-encryption seam.
 
 Wallet **signing never happens in agent code**. Normally the MCP *host* renders an
 in-chat **signing window** (`ui://paybox/wallet-sign`) that signs client-side via
-MoonX MPC. **Dock is a server-side agent (Next.js) with a Telegram/web chat — it
+MoonX MPC. **Dinghy is a server-side agent (Next.js) with a Telegram/web chat — it
 does not render an MCP host signing window.** Consequences:
 
 - `request_payment` and `request_secret` complete **fully server-side** over
   MCP/REST → these work today with just OAuth.
 - `request_wallet_sign` and `request_swap` will **stall at `pending_signature`**
-  unless Dock signs in-process via `@paybox-sh/sdk` with a provisioned `pbxk1.`
+  unless Dinghy signs in-process via `@paybox-sh/sdk` with a provisioned `pbxk1.`
   signing key. So wallet sign/swap is a **later phase** requiring the SDK + key
   provisioning, not the MCP-only path.
 
-## How Dock is built (the seam we plug into)
+## How Dinghy is built (the seam we plug into)
 
 - **Per-provider integration modules** — `src/lib/integrations/*.ts`. Each does
   auth-URL → exchange-code → `store…Tokens` → `getDecrypted…Tokens`, persisting to
@@ -152,15 +152,15 @@ loop, so payments/secrets UX suffers. Not recommended as the primary path.)
 
 ### Cross-cutting
 
-- Surface `approval_url` to the user through Dock's existing chat channel; the
+- Surface `approval_url` to the user through Dinghy's existing chat channel; the
   agent must wait for approval and poll, not retry.
-- Audit every Paybox op in Dock's logs (Paybox also keeps its own audit trail).
+- Audit every Paybox op in Dinghy's logs (Paybox also keeps its own audit trail).
 - Feature-flag the provider; ship Phase 1 first.
 
 ## Open questions (smaller now)
 
-1. **Dynamic registration cadence** — one Dock-wide `client_id`, or one per user?
-   (One Dock-wide public client is simplest; the per-user grant set lives in the
+1. **Dynamic registration cadence** — one Dinghy-wide `client_id`, or one per user?
+   (One Dinghy-wide public client is simplest; the per-user grant set lives in the
    token, not the client.)
 2. **Phase-2 signing-key provisioning UX** — can the `pbxk1.` key be minted in a
    headless/server flow, or does it require the user in the Paybox app each time?
@@ -215,12 +215,12 @@ integration onto it, replacing the hand-rolled MCP client from Phase 1 (the part
 flagged as unverified). The SDK talks to Paybox's REST `/agent/*` surface using
 the same OAuth bearer token we already mint, returns typed `AgentResponse`s, and
 signs wallet ops **in-process / non-custodially** with a `pbxk1.` key (the MoonX
-secret never reaches Dock). It's fully bundled (no `@paybox/mcp-app` runtime dep)
+secret never reaches Dinghy). It's fully bundled (no `@paybox/mcp-app` runtime dep)
 and typechecks under `skipLibCheck`.
 
 - `getPayboxSdk(tokens, userId)` builds the SDK client with a fresh access token
   (+ the signing key when present). `agentResultToTool` maps `AgentResponse` to
-  Dock's `ToolResult`, preserving the submit→poll lifecycle (no `approval_url` on
+  Dinghy's `ToolResult`, preserving the submit→poll lifecycle (no `approval_url` on
   the REST surface — we surface `approval_id` + the app URL instead).
 - New tools: `paybox_request_wallet_sign` (message / typedData / transaction /
   solana intents), `paybox_request_swap`, `paybox_get_portfolio`. Sign/swap
@@ -235,7 +235,7 @@ and typechecks under `skipLibCheck`.
 
 **Must apply migration 005** to the live DB for signing-key storage to work.
 
-Follow-up worth doing: route Dock's x402 spend through Paybox via the SDK's
+Follow-up worth doing: route Dinghy's x402 spend through Paybox via the SDK's
 `useService` / `payX402` / `discoverServices` (the gate already requires Paybox
 for `x402_fetch`), retiring the OpenWallet-backed x402 signer.
 

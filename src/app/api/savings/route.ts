@@ -48,7 +48,7 @@ function shape<T extends Totals | ModelRow>(t: T) {
 
 /**
  * Savings summary for the savings dashboard: this user's totals + per-model
- * breakdown, plus global totals across all Dock users. One RPC round trip
+ * breakdown, plus global totals across all Dinghy users. One RPC round trip
  * (inference_savings_summary), read via the service-role client.
  */
 export async function GET(): Promise<NextResponse> {

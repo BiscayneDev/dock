@@ -77,7 +77,7 @@ export default function MarketplaceRecipeDetailPage({ params }: { params: Promis
       {/* Header */}
       <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
         <p style={{ opacity: 0.5, fontSize: '0.8rem' }}>
-          Made with Dock | By {recipe.creator.name}
+          Made with Dinghy | By {recipe.creator.name}
           {recipe.creator.username && <span> @{recipe.creator.username}</span>}
         </p>
       </div>

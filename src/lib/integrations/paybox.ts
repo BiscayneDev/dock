@@ -10,10 +10,10 @@ import type { DecryptedTokens, ToolResult, UserContext } from '@/lib/llm/types'
 //
 // The developer surface is OAuth 2.1 (authorize) -> the Paybox agent API. Paybox
 // is NOT a writable secret store; credentials are vaulted by the user in the
-// Paybox app. Dock connects as a public OAuth client and drives the official
+// Paybox app. Dinghy connects as a public OAuth client and drives the official
 // SDK (REST /agent/* over the same bearer token) on the user's behalf. Wallet
 // signing is non-custodial and runs in-process via a `pbxk1.` signing key the
-// user provisions in the Paybox app; the MoonX secret never reaches Dock.
+// user provisions in the Paybox app; the MoonX secret never reaches Dinghy.
 
 const DEFAULT_API_URL = 'https://api.paybox.sh'
 const DEFAULT_APP_URL = 'https://app.paybox.sh'
@@ -96,7 +96,7 @@ export async function getOrRegisterClientId(): Promise<string> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({
-      client_name: 'Dock',
+      client_name: 'Dinghy',
       redirect_uris: [getRedirectUri()],
       token_endpoint_auth_method: 'none',
       grant_types: ['authorization_code', 'refresh_token'],

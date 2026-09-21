@@ -9,9 +9,9 @@ export default function PrivacyPolicy() {
         </p>
 
         <section>
-          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>What Dock Is</h2>
+          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>What Dinghy Is</h2>
           <p>
-            Dock is an AI assistant that lives in Telegram and helps you manage email, calendar, GitHub, Notion, crypto wallets, and health data. It also provides a companion web app (&ldquo;The Harbor&rdquo;) for account management, integrations, and recipe automation.
+            Dinghy is an AI assistant that lives in Telegram and helps you manage email, calendar, GitHub, Notion, crypto wallets, and health data. It also provides a companion web app (&ldquo;The Harbor&rdquo;) for account management, integrations, and recipe automation.
           </p>
         </section>
 
@@ -19,10 +19,10 @@ export default function PrivacyPolicy() {
           <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Information We Collect</h2>
           <p><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Account information:</strong> When you connect via Telegram, we store your Telegram user ID, first name, and username. No phone number or password is collected.</p>
           <p style={{ marginTop: '0.5rem' }}><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Integration tokens:</strong> When you connect services (Google, GitHub, Notion, Oura, WHOOP, MoonPay), we store encrypted OAuth access tokens and refresh tokens. These are used solely to make API calls on your behalf. All tokens are encrypted at rest using AES-256-GCM.</p>
-          <p style={{ marginTop: '0.5rem' }}><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Messages:</strong> Your conversation history with the Dock bot is stored to maintain context across sessions. Messages are associated with your user ID and are not shared with other users.</p>
+          <p style={{ marginTop: '0.5rem' }}><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Messages:</strong> Your conversation history with the Dinghy bot is stored to maintain context across sessions. Messages are associated with your user ID and are not shared with other users.</p>
           <p style={{ marginTop: '0.5rem' }}><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Health data:</strong> If you connect Oura Ring or WHOOP, we access sleep, readiness/recovery, activity, and heart rate data through their APIs. This data is fetched on demand and not stored persistently — it is retrieved each time the agent needs it.</p>
           <p style={{ marginTop: '0.5rem' }}><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Recipes and automation:</strong> Recipes you create (including instructions, trigger configurations, and run history) are stored in our database.</p>
-          <p style={{ marginTop: '0.5rem' }}><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Wallet information:</strong> If you connect a MoonPay wallet, your wallet address and chain preference are stored. Private keys are never stored by Dock — signing happens through the OpenWallet Standard (OWS) client you control.</p>
+          <p style={{ marginTop: '0.5rem' }}><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Wallet information:</strong> If you connect a MoonPay wallet, your wallet address and chain preference are stored. Private keys are never stored by Dinghy — signing happens through the OpenWallet Standard (OWS) client you control.</p>
         </section>
 
         <section>
@@ -39,7 +39,7 @@ export default function PrivacyPolicy() {
 
         <section>
           <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Third-Party Services</h2>
-          <p>Dock integrates with the following third-party services. Each has its own privacy policy:</p>
+          <p>Dinghy integrates with the following third-party services. Each has its own privacy policy:</p>
           <ul style={{ marginTop: '0.5rem', paddingLeft: '1.25rem' }}>
             <li>Google (Gmail, Calendar) — for email and calendar management</li>
             <li>GitHub — for repository, issue, and PR management</li>
@@ -77,12 +77,12 @@ export default function PrivacyPolicy() {
 
         <section>
           <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>x402 Payments</h2>
-          <p>When using paid recipes or x402 services, payments are processed on-chain (USDC on Base, Ethereum, or Solana). Transaction hashes are stored for record-keeping. Dock does not hold or custody any funds — all transactions are initiated through your connected wallet.</p>
+          <p>When using paid recipes or x402 services, payments are processed on-chain (USDC on Base, Ethereum, or Solana). Transaction hashes are stored for record-keeping. Dinghy does not hold or custody any funds — all transactions are initiated through your connected wallet.</p>
         </section>
 
         <section>
           <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Children</h2>
-          <p>Dock is not intended for use by anyone under the age of 13. We do not knowingly collect personal information from children.</p>
+          <p>Dinghy is not intended for use by anyone under the age of 13. We do not knowingly collect personal information from children.</p>
         </section>
 
         <section>

@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 
 // x402 server middleware for gating recipe execution endpoints
-// External AI agents can discover and pay for Dock recipes via HTTP 402
+// External AI agents can discover and pay for Dinghy recipes via HTTP 402
 
 interface X402ServerConfig {
   recipientAddress: string
@@ -174,7 +174,7 @@ export function withX402RecipeGate(
     if (creator) {
       await supabase.from('recipe_payments').insert({
         recipe_id: recipeId,
-        payer_id: '00000000-0000-0000-0000-000000000000', // External x402 payer (no Dock account)
+        payer_id: '00000000-0000-0000-0000-000000000000', // External x402 payer (no Dinghy account)
         recipient_id: creator.id as string,
         amount: recipe.fee_amount as number,
         currency: 'USDC',

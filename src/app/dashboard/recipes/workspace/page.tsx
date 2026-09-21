@@ -102,7 +102,7 @@ function WorkspacePage() {
         <header className="ws-sidebar-header">
           <div className="ws-logo" onClick={() => router.push('/harbor')}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h16M12 20v-8M7 8c2 0 5-3 5-3s3 3 5 3M12 5v3" /></svg>
-            <span>Dock</span>
+            <span>Dinghy</span>
           </div>
           <button className="ws-icon-btn" onClick={() => { setMessages([]); setInput('') }} title="New conversation">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round"><path d="M12 4v16m-8-8h16" /></svg>
@@ -175,7 +175,7 @@ function WorkspacePage() {
               <div key={i} className={`ws-msg ws-msg-${msg.role}`}>
                 <div className="ws-msg-label">
                   {msg.role === 'agent' && <div className="ws-agent-dot"><svg width="14" height="14" viewBox="0 0 24 24" fill="var(--cream)" stroke="var(--ink)" strokeWidth="1.5"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" /></svg></div>}
-                  <span className="ws-meta">{msg.role === 'user' ? 'You' : 'Dock Agent'}</span>
+                  <span className="ws-meta">{msg.role === 'user' ? 'You' : 'Dinghy Agent'}</span>
                 </div>
                 <div className={`ws-msg-wrap ${msg.role === 'user' ? 'ws-msg-wrap-right' : ''}`}>
                   <div className="ws-msg-col">

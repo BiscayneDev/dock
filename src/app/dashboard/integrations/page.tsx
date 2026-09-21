@@ -27,7 +27,7 @@ export default function IntegrationsPage() {
 
   return (
     <HarborShell title="MCP Servers" showBack>
-      <p style={{ opacity: 0.5, fontSize: '0.9rem', marginBottom: '1rem' }}>Extend Dock with custom tool servers.</p>
+      <p style={{ opacity: 0.5, fontSize: '0.9rem', marginBottom: '1rem' }}>Extend Dinghy with custom tool servers.</p>
 
       {/* Featured: MoonPay Agents */}
       {!connections.some((c) => c.name.toLowerCase().includes('moonpay')) && (
@@ -81,7 +81,7 @@ export default function IntegrationsPage() {
         <div className="dock-card" style={{ padding: '3rem', alignItems: 'center', textAlign: 'center' }}>
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3, marginBottom: '1rem' }}><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><circle cx="17" cy="17" r="3" /></svg>
           <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700 }}>No servers connected</p>
-          <p style={{ fontSize: '0.85rem', opacity: 0.5, marginTop: '0.25rem' }}>Add an MCP server to extend Dock with custom tools.</p>
+          <p style={{ fontSize: '0.85rem', opacity: 0.5, marginTop: '0.25rem' }}>Add an MCP server to extend Dinghy with custom tools.</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>

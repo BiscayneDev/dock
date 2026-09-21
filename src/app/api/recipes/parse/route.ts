@@ -33,7 +33,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     : ''
 
   const response = await llm.chat({
-    system: `You parse natural language recipe descriptions into structured recipe configurations for an AI assistant called Dock.
+    system: `You parse natural language recipe descriptions into structured recipe configurations for an AI assistant called Dinghy.
 
 Given a user's description, extract:
 1. name - short descriptive name (2-5 words)

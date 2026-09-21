@@ -30,7 +30,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const llm = getLLMProvider()
 
   const response = await llm.chat({
-    system: `You write instructions for an AI automation agent called Dock. Given a trigger type and configuration, suggest clear, specific instructions for what the agent should do when the trigger fires. Be concise but thorough. Write in second person imperative ("Summarize my...", "Check for...", "Create a...").`,
+    system: `You write instructions for an AI automation agent called Dinghy. Given a trigger type and configuration, suggest clear, specific instructions for what the agent should do when the trigger fires. Be concise but thorough. Write in second person imperative ("Summarize my...", "Check for...", "Create a...").`,
     messages: [
       {
         role: 'user',

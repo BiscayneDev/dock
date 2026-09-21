@@ -123,7 +123,7 @@ export default function HarborHome() {
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 21h14M12 21v-12M8 6c1.5 0 4-3 4-3s2.5 3 4 3" />
             </svg>
-            <span className="font-sans" style={{ fontWeight: 800, fontSize: '1.1rem', letterSpacing: '-0.02em' }}>Dock</span>
+            <span className="font-sans" style={{ fontWeight: 800, fontSize: '1.1rem', letterSpacing: '-0.02em' }}>Dinghy</span>
           </div>
           <div style={{ fontStyle: 'italic', fontSize: '0.9rem', fontWeight: 500, opacity: 0.6 }}>{dateStr}</div>
           <Link href="/dashboard" style={{
@@ -223,7 +223,7 @@ export default function HarborHome() {
               <div className="badge-num">6</div>
               <svg className="card-icon" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
               <h2 className="card-title">Telegram</h2>
-              <p className="card-desc">Chat with Dock</p>
+              <p className="card-desc">Chat with Dinghy</p>
             </Link>
           </section>
         </div>

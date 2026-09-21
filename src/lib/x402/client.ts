@@ -3,7 +3,7 @@ import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 import { isPayboxConnected, payboxRequired, getPayboxSdk, agentResultToTool } from '@/lib/integrations/paybox'
 import { logger } from '@/lib/logger'
 
-// x402 client tools — let Dock's agent consume external x402-gated APIs
+// x402 client tools — let Dinghy's agent consume external x402-gated APIs
 // and discover services from the x402 Index.
 
 const X402FetchInput = z.object({
@@ -203,7 +203,7 @@ export const x402Fetch: Tool = {
           signal: controller.signal,
           headers: {
             'Accept': 'application/json, text/plain, */*',
-            'User-Agent': 'Dock/1.0 (x402-client)',
+            'User-Agent': 'Dinghy/1.0 (x402-client)',
           },
         }
 
@@ -265,7 +265,7 @@ export const x402Search: Tool = {
     try {
       const parsed = X402SearchInput.parse(input)
 
-      // Use Dock's cached trending endpoint — free browsing, no paywall
+      // Use Dinghy's cached trending endpoint — free browsing, no paywall
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
       const trendingUrl = new URL('/api/x402/trending', appUrl)
       if (parsed.category) trendingUrl.searchParams.set('category', parsed.category)

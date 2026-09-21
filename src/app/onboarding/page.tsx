@@ -115,7 +115,7 @@ function OnboardingPage() {
           </svg>
 
           <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: '1.3rem', marginBottom: '0.75rem', letterSpacing: '-0.02em' }}>
-            Get started with Dock
+            Get started with Dinghy
           </h2>
 
           <div style={{ textAlign: 'left', margin: '0.75rem 0 1.5rem', fontSize: '0.9rem', lineHeight: 1.7, opacity: 0.7 }}>
@@ -140,7 +140,7 @@ function OnboardingPage() {
         </div>
       ) : (
         <>
-          <p style={{ opacity: 0.6, marginBottom: '1rem', fontSize: '0.9rem' }}>Connect your services so Dock can manage them.</p>
+          <p style={{ opacity: 0.6, marginBottom: '1rem', fontSize: '0.9rem' }}>Connect your services so Dinghy can manage them.</p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {INTEGRATIONS.map((int) => {

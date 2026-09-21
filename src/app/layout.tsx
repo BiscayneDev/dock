@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 })
 
 const SITE_URL = "https://dock-six.vercel.app"
-const TITLE = "Dock — Your AI First Mate"
+const TITLE = "Dinghy — Your AI First Mate"
 const DESCRIPTION = "AI assistant that manages your email, calendar, GitHub, Notion, and crypto wallets through natural conversation in Telegram. No app switching. Just chat."
 
 export const viewport: Viewport = {
@@ -26,12 +26,12 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: {
     default: TITLE,
-    template: "%s — Dock",
+    template: "%s — Dinghy",
   },
   description: DESCRIPTION,
-  applicationName: "Dock",
-  authors: [{ name: "Dock" }],
-  creator: "Dock",
+  applicationName: "Dinghy",
+  authors: [{ name: "Dinghy" }],
+  creator: "Dinghy",
   keywords: [
     "AI assistant",
     "Telegram bot",
@@ -56,13 +56,13 @@ export const metadata: Metadata = {
     url: SITE_URL,
     title: TITLE,
     description: DESCRIPTION,
-    siteName: "Dock",
+    siteName: "Dinghy",
     images: [
       {
         url: `${SITE_URL}/api/og`,
         width: 1200,
         height: 630,
-        alt: "Dock — Your AI first mate, always on deck",
+        alt: "Dinghy — Your AI first mate, always on deck",
         type: "image/png",
       },
     ],
