@@ -99,7 +99,7 @@ interface SpectrumSpace {
 const onboarded = new Set<string>()
 
 // On-demand triggers for the contact card.
-const CONTACT_CARD_TRIGGERS = ['contact card', 'my card', 'share card', 'your card', 'add me', 'save contact']
+const CONTACT_CARD_TRIGGERS = ['contact card', 'my card', 'share card', 'your card', 'add me', 'save contact', 'contact details', 'save your contact', 'save your details', 'your contact']
 
 async function main() {
 const app = await Spectrum({
