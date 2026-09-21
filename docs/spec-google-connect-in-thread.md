@@ -54,7 +54,9 @@ Everything below is **existing, working code** in `src/`:
 - Scopes: keep the current five (`gmail.readonly`, `gmail.send`, `gmail.modify`, `calendar.readonly`, `calendar.events`). Least-privilege justification: `gmail.modify` covers label/archive + send/readonly needs; dropping it would break `gmail_label`/`gmail_archive`.
 - **Consent screen / testing:** if publishing status is *Testing*, every user must be a test user. Add all 10 beta members' Google addresses under *OAuth consent screen → Audience → Test users*. Gmail scopes are **restricted** — while in Testing, refresh tokens expire after 7 days; either keep Testing + re-auth weekly, or request verification/`internal` status before the 10-seat rollout. Flag to Halsey before either.
 
-## 5. Token storage — DECISION REQUIRED (not chosen silently)
+## 5. Token storage — APPROVED by Halsey (2026-09-21)
+
+**Decision: Option A — keep Supabase `oauth_tokens` (status quo).** Explicitly approved by Halsey in the trusted channel. Refresh tokens stay in Supabase, encrypted at rest via `src/lib/crypto.ts`, with auto-refresh in `getAuthedClient()`. PayBox (option B) remains the long-term blueprint target and can be migrated later without changing the connect flow — `storeGoogleTokens`/`getDecryptedGoogleTokens` are the only touch points.
 
 Blueprint says **PayBox**; PayBox credentials are currently unavailable. Do **not** migrate anything until Halsey approves one of:
 
