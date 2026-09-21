@@ -137,20 +137,23 @@ export async function beginConnectByToken(
 }
 
 /**
- * Step 3 — look up the consumed-but-incomplete row by the OAuth state that
- * Google echoed back, and atomically mark it completed. Exactly one
- * callback invocation can win.
+ * Step 3 — atomically CLAIM the consumed-but-incomplete row by the OAuth
+ * state Google echoed back. The claim (claimed_at) is retryable: if code
+ * exchange or live verification fails, releaseConnectClaim() clears it so
+ * the same consent round-trip can retry within the TTL. completed_at is set
+ * ONLY after verification succeeds — a failure never burns the token.
  */
-export async function completeConnectByState(
+export async function claimConnectByState(
   oauthState: string
 ): Promise<ConnectRow | null> {
   const supabase = createServerClient()
   const { data, error } = await supabase
     .from('connect_tokens')
-    .update({ completed_at: new Date().toISOString() })
+    .update({ claimed_at: new Date().toISOString() })
     .eq('oauth_state', oauthState)
     .not('used_at', 'is', null)
     .is('completed_at', null)
+    .is('claimed_at', null)
     .select('id, platform, chat_id, pending_request')
     .maybeSingle()
 
@@ -161,6 +164,26 @@ export async function completeConnectByState(
     chatId: data.chat_id as string,
     pendingRequest: (data.pending_request as string | null) ?? null,
   }
+}
+
+/** Release a failed callback claim so the state can retry (within TTL). */
+export async function releaseConnectClaim(tokenRowId: string): Promise<void> {
+  const supabase = createServerClient()
+  await supabase
+    .from('connect_tokens')
+    .update({ claimed_at: null })
+    .eq('id', tokenRowId)
+    .is('completed_at', null)
+}
+
+/** Mark the flow fully complete — ONLY after live verification passes. */
+export async function completeConnect(tokenRowId: string): Promise<void> {
+  const supabase = createServerClient()
+  await supabase
+    .from('connect_tokens')
+    .update({ completed_at: new Date().toISOString() })
+    .eq('id', tokenRowId)
+    .is('completed_at', null)
 }
 
 /**
@@ -192,7 +215,7 @@ export async function claimPendingResume(
  * Bind an iMessage chat guid to a Dock user (creating the user on first
  * connect). Telegram users are looked up by telegram_id and need no binding.
  */
-export async function bindSpectrumIdentity(chatGuid: string): Promise<string | null> {
+export async function bindSpectrumIdentity(chatGuid: string, handle?: string | null): Promise<string | null> {
   const supabase = createServerClient()
 
   // Existing binding?
@@ -201,7 +224,13 @@ export async function bindSpectrumIdentity(chatGuid: string): Promise<string | n
     .select('user_id')
     .eq('chat_guid', chatGuid)
     .maybeSingle()
-  if (existing?.user_id) return existing.user_id as string
+  if (existing?.user_id) {
+    // Keep the handle fresh when Photon provides one.
+    if (handle) {
+      await supabase.from('spectrum_identities').update({ handle }).eq('chat_guid', chatGuid)
+    }
+    return existing.user_id as string
+  }
 
   // Create the backing user (telegram_id nullable since migration 011).
   const { data: user, error: userErr } = await supabase
@@ -212,7 +241,7 @@ export async function bindSpectrumIdentity(chatGuid: string): Promise<string | n
   if (userErr || !user) return null
 
   await supabase.from('spectrum_identities').upsert(
-    { chat_guid: chatGuid, user_id: user.id, bound_at: new Date().toISOString() },
+    { chat_guid: chatGuid, handle: handle ?? null, user_id: user.id, bound_at: new Date().toISOString() },
     { onConflict: 'chat_guid' }
   )
   return user.id as string

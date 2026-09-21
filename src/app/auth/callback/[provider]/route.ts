@@ -31,7 +31,9 @@ import {
 } from '@/lib/integrations/paybox'
 
 import {
-  completeConnectByState,
+  claimConnectByState,
+  releaseConnectClaim,
+  completeConnect,
   bindSpectrumIdentity,
 } from '@/lib/connect-token'
 
@@ -76,7 +78,7 @@ export async function GET(
           result.accessToken,
           result.refreshToken,
           result.expiresAt,
-          ['gmail.readonly', 'gmail.send', 'gmail.modify', 'calendar.readonly', 'calendar.events'],
+          ['openid', 'email', 'gmail.readonly', 'gmail.send', 'gmail.modify', 'calendar.readonly', 'calendar.events'],
           result.email
         )
         break
@@ -196,7 +198,7 @@ async function handleGoogleConnectCallback(
     return NextResponse.redirect(`${appUrl}/onboarding?error=connect_no_code`)
   }
 
-  const connect = await completeConnectByState(state)
+  const connect = await claimConnectByState(state)
   if (!connect) {
     return NextResponse.redirect(`${appUrl}/onboarding?error=connect_state_invalid`)
   }
@@ -213,6 +215,7 @@ async function handleGoogleConnectCallback(
       userId = await getOrCreateUserByTelegramId(BigInt(connect.chatId))
     }
     if (!userId) {
+      await releaseConnectClaim(connect.id)
       logger.error('connect flow: failed to bind identity', { platform: connect.platform })
       return NextResponse.redirect(`${appUrl}/onboarding?error=connect_identity_failed`)
     }
@@ -222,21 +225,26 @@ async function handleGoogleConnectCallback(
       result.accessToken,
       result.refreshToken,
       result.expiresAt,
-      ['gmail.readonly', 'gmail.send', 'gmail.modify', 'calendar.readonly', 'calendar.events'],
+      ['openid', 'email', 'gmail.readonly', 'gmail.send', 'gmail.modify', 'calendar.readonly', 'calendar.events'],
       result.email
     )
 
     // Never claim connected until a live call against the fresh tokens passes.
     const verified = await verifyGoogleConnection(result.accessToken, result.refreshToken)
     if (!verified) {
+      // Release the claim: the same consent round-trip can retry within TTL.
+      await releaseConnectClaim(connect.id)
       logger.error('connect flow: live verification failed', { platform: connect.platform })
       await notifyConnectFailure(connect)
       return NextResponse.redirect(`${appUrl}/onboarding?error=connect_verification_failed`)
     }
 
+    // Complete ONLY after live verification passed.
+    await completeConnect(connect.id)
     await notifyConnectSuccess(connect)
     return NextResponse.redirect(`${appUrl}/onboarding?connected=google&via=chat`)
   } catch (err) {
+    await releaseConnectClaim(connect.id)
     const message = err instanceof Error ? err.message : String(err)
     logger.error('connect flow callback error', { error: message })
     await notifyConnectFailure(connect)

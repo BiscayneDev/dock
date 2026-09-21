@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/session'
-import { getAuthUrl } from '@/lib/integrations/google'
+import { getAuthUrl, GOOGLE_OAUTH_SCOPES, hasStoredGoogleConnection } from '@/lib/integrations/google'
 import { beginConnectByToken } from '@/lib/connect-token'
 import { randomBytes } from 'crypto'
-
-const GOOGLE_SCOPES = [
-  'https://www.googleapis.com/auth/gmail.readonly',
-  'https://www.googleapis.com/auth/gmail.send',
-  'https://www.googleapis.com/auth/gmail.modify',
-  'https://www.googleapis.com/auth/calendar.readonly',
-  'https://www.googleapis.com/auth/calendar.events',
-]
 
 const STATE_COOKIE = 'g_oauth_state'
 
@@ -29,7 +21,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       // to request a fresh link rather than starting an unbound OAuth flow.
       return NextResponse.redirect(`${appUrl()}/onboarding?error=connect_link_invalid`)
     }
-    const url = getAuthUrl(GOOGLE_SCOPES, started.oauthState)
+    // Connect flow only fires when unconnected → first connect → consent.
+    const url = getAuthUrl(GOOGLE_OAUTH_SCOPES, started.oauthState, { forceConsent: true })
     return NextResponse.redirect(url)
   }
 
@@ -41,7 +34,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   // CSRF protection: bind this browser session to the OAuth round trip.
   const state = randomBytes(24).toString('hex')
-  const url = getAuthUrl(GOOGLE_SCOPES, state)
+  // Consent only when this account has no Google refresh token yet; a
+  // reconnect skips the re-consent screen.
+  const forceConsent = !(await hasStoredGoogleConnection(session.userId))
+  const url = getAuthUrl(GOOGLE_OAUTH_SCOPES, state, { forceConsent })
   const response = NextResponse.redirect(url)
   response.cookies.set(STATE_COOKIE, state, {
     httpOnly: true,
