@@ -12,7 +12,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 })
 
-const SITE_URL = "https://dock-six.vercel.app"
+const SITE_URL = "https://getdinghy.sh"
 const TITLE = "Dinghy — Your AI First Mate"
 const DESCRIPTION = "AI assistant that manages your email, calendar, GitHub, Notion, and crypto wallets through natural conversation in Telegram. No app switching. Just chat."
 

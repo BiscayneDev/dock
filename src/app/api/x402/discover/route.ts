@@ -37,7 +37,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   // Determine base URL from request
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${request.headers.get('host') ?? 'dock-six.vercel.app'}`
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${request.headers.get('host') ?? 'getdinghy.sh'}`
 
   const services = (recipes ?? []).map((recipe) =>
     buildRecipeServiceInfo(
