@@ -1,3 +1,9 @@
+export interface MemoryBullet {
+  content: string
+  type?: string
+  valid_from: string
+}
+
 interface SystemPromptParams {
   datetime: string
   timezone: string
@@ -8,6 +14,8 @@ interface SystemPromptParams {
   isFirstMessage?: boolean
   messageCount?: number
   activeModel?: { provider: string; model: string }
+  relevantMemories?: MemoryBullet[]
+  profileMemories?: MemoryBullet[]
 }
 
 export function buildSystemPrompt(params: SystemPromptParams): string {
@@ -22,7 +30,8 @@ export function buildSystemPrompt(params: SystemPromptParams): string {
     ? `\nnot connected: ${disconnected.join(', ')} — if the user tries to use these, suggest connecting at /onboarding or The Harbor`
     : ''
 
-  const preferencesSection = buildPreferencesSection(params.name, params.userPreferences)
+  const preferencesSection = buildPreferencesSection(params.name, params.userPreferences, params.profileMemories)
+  const memoriesSection = buildMemoriesSection(params.profileMemories, params.relevantMemories)
   const firstMessageSection = params.isFirstMessage ? buildFirstMessageSection(params.integrations) : ''
   const activeModelLine = params.activeModel
     ? `active model: ${params.activeModel.provider} (${params.activeModel.model}) — if the user asks what model or provider you're running on, answer with this. if they ask you to switch, call switch_llm_provider with one of: anthropic, openai, usepod.`
@@ -34,7 +43,7 @@ current datetime: ${params.datetime}
 user timezone: ${params.timezone}
 connected integrations: ${integrationList}${disconnectedNote}
 always available: web search, web page reading, x402 paid API marketplace
-${activeModelLine ? `${activeModelLine}\n` : ''}${preferencesSection}
+${activeModelLine ? `${activeModelLine}\n` : ''}${preferencesSection}${memoriesSection}
 VOICE:
 - use lowercase. you're texting, not writing an essay
 - keep it short. 2-3 sentences per thought. lists are fine. paragraphs are not
@@ -97,8 +106,14 @@ BOT COMMANDS:
 
 function buildPreferencesSection(
   name: string,
-  preferences?: Record<string, unknown>
+  preferences?: Record<string, unknown>,
+  profileMemories?: MemoryBullet[]
 ): string {
+  // Memories replace the legacy preferences block; fall back when no memories exist yet
+  if (profileMemories && profileMemories.length > 0) {
+    return ''
+  }
+
   if (!preferences || Object.keys(preferences).length === 0) {
     return ''
   }
@@ -123,6 +138,40 @@ function buildPreferencesSection(
   if (lines.length === 0) return ''
 
   return `\nWHAT YOU KNOW ABOUT ${name || 'this user'}:\n${lines.join('\n')}\n`
+}
+
+const MAX_PROFILE_MEMORIES = 10
+const MAX_RELEVANT_MEMORIES = 8
+const MAX_MEMORY_CONTENT_CHARS = 200
+
+function formatMemoryBullet(m: MemoryBullet): string {
+  const date = (m.valid_from || '').slice(0, 10)
+  const content = (m.content || '').slice(0, MAX_MEMORY_CONTENT_CHARS)
+  return `- [${date}] ${content}`
+}
+
+function buildMemoriesSection(
+  profileMemories?: MemoryBullet[],
+  relevantMemories?: MemoryBullet[]
+): string {
+  const profile = (profileMemories ?? []).slice(0, MAX_PROFILE_MEMORIES)
+  const relevant = (relevantMemories ?? []).slice(0, MAX_RELEVANT_MEMORIES)
+
+  if (profile.length === 0 && relevant.length === 0) return ''
+
+  const lines: string[] = []
+
+  if (profile.length > 0) {
+    lines.push('About the user:')
+    for (const m of profile) lines.push(formatMemoryBullet(m))
+  }
+  if (relevant.length > 0) {
+    if (lines.length > 0) lines.push('')
+    lines.push('Relevant to this message:')
+    for (const m of relevant) lines.push(formatMemoryBullet(m))
+  }
+
+  return `\nWHAT YOU REMEMBER:\n${lines.join('\n')}\n`
 }
 
 function buildFirstMessageSection(connectedIntegrations: string[]): string {
