@@ -1,7 +1,7 @@
 -- Beta allowlist — chat guids permitted to bind identities during private beta.
--- When this table has rows, only listed guids may create new bindings.
--- When empty, binding is open (with a console warning) — populate before the
--- 10-seat beta opens. Halsey adds guids via the Supabase dashboard.
+-- The table starts EMPTY — binding is CLOSED until Halsey provisions guids
+-- operationally from the trusted live Spectrum identity/message record.
+-- No open fallback, no placeholder seed. Test GUIDs only in test fixtures.
 
 create table if not exists public.beta_allowlist (
   id uuid primary key default gen_random_uuid(),

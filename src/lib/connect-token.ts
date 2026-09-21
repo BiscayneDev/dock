@@ -250,29 +250,21 @@ export async function bindSpectrumIdentity(chatGuid: string, handle?: string | n
   // Ownership gate: in private beta, only chat guids on the beta allowlist
   // may create a new binding. This prevents a random number texting the
   // managed iMessage line from binding a Google account to a Dock user.
-  // Halsey adds guids to the allowlist via the Supabase dashboard.
-  //
-  // When the allowlist is empty (not yet populated), fall open — but log
-  // a warning so it's visible. Halsey must populate it before the 10-seat
-  // beta opens.
-  const { data: allowed } = await supabase
+  // The allowlist is empty by default — binding is CLOSED until Halsey
+  // provisions guids operationally from the trusted live Spectrum record.
+  // No open fallback, no placeholder seed.
+  const { data: allowed, error: allowErr } = await supabase
     .from('beta_allowlist')
     .select('chat_guid')
     .eq('chat_guid', chatGuid)
     .maybeSingle()
 
-  const { count } = await supabase
-    .from('beta_allowlist')
-    .select('*', { count: 'exact', head: true })
-
-  if (count !== null && count > 0 && !allowed) {
-    console.error(`bindSpectrumIdentity: ${chatGuid} not on beta allowlist (rejected)`)
+  if (allowErr || !allowed) {
+    console.error(`bindSpectrumIdentity: ${chatGuid} not on beta allowlist — rejected (fail closed)`)
     return null
   }
 
-  if (count === 0) {
-    console.warn('bindSpectrumIdentity: beta_allowlist is empty — binding open (populate before beta)')
-  }
+  // Allowlist matched — proceed to create the binding.
 
   // Create the backing user (telegram_id nullable since migration 011).
   const { data: user, error: userErr } = await supabase

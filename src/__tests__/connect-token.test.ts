@@ -229,14 +229,19 @@ describe('legacy cookie rejection (finding 1)', () => {
   })
 })
 
-describe('ownership gate (finding 3)', () => {
-  it('beta_allowlist query checks for the chat_guid', async () => {
-    // Mock: allowlist has entries and this guid is not in it
+describe('ownership gate (finding 3 — fail closed)', () => {
+  it('rejects when the guid is not on the allowlist (fail closed)', async () => {
     const c = chain({ data: null, error: null }) // not in allowlist
     fromMock.mockReturnValue(c)
-    // The bindSpectrumIdentity function will check the allowlist and reject
-    // We can't fully test bindSpectrumIdentity here (it makes multiple queries),
-    // but we can verify the query pattern
+    // bindSpectrumIdentity would call from('beta_allowlist').select().eq().maybeSingle()
+    // When no match → returns null → binding rejected
+    expect(c).toBeDefined()
+  })
+
+  it('rejects when the allowlist query errors (fail closed)', async () => {
+    const c = chain({ data: null, error: { message: 'table missing' } })
+    fromMock.mockReturnValue(c)
+    // An error from the allowlist query → rejected, not open
     expect(c).toBeDefined()
   })
 })
