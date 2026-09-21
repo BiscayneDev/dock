@@ -37,7 +37,7 @@ Dock has a persistent memory layer on top of the raw message history:
 - **Background fact extractor**: every ~10 messages, a lightweight extractor pulls durable facts out of the conversation and writes them to the `memories` table (new facts supersede outdated ones).
 - **Prompt injection**: relevant memories plus the user profile are injected into each system prompt, so the agent remembers across sessions.
 - **Agent tools**: the agent can call `memory_search` and `memory_forget` on its own.
-- **Embeddings** use OpenAI `text-embedding-3-small`, which requires `OPENAI_API_KEY`.
+- **Embeddings** default to OpenAI `text-embedding-3-small` but point at any OpenAI-compatible endpoint via env vars: `EMBEDDINGS_BASE_URL` (e.g. a Shipyard Inference gateway `/v1`), `EMBEDDINGS_API_KEY`, `EMBEDDINGS_MODEL` (must stay fixed per deployment and emit 1536-dim vectors — all vectors share one index). Falls back to `OPENAI_API_KEY` when the dedicated vars are unset; without any key, memory degrades to keyword-only search.
 
 ## Deploy on Vercel
 
