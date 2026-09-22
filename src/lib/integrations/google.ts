@@ -11,13 +11,69 @@ export function getOAuth2Client(): InstanceType<typeof google.auth.OAuth2> {
   )
 }
 
-export function getAuthUrl(scopes: string[]): string {
+/**
+ * Scopes requested from Google. `openid` + `email` identity scopes back the
+ * userinfo call in exchangeCode(); the gmail/calendar scopes are the actual
+ * tool permissions (least-privilege — see spec §4).
+ */
+export const GOOGLE_OAUTH_SCOPES = [
+  'openid',
+  'email',
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/gmail.modify',
+  'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/calendar.events',
+]
+
+/**
+ * `forceConsent` must be true on the FIRST connect — the consent prompt is
+ * what yields a refresh token. Re-auths of an already-connected account skip
+ * the consent screen: no reason to re-prompt for grants already made.
+ */
+export function getAuthUrl(
+  scopes: string[],
+  state?: string,
+  opts?: { forceConsent?: boolean }
+): string {
   const client = getOAuth2Client()
   return client.generateAuthUrl({
     access_type: 'offline',
-    prompt: 'consent',
+    ...(opts?.forceConsent ? { prompt: 'consent' as const } : {}),
     scope: scopes,
+    ...(state ? { state } : {}),
   })
+}
+
+/**
+ * Whether a Google connection (with refresh token) already exists for a user.
+ * Drives the conditional consent prompt: first connect → consent; reconnect → skip.
+ */
+export async function hasStoredGoogleConnection(userId: string): Promise<boolean> {
+  const supabase = createServerClient()
+  const { data } = await supabase
+    .from('oauth_tokens')
+    .select('refresh_token')
+    .eq('user_id', userId)
+    .eq('provider', 'google')
+    .maybeSingle()
+  return !!(data?.refresh_token as string | undefined)
+}
+
+/**
+ * Cheap live check that the freshly granted tokens actually work.
+ * Never claim a connection is complete without this passing.
+ */
+export async function verifyGoogleConnection(accessToken: string, refreshToken: string | null): Promise<boolean> {
+  try {
+    const client = getOAuth2Client()
+    client.setCredentials({ access_token: accessToken, refresh_token: refreshToken })
+    const gmail = google.gmail({ version: 'v1', auth: client })
+    await gmail.users.labels.list({ userId: 'me' })
+    return true
+  } catch {
+    return false
+  }
 }
 
 export async function exchangeCode(code: string): Promise<{
