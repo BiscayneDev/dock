@@ -4,6 +4,7 @@ import { runAgentLoop } from '@/lib/llm/agent-loop'
 import { getActiveProviderInfo, type LLMProviderName } from '@/lib/llm'
 import { buildSystemPrompt } from './system-prompt'
 import { fetchConversationHistory, persistMessage } from './memory'
+import { searchMemories, getActiveMemories } from '@/lib/memory/store'
 import { integrationTools, getOrchestratorTools } from '@/lib/tools/index'
 import {
   sendMessage,
@@ -154,6 +155,19 @@ async function handleMessageInner(chatId: number, telegramId: number, initialTex
   const userPrefs = (user as unknown as Record<string, unknown>).preferences as Record<string, unknown> | undefined
   const userProvider = userPrefs?.llm_provider as LLMProviderName | undefined
   const activeModel = getActiveProviderInfo({ provider: userProvider })
+
+  // Memory injection must never block or fail the reply path
+  const [relevantResult, profileResult] = await Promise.allSettled([
+    searchMemories(user.id, text, 8),
+    getActiveMemories(user.id, 30),
+  ])
+  const relevantMemories = relevantResult.status === 'fulfilled'
+    ? relevantResult.value?.map((m) => ({ content: m.content, valid_from: m.valid_from }))
+    : undefined
+  const profileMemories = profileResult.status === 'fulfilled'
+    ? profileResult.value?.map((m) => ({ content: m.content, type: m.type, valid_from: m.valid_from }))
+    : undefined
+
   const systemPrompt = buildSystemPrompt({
     datetime: new Date().toISOString(),
     timezone: user.timezone ?? 'UTC',
@@ -163,6 +177,8 @@ async function handleMessageInner(chatId: number, telegramId: number, initialTex
     isFirstMessage: isFirstMessage && connectedIntegrations.length > 0,
     messageCount: messageCount ?? 0,
     activeModel,
+    relevantMemories,
+    profileMemories,
   })
 
   // Get tools (including recipe tools + user's MCP tools)
@@ -212,10 +228,10 @@ async function handleMessageInner(chatId: number, telegramId: number, initialTex
     })
   }
 
-  // Background: extract user preferences every ~10 messages
+  // Background: extract memories every ~10 messages
   if ((messageCount ?? 0) > 0 && (messageCount ?? 0) % 10 === 0) {
-    import('@/lib/orchestrator/preference-extractor')
-      .then((mod) => mod.extractPreferences(user.id))
+    import('@/lib/memory/extractor')
+      .then((mod) => mod.extractMemories(user.id))
       .catch(() => {
         // Non-critical — silently ignore
       })

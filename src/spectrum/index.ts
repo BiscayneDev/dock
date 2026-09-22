@@ -11,6 +11,8 @@
  *   SPECTRUM_PROJECT_SECRET  — Photon project secret
  *   SHIPYARD_GATEWAY_URL    — Shipyard Inference gateway (default: https://shipyard-inference.vercel.app)
  *   SHIPYARD_API_KEY        — Gateway API key (sk-shipyard-…)
+ *   SHIPYARD_MODEL          — Model id to request (default: anthropic/claude-haiku-4-5-20251001,
+ *                             a Hopscotch-catalog id, so Dinghy calls route through Hopscotch)
  */
 
 import { Spectrum } from 'spectrum-ts'
@@ -32,6 +34,10 @@ const PROJECT_ID = process.env.SPECTRUM_PROJECT_ID
 const PROJECT_SECRET = process.env.SPECTRUM_PROJECT_SECRET
 const GATEWAY_URL = process.env.SHIPYARD_GATEWAY_URL ?? 'https://shipyard-inference.vercel.app'
 const API_KEY = process.env.SHIPYARD_API_KEY
+// Pin Dinghy's requests to a Hopscotch-catalog model id: the gateway's Hopscotch
+// candidate is the only provider serving it, so every call routes through
+// Hopscotch (x-shipyard-provider: hopscotch). Override with SHIPYARD_MODEL.
+const MODEL = process.env.SHIPYARD_MODEL ?? 'anthropic/claude-haiku-4-5-20251001'
 
 if (!PROJECT_ID || !PROJECT_SECRET) {
   console.error('SPECTRUM_PROJECT_ID and SPECTRUM_PROJECT_SECRET are required.')
@@ -86,7 +92,7 @@ async function chat(history: Message[]): Promise<string> {
       Authorization: `Bearer ${API_KEY}`,
     },
     body: JSON.stringify({
-      model: 'auto',
+      model: MODEL,
       messages,
       stream: false,
     }),
