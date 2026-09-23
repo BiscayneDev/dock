@@ -157,3 +157,9 @@ export const executionAgentTools: Tool[] = [...integrationTools]
 export function getOrchestratorTools(recipeTools: Tool[]): Tool[] {
   return [...integrationTools, ...recipeTools]
 }
+
+// Sandboxed read-only tool subset for x402 recipe execution — defined in
+// ./x402-sandbox.ts (kept separate so tests can import it without pulling
+// the full tool barrel's heavy deps). See that file for the allowlist and
+// the exclusion rationale.
+export { x402RecipeTools } from './x402-sandbox'
