@@ -19,14 +19,26 @@ import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { claimInboundDelivery, enqueueOutbox, markOutboxFailed, markOutboxSent, type OutboxKind } from './outbox'
 
 export interface InboundSpace {
-    guid: string
+    /** Webhook SDK space objects carry the chat identifier as `id`. */
+    id?: string
+    /** Stream SDK space objects (src/spectrum/index.ts) carry it as `guid`. */
+    guid?: string
     send(text: string): Promise<unknown>
 }
 
 export interface InboundMessage {
     id?: string
     content: { type: string; text?: string }
-    sender?: { handle?: string }
+    sender?: { handle?: string; id?: string }
+}
+
+/**
+ * The chat identifier for persistence. Webhook deliveries expose the space
+ * id (Zod-required string); the legacy stream shape used `guid`. Returns
+ * null only for a shape no Spectrum transport produces.
+ */
+export function resolveChatGuid(space: InboundSpace): string | null {
+    return space.id ?? space.guid ?? null
 }
 
 function logErr(context: string, err: unknown): void {
@@ -35,15 +47,15 @@ function logErr(context: string, err: unknown): void {
 
 /** Enqueue-then-send: the row exists before the attempt, so a kill or a
  *  send failure is always retried by the sweep. */
-async function sendText(space: InboundSpace, kind: OutboxKind, text: string): Promise<void> {
-    const outboxId = await enqueueOutbox(space.guid, kind, text)
+async function sendText(space: InboundSpace, chatGuid: string, kind: OutboxKind, text: string): Promise<void> {
+    const outboxId = await enqueueOutbox(chatGuid, kind, text)
     try {
         await space.send(text)
         if (outboxId) await markOutboxSent(outboxId)
     } catch (err) {
         if (outboxId) {
             await markOutboxFailed(
-                { id: outboxId, chat_guid: space.guid, kind, text, attempts: 0 },
+                { id: outboxId, chat_guid: chatGuid, kind, text, attempts: 0 },
                 err
             )
         } else {
@@ -57,13 +69,19 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     const text = message.content.text.trim()
     if (!text) return
 
+    const chatGuid = resolveChatGuid(space)
+    if (!chatGuid) {
+        logErr('inbound message dropped', new Error('space carries neither id nor guid'))
+        return
+    }
+
     // Exactly-once: Spectrum delivery is at-least-once, dedupe on message.id.
     if (message.id) {
-        const isNew = await claimInboundDelivery(message.id, space.guid)
+        const isNew = await claimInboundDelivery(message.id, chatGuid)
         if (!isNew) return
     }
 
-    await ensureIdentity(space.guid, message.sender?.handle ?? null).catch((err) =>
+    await ensureIdentity(chatGuid, message.sender?.handle ?? message.sender?.id ?? null).catch((err) =>
         logErr('identity ensure failed', err)
     )
 
@@ -75,7 +93,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         return
     }
 
-    const history = await loadHistory(space.guid, MAX_HISTORY)
+    const history = await loadHistory(chatGuid, MAX_HISTORY)
 
     // First-ever message in this chat: onboarding contact card. DB-backed
     // (was a process-memory Set on the VPS) so it works statelessly.
@@ -86,30 +104,31 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     }
 
     // Gmail/Calendar requested while unconnected: one-use connect link.
-    if (wantsGoogle(text) && !(await isGoogleConnected(space.guid).catch(() => false))) {
+    if (wantsGoogle(text) && !(await isGoogleConnected(chatGuid).catch(() => false))) {
         try {
-            const link = await createConnectLink(space.guid, text)
-            await saveMessage(space.guid, 'user', text)
+            const link = await createConnectLink(chatGuid, text)
+            await saveMessage(chatGuid, 'user', text)
             await sendText(
                 space,
+                chatGuid,
                 'connect_link',
                 `email + calendar aren't connected yet — connect google and i'll take it from there:\n${link}`
             )
         } catch (err) {
             logErr('connect link failed', err)
-            await sendText(space, 'error_notice', "couldn't start the connect flow — try again in a moment.")
+            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow — try again in a moment.")
         }
         return
     }
 
     if (!SHIPYARD_API_KEY) {
         logErr('reply failed', new Error('SHIPYARD_API_KEY is not set'))
-        await sendText(space, 'error_notice', 'Something went wrong on my end. Try again in a moment.')
+        await sendText(space, chatGuid, 'error_notice', 'Something went wrong on my end. Try again in a moment.')
         return
     }
 
     const full: Message[] = [...history, { role: 'user', content: text }]
-    await saveMessage(space.guid, 'user', text)
+    await saveMessage(chatGuid, 'user', text)
 
     try {
         const reply = await chat(full, {
@@ -117,10 +136,10 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             apiKey: SHIPYARD_API_KEY,
             model: SHIPYARD_MODEL,
         })
-        await sendText(space, 'reply', reply)
-        await saveMessage(space.guid, 'assistant', reply)
+        await sendText(space, chatGuid, 'reply', reply)
+        await saveMessage(chatGuid, 'assistant', reply)
     } catch (err) {
         logErr('gateway call failed', err)
-        await sendText(space, 'error_notice', 'Something went wrong on my end. Try again in a moment.')
+        await sendText(space, chatGuid, 'error_notice', 'Something went wrong on my end. Try again in a moment.')
     }
 }
