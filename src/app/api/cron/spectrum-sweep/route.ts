@@ -136,7 +136,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 const connectedLine =
                     claimed.provider === 'paybox'
                         ? "paybox is connected — i can see your wallet balances now (read-only) ✓"
-                        : "you're connected — gmail + calendar are in ✓"
+                        : claimed.provider === 'github'
+                          ? "github is connected — i can read your repos, issues and PRs now ✓"
+                          : "you're connected — gmail + calendar are in ✓"
                 await space.send(`${connectedLine}\n\n${reply}`)
                 const proposal = actions?.proposal()
                 if (proposal) await space.send(renderProposal(proposal))

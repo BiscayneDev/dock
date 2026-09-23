@@ -58,6 +58,11 @@ export async function GET(
   if (provider === 'paybox' && state && state !== 'paybox' && !request.cookies.get('paybox_cv')) {
     return handlePayboxConnectCallback(code, state, appUrl)
   }
+  // GitHub in-thread flow: the web session flow sends no state, so a state
+  // here always means a connect-token round trip.
+  if (provider === 'github' && state) {
+    return handleGithubConnectCallback(code, state, appUrl)
+  }
 
   const session = await getSession()
   if (!session) {
@@ -356,6 +361,55 @@ async function handlePayboxConnectCallback(
   } catch (err) {
     await markConnectTerminal(connect.id, { failed: true })
     logger.error('paybox connect callback error', { error: err instanceof Error ? err.message : String(err) })
+    return NextResponse.redirect(`${appUrl}/onboarding?error=connect_failed`)
+  }
+}
+
+/**
+ * Complete an in-thread (iMessage) GitHub connect: claim by state
+ * (provider-bound), exchange the code, bind the chat identity (fail-closed on
+ * the beta allowlist), store the token, verify with a live /user call, and
+ * only then mark complete so the sweep resumes the original request.
+ */
+async function handleGithubConnectCallback(
+  code: string | null,
+  state: string,
+  appUrl: string
+): Promise<NextResponse> {
+  const { logger } = await import('@/lib/logger')
+  if (!code) return NextResponse.redirect(`${appUrl}/onboarding?error=connect_no_code`)
+
+  const connect = await claimConnectByState(state, 'github')
+  if (!connect) return NextResponse.redirect(`${appUrl}/onboarding?error=connect_state_invalid`)
+  if (connect.platform !== 'imessage') {
+    await markConnectTerminal(connect.id, { failed: true })
+    return NextResponse.redirect(`${appUrl}/onboarding?error=connect_state_invalid`)
+  }
+
+  try {
+    const result = await exchangeGithubCode(code)
+    const userId = await bindSpectrumIdentity(connect.chatId)
+    if (!userId) {
+      await markConnectTerminal(connect.id, { failed: true })
+      logger.error('github connect: failed to bind identity')
+      return NextResponse.redirect(`${appUrl}/onboarding?error=connect_identity_failed`)
+    }
+    await storeGithubTokens(userId, result.accessToken, result.username)
+
+    const check = await fetch('https://api.github.com/user', {
+      headers: { Authorization: `Bearer ${result.accessToken}`, Accept: 'application/vnd.github+json', 'User-Agent': 'dinghy' },
+    }).catch(() => null)
+    if (!check?.ok) {
+      await markConnectTerminal(connect.id, { failed: true })
+      logger.error('github connect: live verification failed')
+      return NextResponse.redirect(`${appUrl}/onboarding?error=connect_verification_failed`)
+    }
+
+    await completeConnect(connect.id)
+    return NextResponse.redirect(`${appUrl}/connect/github/success`)
+  } catch (err) {
+    await markConnectTerminal(connect.id, { failed: true })
+    logger.error('github connect callback error', { error: err instanceof Error ? err.message : String(err) })
     return NextResponse.redirect(`${appUrl}/onboarding?error=connect_failed`)
   }
 }

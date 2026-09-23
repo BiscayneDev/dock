@@ -6,7 +6,7 @@ import type { DecryptedTokens } from '@/lib/llm/types'
 const GITHUB_AUTH_URL = 'https://github.com/login/oauth/authorize'
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token'
 
-export function getAuthUrl(scopes: string[] = ['repo', 'notifications']): string {
+export function getAuthUrl(scopes: string[] = ['repo', 'notifications'], state?: string): string {
   const clientId = process.env.GITHUB_CLIENT_ID
   const redirectUri = process.env.GITHUB_REDIRECT_URI
 
@@ -14,6 +14,7 @@ export function getAuthUrl(scopes: string[] = ['repo', 'notifications']): string
     client_id: clientId ?? '',
     redirect_uri: redirectUri ?? '',
     scope: scopes.join(' '),
+    ...(state ? { state } : {}),
   })
 
   return `${GITHUB_AUTH_URL}?${params.toString()}`
