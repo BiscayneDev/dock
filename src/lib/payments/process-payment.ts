@@ -1,7 +1,7 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { getDecryptedOWSTokens, getOWSClient } from '@/lib/integrations/openwallet'
 import { logger } from '@/lib/logger'
-import { assertWithinCap } from './spend-caps'
+import { assertWithinCap, recordSpend } from './spend-caps'
 import {
   USDC_CONTRACTS,
   CURRENCY,
@@ -174,6 +174,28 @@ export async function processRecipePayment(
       completed_at: new Date().toISOString(),
     })
     .eq('id', payment.id)
+
+  // Also record the settled payment in the shared spend ledger so the daily
+  // cap counts recipe spend alongside paybox/wallet/x402. The recipe_payments
+  // row above stays as the payment-specific record. A ledger-write failure
+  // here is logged loudly — the payment already settled on-chain, so it can't
+  // be failed closed, but the miss must not be silent.
+  try {
+    await recordSpend(
+      payerId,
+      'recipe',
+      amount,
+      `recipe payment to ${recipientAddress} on ${chain} (payment ${payment.id})`,
+      supabase
+    )
+  } catch (err) {
+    logger.error('Failed to record recipe payment in spend ledger', {
+      paymentId: payment.id,
+      payerId,
+      amount,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
 
   logger.info('Recipe payment completed', {
     paymentId: payment.id,

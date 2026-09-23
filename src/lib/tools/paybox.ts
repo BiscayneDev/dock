@@ -5,7 +5,7 @@ import {
   payboxRequired,
   agentResultToTool,
 } from '@/lib/integrations/paybox'
-import { assertWithinCap } from '@/lib/payments/spend-caps'
+import { assertWithinCap, recordSpend } from '@/lib/payments/spend-caps'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 
 // Paybox — passkey-gated payments, secrets, and non-custodial wallet ops, driven
@@ -81,7 +81,28 @@ export const payboxRequestPayment: Tool = {
         amountCents: p.amountCents,
         currency: p.currency,
       })
-      return agentResultToTool(resp)
+      const result = agentResultToTool(resp)
+      if (result.success) {
+        // Card issued and charged amount is fixed — record it in the shared
+        // ledger. A ledger-write failure fails closed: surface the error even
+        // though the request went through, so the miss is never silent.
+        try {
+          await recordSpend(
+            ctx.userId,
+            'paybox_payment',
+            p.amountCents / 100,
+            `paybox payment to ${p.merchant} (${p.merchantUrl})`
+          )
+        } catch (err) {
+          return {
+            success: false,
+            error:
+              `Payment request succeeded but failed to record spend in ledger: ` +
+              `${err instanceof Error ? err.message : String(err)}`,
+          }
+        }
+      }
+      return result
     } catch (err) {
       return toError(err)
     }
@@ -231,7 +252,27 @@ export const payboxRequestSwap: Tool = {
         slippageBps: p.slippageBps,
         valueCents: p.valueCents,
       })
-      return agentResultToTool(result.response)
+      const toolResult = agentResultToTool(result.response)
+      if (toolResult.success) {
+        // Swap settled (broadcast). Record the sell-side USD estimate — a
+        // ledger-write failure fails closed and is surfaced, never swallowed.
+        try {
+          await recordSpend(
+            ctx.userId,
+            'paybox_swap',
+            (p.valueCents ?? 0) / 100,
+            `paybox swap ${p.srcToken} -> ${p.dstToken} on ${p.srcChain}, amount ${p.amount}`
+          )
+        } catch (err) {
+          return {
+            success: false,
+            error:
+              `Swap succeeded but failed to record spend in ledger: ` +
+              `${err instanceof Error ? err.message : String(err)}`,
+          }
+        }
+      }
+      return toolResult
     } catch (err) {
       return toError(err)
     }
