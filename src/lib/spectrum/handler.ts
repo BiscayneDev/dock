@@ -20,6 +20,7 @@ import {
 } from '@/spectrum/store'
 import { chat, chatWithTools, wantsGoogle, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { capabilitiesFor, loadImessageToolContext, toolsFor } from './imessage-tools'
+import { actionToolsFor, cancelPendingActions, executePendingAction, hasPendingAction, parseConfirmation, renderProposal } from './actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { dinghyContactCard } from './contact-card'
 import { hitRateLimit, RATE_NOTICE } from './rate-limit'
@@ -267,6 +268,34 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         return
     }
 
+    // An open draft (email / invite) runs only on a clear yes as the very
+    // next message. "no" or anything else cancels it; anything else then
+    // goes through the normal path as a fresh request.
+    if (await hasPendingAction(chatGuid).catch((err) => { logErr('pending action peek failed', err); return false })) {
+        const answer = parseConfirmation(text)
+        if (answer === 'yes') {
+            await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+            let out: string
+            try {
+                const ctx = await loadImessageToolContext(chatGuid).catch(() => null)
+                out = await executePendingAction(chatGuid, ctx)
+            } catch (err) {
+                logErr('pending action failed', err)
+                out = "that didn't go through - try again in a moment."
+            }
+            await sendText(space, chatGuid, 'reply', out)
+            await saveMessage(chatGuid, 'assistant', out).catch((err) => logErr('message save failed', err))
+            return
+        }
+        await cancelPendingActions(chatGuid).catch((err) => logErr('pending action cancel failed', err))
+        if (answer === 'no') {
+            await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+            await sendText(space, chatGuid, 'reply', 'ok, scrapped it.')
+            await saveMessage(chatGuid, 'assistant', 'ok, scrapped it.').catch((err) => logErr('message save failed', err))
+            return
+        }
+    }
+
     if (!SHIPYARD_API_KEY) {
         logErr('reply failed', new Error('SHIPYARD_API_KEY is not set'))
         await sendText(space, chatGuid, 'error_notice', 'Something went wrong on my end. Try again in a moment.')
@@ -288,7 +317,8 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         let reply: string
         let toolCalls = 0
         let iterations = 0
-        const tools = toolCtx ? toolsFor(toolCtx) : []
+        const actions = toolCtx && capabilitiesFor(toolCtx).google ? actionToolsFor(chatGuid) : null
+        const tools = toolCtx ? [...toolsFor(toolCtx), ...(actions?.tools ?? [])] : []
         if (toolCtx && tools.length > 0) {
             const r = await chatWithTools(
                 full,
@@ -318,6 +348,13 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         const tChatEnd = Date.now()
         await sendText(space, chatGuid, 'reply', reply)
         await saveMessage(chatGuid, 'assistant', reply).catch((err) => logErr('message save failed', err))
+        // The exact draft, rendered by the server, as its own bubble.
+        const proposal = actions?.proposal()
+        if (proposal) {
+            const preview = renderProposal(proposal)
+            await sendText(space, chatGuid, 'reply', preview)
+            await saveMessage(chatGuid, 'assistant', preview).catch((err) => logErr('message save failed', err))
+        }
         // Warm-path latency ledger: read these from the function logs.
         console.log(
             `dinghy timing ${JSON.stringify({

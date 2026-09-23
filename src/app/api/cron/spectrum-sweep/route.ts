@@ -13,6 +13,7 @@ import { getSpectrumApp, getImessage } from '@/lib/spectrum/app'
 import { claimOutboxBatch, markOutboxFailed, markOutboxSent } from '@/lib/spectrum/outbox'
 import { chat, chatWithTools, MAX_HISTORY } from '@/lib/spectrum/dinghy'
 import { capabilitiesFor, loadImessageToolContext, toolsFor } from '@/lib/spectrum/imessage-tools'
+import { actionToolsFor, renderProposal } from '@/lib/spectrum/actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from '@/lib/spectrum/config'
 import { typing } from 'spectrum-ts'
 import {
@@ -91,7 +92,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 // Freshly connected chats resume their original request —
                 // with tools when the binding is in place.
                 const toolCtx = await loadImessageToolContext(guid).catch(() => null)
-                const tools = toolCtx ? toolsFor(toolCtx) : []
+                const actions = toolCtx && capabilitiesFor(toolCtx).google ? actionToolsFor(guid) : null
+                const tools = toolCtx ? [...toolsFor(toolCtx), ...(actions?.tools ?? [])] : []
                 const reply = toolCtx && tools.length > 0
                     ? (
                           await chatWithTools(
@@ -120,6 +122,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                         ? "paybox is connected — i can see your wallet balances now (read-only) ✓"
                         : "you're connected — gmail + calendar are in ✓"
                 await space.send(`${connectedLine}\n\n${reply}`)
+                const proposal = actions?.proposal()
+                if (proposal) await space.send(renderProposal(proposal))
                 void space.send(typing('stop')).catch(() => {})
                 await ackResume(claimed.id) // ack ONLY after a successful send
                 await saveMessage(guid, 'user', claimed.pendingRequest).catch((err) =>

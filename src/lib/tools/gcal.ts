@@ -175,6 +175,8 @@ export const gcalListEvents: Tool = {
 const GetEventInput = z.object({
   eventId: z.string().describe('The calendar event ID'),
   calendarId: z.string().optional().default('primary'),
+  // Server-set only (not in the model-facing schema): 'all' emails invites.
+  sendUpdates: z.enum(['all', 'externalOnly', 'none']).optional(),
 })
 
 export const gcalGetEvent: Tool = {
@@ -260,6 +262,7 @@ export const gcalCreateEvent: Tool = {
 
       const res = await cal.events.insert({
         calendarId: parsed.calendarId,
+        ...(parsed.sendUpdates ? { sendUpdates: parsed.sendUpdates } : {}),
         requestBody: {
           summary: parsed.summary,
           start: { dateTime: parsed.start },
