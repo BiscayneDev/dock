@@ -249,6 +249,11 @@ async function handleGoogleConnectCallback(
     // Complete ONLY after live verification passed.
     await completeConnect(connect.id)
     await notifyConnectSuccess(connect)
+    // iMessage connects land on a branded done page — the chat is their
+    // home, not the Telegram onboarding card.
+    if (connect.platform === 'imessage') {
+      return NextResponse.redirect(`${appUrl}/connect/success`)
+    }
     return NextResponse.redirect(`${appUrl}/onboarding?connected=google&via=chat`)
   } catch (err) {
     // Code may or may not have been consumed — either way, the auth code is
