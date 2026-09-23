@@ -107,10 +107,10 @@ export function wantsWallet(text: string): boolean {
 /** Shipyard gateway call (OpenAI-compatible). Plain HTTP, works anywhere. */
 export async function chat(
     history: Message[],
-    opts: { gatewayUrl: string; apiKey: string; model: string; facts?: DinghyFact[]; includeOpener?: boolean }
+    opts: { gatewayUrl: string; apiKey: string; model: string; facts?: DinghyFact[]; includeOpener?: boolean; memory?: string }
 ): Promise<string> {
     const messages = [
-        { role: 'system' as const, content: buildSystemPrompt(opts.facts ?? [], opts.includeOpener ?? false) },
+        { role: 'system' as const, content: buildSystemPrompt(opts.facts ?? [], opts.includeOpener ?? false) + (opts.memory ?? '') },
         ...history,
     ]
 
@@ -172,6 +172,8 @@ export async function chatWithTools(
         facts?: DinghyFact[]
         includeOpener?: boolean
         capabilities?: PromptCapabilities
+        /** Rendered memory block (memory.ts renderMemoryBlock), appended to the system prompt. */
+        memory?: string
     },
     tools: Tool[],
     ctx: UserContext
@@ -187,7 +189,7 @@ export async function chatWithTools(
                 opts.facts ?? [],
                 opts.includeOpener ?? false,
                 opts.capabilities ?? { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox) }
-            ),
+            ) + (opts.memory ?? ''),
         },
         ...history,
     ]

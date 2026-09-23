@@ -1,0 +1,281 @@
+/**
+ * Dinghy memory (migration 024). Three layers, all keyed by chat_guid:
+ *
+ *   profile    one short document about the person, rewritten over time,
+ *              always in the prompt
+ *   summaries  episodic summaries of conversation that has scrolled out of
+ *              the 20-message history window; latest 2 in the prompt
+ *   facts      atomic memories in the shared `memories` table, retrieved by
+ *              relevance to the current message (pgvector when an embeddings
+ *              key is configured, newest-first otherwise)
+ *
+ * Reads happen before the reply (one RPC + one embed). Writes happen after
+ * the reply is sent, at most once every UPDATE_EVERY messages, so memory
+ * never adds latency to a reply. Every failure degrades to "no memory".
+ */
+
+import { createServerClient } from '@/lib/supabase/server'
+import { embedText, currentEmbeddingModel } from '@/lib/memory/embeddings'
+import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
+
+export const UPDATE_EVERY = 10
+export const HISTORY_WINDOW = 20
+const SUMMARIZE_MIN = 20
+const SUMMARIZE_MAX = 60
+const FACT_LIMIT = 5
+const FACT_MIN_SIMILARITY = 0.3
+const DUPLICATE_SIMILARITY = 0.92
+const PROFILE_CAP = 1200
+const SUMMARY_CAP = 600
+const VALID_TYPES = new Set(['fact', 'person', 'preference', 'org', 'event'])
+
+export interface MemoryContext {
+    profile: string
+    summaries: string[]
+    facts: string[]
+}
+
+export const EMPTY_MEMORY: MemoryContext = { profile: '', summaries: [], facts: [] }
+
+// ── Secret guard: nothing that looks like a credential is ever stored. ──────
+
+const SECRET_PATTERNS: RegExp[] = [
+    /\b(sk|pk|rk|ghp|gho|ghs|github_pat|xox[abpr]|AKIA|AIza|sbp|eyJ)[A-Za-z0-9_\-.]{12,}/,
+    /\b[A-Fa-f0-9]{32,}\b/,
+    /\b[1-9A-HJ-NP-Za-km-z]{43,88}\b/, // base58 keys / signatures
+    /\b(?:\d[ -]?){13,19}\b/, // card-like numbers
+    /\b(password|passcode|passwd|pin code|seed phrase|recovery phrase|mnemonic|private key|secret key|api key|cvv|cvc|ssn|social security)\b/i,
+    /\b\d{3}-\d{2}-\d{4}\b/,
+]
+
+export function looksSecret(text: string): boolean {
+    return SECRET_PATTERNS.some((re) => re.test(text))
+}
+
+// ── Prompt block ──────────────────────────────────────────────────────────────
+
+/** The memory section appended to the system prompt; empty string when nothing is known. */
+export function renderMemoryBlock(m: MemoryContext): string {
+    const parts: string[] = []
+    if (m.profile.trim()) parts.push(`What you know about this person:\n${m.profile.trim().slice(0, PROFILE_CAP)}`)
+    if (m.summaries.length) {
+        parts.push(`Earlier conversation (summaries, oldest first):\n${m.summaries.map((s) => `- ${s.slice(0, SUMMARY_CAP)}`).join('\n')}`)
+    }
+    if (m.facts.length) parts.push(`Possibly relevant memories:\n${m.facts.map((f) => `- ${f}`).join('\n')}`)
+    if (!parts.length) return ''
+    return (
+        '\n\n' +
+        parts.join('\n\n') +
+        '\n\nUse this only when it helps; do not recite it. If it conflicts with what they say now, trust what they say now.'
+    )
+}
+
+// ── Read path ─────────────────────────────────────────────────────────────────
+
+export async function loadMemoryContext(chatGuid: string, query: string): Promise<MemoryContext> {
+    const supabase = createServerClient()
+    const [ctxRes, facts] = await Promise.all([
+        supabase.rpc('dinghy_memory_context', { p_chat_guid: chatGuid }),
+        relevantFacts(chatGuid, query).catch(() => [] as string[]),
+    ])
+    if (ctxRes.error) throw new Error(`dinghy_memory_context failed: ${ctxRes.error.message}`)
+    const d = (ctxRes.data ?? {}) as { profile?: string; summaries?: string[] }
+    return { profile: d.profile ?? '', summaries: Array.isArray(d.summaries) ? d.summaries : [], facts }
+}
+
+async function relevantFacts(chatGuid: string, query: string): Promise<string[]> {
+    const supabase = createServerClient()
+    const embedding = query.trim().length >= 3 ? await embedText(query) : null
+    if (embedding) {
+        const { data, error } = await supabase.rpc('match_chat_memories', {
+            p_chat_guid: chatGuid,
+            p_embedding: JSON.stringify(embedding),
+            p_model: currentEmbeddingModel(),
+            p_limit: FACT_LIMIT,
+        })
+        if (!error && Array.isArray(data) && data.length) {
+            return (data as { content: string; similarity: number }[])
+                .filter((r) => r.similarity >= FACT_MIN_SIMILARITY)
+                .map((r) => r.content)
+        }
+    }
+    const { data } = await supabase.rpc('recent_chat_memories', { p_chat_guid: chatGuid, p_limit: FACT_LIMIT })
+    return ((data ?? []) as { content: string }[]).map((r) => r.content)
+}
+
+// ── Write path (after the reply) ──────────────────────────────────────────────
+
+interface Row {
+    role: string
+    content: string
+    created_at: string
+}
+
+async function gatewayJson(system: string, user: string, maxTokens: number): Promise<Record<string, unknown> | null> {
+    if (!SHIPYARD_API_KEY) return null
+    const res = await fetch(`${GATEWAY_URL}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SHIPYARD_API_KEY}` },
+        body: JSON.stringify({
+            model: SHIPYARD_MODEL,
+            messages: [
+                { role: 'system', content: system },
+                { role: 'user', content: user },
+            ],
+            max_tokens: maxTokens,
+            stream: false,
+        }),
+    })
+    if (!res.ok) throw new Error(`gateway ${res.status}`)
+    const data = (await res.json()) as { choices?: { message?: { content?: string | null } }[] }
+    return parseJsonObject(data.choices?.[0]?.message?.content ?? '')
+}
+
+export function parseJsonObject(text: string): Record<string, unknown> | null {
+    const m = text.match(/\{[\s\S]*\}/)
+    if (!m) return null
+    try {
+        const v = JSON.parse(m[0])
+        return v && typeof v === 'object' ? (v as Record<string, unknown>) : null
+    } catch {
+        return null
+    }
+}
+
+const transcript = (rows: Row[], cap: number) =>
+    rows
+        .map((r) => `${r.role === 'assistant' ? 'dinghy' : 'user'}: ${r.content}`)
+        .join('\n')
+        .slice(-cap)
+
+/** Clean model-proposed facts: valid type, non-empty, no secrets, deduped. */
+export function cleanFacts(raw: unknown, existing: string[]): { content: string; type: string }[] {
+    if (!Array.isArray(raw)) return []
+    const seen = new Set(existing.map((c) => c.toLowerCase().trim()))
+    const out: { content: string; type: string }[] = []
+    for (const f of raw) {
+        const content = typeof f?.content === 'string' ? f.content.trim() : ''
+        const type = typeof f?.type === 'string' && VALID_TYPES.has(f.type) ? f.type : 'fact'
+        if (content.length < 4 || content.length > 300 || looksSecret(content)) continue
+        const key = content.toLowerCase()
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push({ content, type })
+        if (out.length >= 5) break
+    }
+    return out
+}
+
+/** Keep profile lines that don't look like secrets; cap length. */
+export function cleanProfile(raw: unknown): string | null {
+    if (typeof raw !== 'string') return null
+    const lines = raw
+        .split('\n')
+        .map((l) => l.trimEnd())
+        .filter((l) => l.trim() && !looksSecret(l))
+    const text = lines.join('\n').slice(0, PROFILE_CAP).trim()
+    return text || null
+}
+
+const PROFILE_SYSTEM = `You maintain memory for Dinghy, a personal assistant that texts with one person.
+Given the current profile, known facts, and recent messages, return ONLY JSON:
+{"profile": "...", "facts": [{"content": "...", "type": "fact|person|preference|org|event"}]}
+profile: the full updated profile of this person in short "- " lines (name, work, people in their life, preferences, ongoing plans). Rewrite it: keep what is still true, fix what changed, drop what is stale. Max ~15 lines.
+facts: up to 5 NEW concrete, reusable facts from the recent messages not already known. Include dates for time-bound facts.
+Never include passwords, codes, keys, card or account numbers, or anything secret. Only facts about the person, never about Dinghy itself.`
+
+const SUMMARY_SYSTEM = `Summarize this stretch of a text conversation between a person and their assistant Dinghy in 2-4 plain sentences: what they talked about, decisions, and anything left open. Include dates when mentioned. Never include secrets, codes, or account numbers. Return ONLY JSON: {"summary": "..."}`
+
+async function storeFacts(chatGuid: string, facts: { content: string; type: string }[]): Promise<number> {
+    const supabase = createServerClient()
+    let n = 0
+    for (const f of facts) {
+        const embedding = await embedText(f.content)
+        if (embedding) {
+            const { data } = await supabase.rpc('match_chat_memories', {
+                p_chat_guid: chatGuid,
+                p_embedding: JSON.stringify(embedding),
+                p_model: currentEmbeddingModel(),
+                p_limit: 1,
+            })
+            const top = (data as { similarity: number }[] | null)?.[0]
+            if (top && top.similarity > DUPLICATE_SIMILARITY) continue
+        }
+        const { error } = await supabase.rpc('add_chat_memory', {
+            p_chat_guid: chatGuid,
+            p_type: f.type,
+            p_content: f.content,
+            p_embedding: embedding ? JSON.stringify(embedding) : null,
+            p_model: embedding ? currentEmbeddingModel() : null,
+        })
+        if (!error) n++
+    }
+    return n
+}
+
+/**
+ * Called after each reply. Cheap no-op unless UPDATE_EVERY new messages have
+ * arrived (atomic claim). Then: rewrite the profile + extract facts from the
+ * new messages, and summarize any stretch that has scrolled out of the
+ * history window.
+ */
+export async function updateMemory(chatGuid: string): Promise<void> {
+    const supabase = createServerClient()
+    const { data: claim, error } = await supabase.rpc('claim_memory_update', { p_chat_guid: chatGuid, p_every: UPDATE_EVERY })
+    if (error) throw new Error(`claim_memory_update failed: ${error.message}`)
+    const c = (Array.isArray(claim) ? claim[0] : null) as { total: number; previously_seen: number; last_summary_at: string | null } | null
+    if (!c) return
+
+    const { data: rowsData } = await supabase
+        .from('spectrum_messages')
+        .select('role, content, created_at')
+        .eq('chat_guid', chatGuid)
+        .order('created_at', { ascending: false })
+        .limit(SUMMARIZE_MAX + HISTORY_WINDOW)
+    const rows = ((rowsData ?? []) as Row[]).filter((r) => r.role === 'user' || r.role === 'assistant').reverse()
+    if (!rows.length) return
+
+    // 1. Profile + facts from the messages since the last update.
+    const fresh = rows.slice(-Math.min(Math.max(c.total - c.previously_seen, UPDATE_EVERY), 30))
+    const [{ data: ctx }, { data: recent }] = await Promise.all([
+        supabase.rpc('dinghy_memory_context', { p_chat_guid: chatGuid }),
+        supabase.rpc('recent_chat_memories', { p_chat_guid: chatGuid, p_limit: 30 }),
+    ])
+    const profile = ((ctx ?? {}) as { profile?: string }).profile ?? ''
+    const known = ((recent ?? []) as { content: string }[]).map((r) => r.content)
+    const out = await gatewayJson(
+        PROFILE_SYSTEM,
+        `current profile:\n${profile || '(empty)'}\n\nknown facts:\n${known.map((k) => `- ${k}`).join('\n') || '(none)'}\n\nrecent messages:\n${transcript(fresh, 6000)}`,
+        700
+    )
+    if (out) {
+        const nextProfile = cleanProfile(out.profile)
+        if (nextProfile) await supabase.rpc('save_dinghy_profile', { p_chat_guid: chatGuid, p_profile: nextProfile })
+        await storeFacts(chatGuid, cleanFacts(out.facts, known))
+    }
+
+    // 2. Episodic summary of what scrolled out of the history window.
+    const since = c.last_summary_at ? Date.parse(c.last_summary_at) : 0
+    const outOfWindow = rows.slice(0, Math.max(0, rows.length - HISTORY_WINDOW)).filter((r) => Date.parse(r.created_at) > since)
+    if (outOfWindow.length >= SUMMARIZE_MIN) {
+        const chunk = outOfWindow.slice(0, SUMMARIZE_MAX)
+        const s = await gatewayJson(SUMMARY_SYSTEM, transcript(chunk, 8000), 300)
+        const summary = typeof s?.summary === 'string' ? s.summary.trim() : ''
+        if (summary && !looksSecret(summary)) {
+            await supabase.rpc('add_conversation_summary', {
+                p_chat_guid: chatGuid,
+                p_summary: summary,
+                p_message_count: chunk.length,
+                p_first_at: chunk[0].created_at,
+                p_last_at: chunk[chunk.length - 1].created_at,
+            })
+        }
+    }
+}
+
+/** "forget X" — soft-deletes matching facts (reversible). */
+export async function forgetMemories(chatGuid: string, match: string): Promise<number> {
+    const { data, error } = await createServerClient().rpc('forget_chat_memories', { p_chat_guid: chatGuid, p_match: match })
+    if (error) throw new Error(`forget_chat_memories failed: ${error.message}`)
+    return (data as number) ?? 0
+}
