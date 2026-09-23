@@ -175,8 +175,6 @@ export const gcalListEvents: Tool = {
 const GetEventInput = z.object({
   eventId: z.string().describe('The calendar event ID'),
   calendarId: z.string().optional().default('primary'),
-  // Server-set only (not in the model-facing schema): 'all' emails invites.
-  sendUpdates: z.enum(['all', 'externalOnly', 'none']).optional(),
 })
 
 export const gcalGetEvent: Tool = {
@@ -237,6 +235,8 @@ const CreateEventInput = z.object({
   location: z.string().optional(),
   attendees: z.array(z.string()).optional().describe('Email addresses of attendees'),
   calendarId: z.string().optional().default('primary'),
+  // Server-set only (not in the model-facing schema): 'all' emails invites.
+  sendUpdates: z.enum(['all', 'externalOnly', 'none']).optional(),
 })
 
 export const gcalCreateEvent: Tool = {
