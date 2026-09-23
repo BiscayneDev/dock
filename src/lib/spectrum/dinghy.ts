@@ -49,7 +49,10 @@ const WALLET_LINE =
     "You have live READ-ONLY access to this user's crypto wallets through PayBox (wallet_balances). " +
     'Answer balance and holdings questions from it in plain language with USD values. You cannot ' +
     'send, swap, or sign anything yet — if asked, say sends are coming soon and will always need ' +
-    'their PayBox passkey approval. Never invent balances.'
+    'their PayBox passkey approval. Never invent balances. When balances look low for what they ' +
+    'want to do — x402 paid APIs, inference spend, a pending swap — offer paybox_onramp: a hosted ' +
+    'buy link (card → USDC straight into their wallet, completed in PayBox with their passkey). ' +
+    'One short offer, never pushy.'
 const NO_WALLET_LINE =
     'Crypto wallet access connects through PayBox via a one-tap link that is sent automatically when ' +
     'the user asks about their wallet or balances. You cannot see any wallet right now; never guess balances.'

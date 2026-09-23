@@ -62,6 +62,7 @@ import {
   payboxRequestWalletSign,
   payboxRequestSwap,
   payboxGetPortfolio,
+  payboxOnramp,
   payboxGetRequest,
 } from './paybox'
 import { switchLLMProvider } from './llm-control'
@@ -142,6 +143,7 @@ export const integrationTools: Tool[] = [
   payboxRequestWalletSign,
   payboxRequestSwap,
   payboxGetPortfolio,
+  payboxOnramp,
   payboxGetRequest,
   // LLM runtime control (self-aware provider swap)
   switchLLMProvider,
