@@ -64,25 +64,34 @@ describe('message classification', () => {
 })
 
 describe('claimInboundDelivery', () => {
-  beforeEach(() => fromMock.mockReset())
+  beforeEach(() => rpcMock.mockReset())
 
-  it('returns true for a new delivery', async () => {
-    fromMock.mockReturnValue({ insert: vi.fn().mockResolvedValue({ error: null }) })
-    expect(await claimInboundDelivery('msg-1', 'guid-1')).toBe(true)
+  it('returns true when this call owns the delivery', async () => {
+    rpcMock.mockResolvedValue({ data: true, error: null })
+    expect(await claimInboundDelivery('msg-1', 'guid-1', [])).toBe(true)
+    expect(rpcMock).toHaveBeenCalledWith('claim_inbound_delivery', expect.objectContaining({ p_message_id: 'msg-1' }))
   })
 
-  it('returns false on a unique violation (redelivery)', async () => {
-    fromMock.mockReturnValue({
-      insert: vi.fn().mockResolvedValue({ error: { code: '23505', message: 'duplicate key' } }),
-    })
-    expect(await claimInboundDelivery('msg-1', 'guid-1')).toBe(false)
+  it('returns false on a redelivery', async () => {
+    rpcMock.mockResolvedValue({ data: false, error: null })
+    expect(await claimInboundDelivery('msg-1', 'guid-1', [])).toBe(false)
   })
 
-  it('fails open on transient errors (duplicate beats silence)', async () => {
-    fromMock.mockReturnValue({
-      insert: vi.fn().mockResolvedValue({ error: { code: '08006', message: 'connection failure' } }),
-    })
-    expect(await claimInboundDelivery('msg-1', 'guid-1')).toBe(true)
+  it('retries transient errors with the same claim id, then processes', async () => {
+    rpcMock
+      .mockResolvedValueOnce({ data: null, error: { code: '08006', message: 'connection failure' } })
+      .mockRejectedValueOnce(new Error('fetch failed'))
+      .mockResolvedValueOnce({ data: true, error: null })
+    expect(await claimInboundDelivery('msg-1', 'guid-1', [0, 0, 0])).toBe(true)
+    expect(rpcMock).toHaveBeenCalledTimes(3)
+    const ids = rpcMock.mock.calls.map((c) => (c[1] as { p_claim_id: string }).p_claim_id)
+    expect(new Set(ids).size).toBe(1)
+  })
+
+  it('never processes when the database stays down (no fail-open duplicates)', async () => {
+    rpcMock.mockResolvedValue({ data: null, error: { code: '08006', message: 'connection failure' } })
+    expect(await claimInboundDelivery('msg-1', 'guid-1', [0, 0])).toBe(false)
+    expect(rpcMock).toHaveBeenCalledTimes(3)
   })
 })
 
