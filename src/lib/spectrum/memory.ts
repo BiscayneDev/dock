@@ -26,7 +26,16 @@ import { createServerClient } from '@/lib/supabase/server'
 import { embedText, currentEmbeddingModel } from '@/lib/memory/embeddings'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 
-export const UPDATE_EVERY = 10
+/**
+ * Extraction cadence (F3 audit + fix): UPDATE_EVERY used to be 10, so a
+ * stated personal fact could sit un-extracted for ten messages. Lowered to
+ * 4 — at most a few messages of delay — while keeping the atomic
+ * claim/lease semantics: the claim still fires at most once per window
+ * (one cheap extraction call), and the extraction window still spans the
+ * full gap since the previous claim (total - previously_seen), so nothing
+ * is missed by the tighter cadence.
+ */
+export const UPDATE_EVERY = 4
 export const HISTORY_WINDOW = 20
 const SUMMARIZE_MIN = 20
 const SUMMARIZE_MAX = 60

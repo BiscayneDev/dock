@@ -91,7 +91,7 @@ describe('D3 parity: two chats, same user', () => {
     expect(add![1]).toMatchObject({ p_user_id: USER, p_chat_guid: CHAT_A, p_channel: 'imessage', p_content: 'Sister is Pia' })
     // per-chat claim cadence is preserved: user-level RPC, still p_every gated
     const claim = rpcMock.mock.calls.find((c) => c[0] === 'claim_user_memory_update')
-    expect(claim![1]).toEqual({ p_user_id: USER, p_chat_guid: CHAT_A, p_every: 10 })
+    expect(claim![1]).toEqual({ p_user_id: USER, p_chat_guid: CHAT_A, p_every: 4 })
     // profile is written to the user-level store, not the per-chat one
     expect(rpcMock.mock.calls.some((c) => c[0] === 'save_dinghy_user_profile')).toBe(true)
     expect(rpcMock.mock.calls.some((c) => c[0] === 'save_dinghy_profile')).toBe(false)
