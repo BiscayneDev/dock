@@ -11,6 +11,11 @@
  * footer's "mute mornings" reply (handled in the webhook path). Quiet
  * hours via time-utils.
  *
+ * Format: the model returns the brief as JSON and it goes out as a designed
+ * card (brief-card.tsx) with weather for where the person is (fresh shared
+ * pin, else briefing_settings.home_place). If the reply isn't usable JSON,
+ * or the card can't render, the plain text goes out instead.
+ *
  * Audience rule: every bound identity gets THEIR OWN briefing (bindings
  * are fail-closed on the beta allowlist). Product-admin data (waitlist)
  * goes only to the chat whose Gmail profile is on the owner domain.
@@ -28,6 +33,9 @@ import { chatWithTools } from '@/lib/spectrum/dinghy'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from '@/lib/spectrum/config'
 import { loadFacts, saveMessage } from '@/spectrum/store'
 import { isInQuietHours, getCurrentHour } from '@/lib/time-utils'
+import { BRIEF_JSON_SPEC, cardDate, cardTime, parseBriefReply, sendBrief } from '@/lib/spectrum/brief-card-send'
+import { briefLocation } from '@/lib/spectrum/location'
+import { cardWeather } from '@/lib/weather/brief-weather'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -129,13 +137,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 day: 'numeric',
                 timeZone: timezone,
             })
+            // Weather where they are: fresh shared pin, else home place.
+            const loc = await briefLocation(ctx.userId).catch(() => null)
+            const weather = loc ? await cardWeather(loc.lat, loc.lon, loc.label) : null
+
             const ask =
                 `Morning briefing for ${today}. Use your tools: today's calendar, ` +
                 'unread email (count + the couple that actually look important)' +
                 (isOwner && waitlistCount !== null
                     ? `, and this product note: the Dinghy waitlist is at ${waitlistCount} signups`
                     : '') +
-                '. One short text, your voice, no headers, no bullet spam.'
+                (weather
+                    ? `. Weather is already on the card (${weather.temp}°F, ${weather.sky} in ${weather.place}, high ${weather.high}, ` +
+                      `${weather.rain ?? 0}% rain), so don't repeat numbers; the opener can nod to the sky`
+                    : '') +
+                '. ' +
+                BRIEF_JSON_SPEC
 
             const { reply } = await chatWithTools(
                 [{ role: 'user', content: ask }],
@@ -143,10 +160,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 IMESSAGE_READ_TOOLS,
                 ctx
             )
-            const text = `${reply}\n\n${MUTE_FOOTER}`
+            const now = new Date()
+            const brief = parseBriefReply(reply, { date: cardDate(now, timezone), time: cardTime(now, timezone), weather })
+            // Not card-shaped: fall back to the old plain-text briefing.
+            const plain = brief ? brief.text : reply.trim().startsWith('{') ? '' : reply
+            if (!brief && !plain) {
+                console.error(`briefing reply unusable (${chatGuid})`)
+                results.errors++
+                continue
+            }
+            const text = `${plain}\n\n${MUTE_FOOTER}`
             // Outbox first: the row exists before the attempt, so a kill or
             // a send failure is always retried by the spectrum-sweep cron.
-            const outboxId = await enqueueOutbox(chatGuid, 'reply', text)
+            const outboxId = brief
+                ? await enqueueOutbox(chatGuid, 'brief', JSON.stringify({ card: brief.card, text }))
+                : await enqueueOutbox(chatGuid, 'reply', text)
             if (!outboxId) {
                 console.error(`briefing outbox enqueue failed (${chatGuid})`)
                 results.errors++
@@ -156,7 +184,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             // Best-effort immediate send; the sweep covers any failure.
             try {
                 const space = await im.space.get(chatGuid)
-                await space.send(text)
+                if (brief) await sendBrief(space, { card: brief.card, text })
+                else await space.send(text)
                 await markOutboxSent(outboxId)
             } catch (sendErr) {
                 console.error(

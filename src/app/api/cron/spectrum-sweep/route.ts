@@ -17,6 +17,7 @@ import { actionToolsFor, renderProposal } from '@/lib/spectrum/actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from '@/lib/spectrum/config'
 import { typing } from 'spectrum-ts'
 import { sendFileWithPreview } from '@/lib/files/send'
+import { sendBrief, type BriefPayload } from '@/lib/spectrum/brief-card-send'
 import { renderFile } from '@/lib/files/render'
 import { parseFileInput } from '@/lib/files/tool'
 import {
@@ -63,6 +64,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 const file = await renderFile(parsed.doc, parsed.format, { ogImage: 'https://www.getdinghy.sh/api/og' })
                 await sendFileWithPreview(space, { ...file, format: parsed.format, title: parsed.doc.title, subtitle: parsed.doc.subtitle })
                 await saveMessage(row.chat_guid, 'assistant', fileMarker(file.filename)).catch(() => undefined)
+            } else if (row.kind === 'brief') {
+                // text is JSON {card, text}: the card, or the text if it can't render.
+                const payload = JSON.parse(row.text) as BriefPayload
+                await sendBrief(space, payload)
+                await saveMessage(row.chat_guid, 'assistant', payload.text).catch(() => undefined)
             } else {
                 await space.send(row.text)
                 // Reminders are server-initiated; keep them in history so a
