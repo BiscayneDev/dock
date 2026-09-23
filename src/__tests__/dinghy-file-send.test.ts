@@ -46,3 +46,13 @@ describe('file preview', () => {
     await expect(sendFileWithPreview({ send: async () => { if (n++ === 1) throw new Error('upstream') } }, file)).rejects.toThrow('upstream')
   })
 })
+
+import { stripFileMarkers } from '@/lib/files/tool'
+
+describe('file markers', () => {
+  it('strips copied "[sent file: x]" markers and flags them', () => {
+    const r = stripFileMarkers('Updated itinerary is in your PDF.\n\n[sent file: spain-trip.pdf]')
+    expect(r).toEqual({ text: 'Updated itinerary is in your PDF.', hadMarker: true })
+    expect(stripFileMarkers('all good')).toEqual({ text: 'all good', hadMarker: false })
+  })
+})

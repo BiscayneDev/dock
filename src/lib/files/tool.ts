@@ -113,3 +113,15 @@ export function fileToolsFor(): FileToolset {
 
     return { tools: [createFile], files: () => [...made] }
 }
+
+/** Remove "[sent file: x]" markers the model may copy into its reply text. */
+export function stripFileMarkers(text: string): { text: string; hadMarker: boolean } {
+    const re = /\[\s*sent file:[^\]]*\]/gi
+    const hadMarker = re.test(text)
+    return { text: text.replace(re, '').replace(/\n{3,}/g, '\n\n').trim(), hadMarker }
+}
+
+/** One-shot nudge when the model claimed a file without calling create_file. */
+export const FILE_NUDGE =
+    'Note from the Dinghy app: your last reply said a file was sent or updated, but you did not call create_file, so nothing was attached. ' +
+    'Call create_file now with the complete, updated document, then reply with one short line. Never write "[sent file: ...]" yourself.'
