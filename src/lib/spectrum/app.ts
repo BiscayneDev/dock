@@ -4,12 +4,15 @@
  * next request retries).
  */
 
-import { Spectrum } from 'spectrum-ts'
+import { Spectrum, type Platform, type PlatformInstance } from 'spectrum-ts'
 import { imessage } from '@spectrum-ts/imessage'
 import { getSpectrumConfig } from './config'
 
 export type SpectrumApp = Awaited<ReturnType<typeof Spectrum>>
-export type IMessageProvider = ReturnType<typeof imessage>
+// imessage() is overloaded (app -> instance, space/message -> narrowed) and
+// ReturnType resolves the last overload, so name the instance type directly.
+type IMessageDef = typeof imessage extends Platform<infer D> ? D : never
+export type IMessageProvider = PlatformInstance<IMessageDef>
 
 let appPromise: Promise<SpectrumApp> | null = null
 
