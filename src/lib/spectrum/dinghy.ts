@@ -63,6 +63,7 @@ export interface PromptCapabilities {
     x?: boolean
     xFree?: boolean
     xSearch?: boolean
+    github?: boolean
 }
 
 const FILES_LINE =
@@ -98,6 +99,10 @@ const X_SEARCH_LINE =
 const NO_X_SEARCH_LINE =
     "You can't keyword-search X yet; you can read a post from its link or a specific account's recent posts."
 
+const GITHUB_LINE =
+    'For GitHub (their repos, issues, pull requests, notifications), use the github_ tools and answer in plain words with the repo and number. ' +
+    'You can only read GitHub from here; never say you opened, commented on, merged or closed anything.'
+
 const SPEND_LINE =
     'For questions about AI spend, cost or usage, call spend_summary and give the number plainly.'
 
@@ -127,6 +132,7 @@ export function buildSystemPrompt(
     if (caps.files) prompt += ' ' + FILES_LINE
     if (caps.spend) prompt += ' ' + SPEND_LINE
     if (caps.reminders) prompt += ' ' + REMINDERS_LINE
+    if (caps.github) prompt += ' ' + GITHUB_LINE
     if (caps.xFree) prompt += ' ' + X_FREE_LINE
     if (caps.x) prompt += ' ' + X_LINE
     else if (caps.xFree) prompt += ' ' + (caps.xSearch ? X_SEARCH_LINE : NO_X_SEARCH_LINE)
@@ -165,6 +171,12 @@ export function wantsGoogle(text: string): boolean {
 
 export const WALLET_INTENT =
     /\b(wallets?|(?:my |wallet |crypto |token )balances?|portfolio|crypto|usdc|usdt|eth|ether|ethereum|sol|solana|base chain|tokens? (do i|i) (have|hold)|paybox|on-?chain)\b/i
+
+export const GITHUB_INTENT = /\b(github|git hub|my repos?|repositor(?:y|ies)|pull requests?|my prs?)\b/i
+
+export function wantsGithub(text: string): boolean {
+    return GITHUB_INTENT.test(text)
+}
 
 export function wantsWallet(text: string): boolean {
     return WALLET_INTENT.test(text)

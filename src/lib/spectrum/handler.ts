@@ -11,6 +11,7 @@ import {
     ensureIdentity,
     isGoogleConnected,
     isPayboxConnected,
+    isGithubConnected,
     loadFacts,
     loadHistory,
     saveMessage,
@@ -19,7 +20,7 @@ import {
     type DinghyFact,
     type HistoryMessage,
 } from '@/spectrum/store'
-import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
+import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsGithub, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { recordUsage, spendToolFor, type GatewayUsage } from './metering'
 import { capabilitiesFor, guestCapabilities, guestToolContext, liveInfoTools, loadImessageToolContext, toolsFor } from './imessage-tools'
 import { reminderToolsFor } from './reminders'
@@ -275,6 +276,25 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             await sendText(space, chatGuid, 'connect_link', link)
         } catch (err) {
             logErr('connect link failed', err)
+            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
+        }
+        return
+    }
+
+    // GitHub asked about while unconnected: one-use GitHub connect link.
+    if (wantsGithub(text) && !(await isGithubConnected(chatGuid).catch(() => false))) {
+        try {
+            const link = await createConnectLink(chatGuid, text, 'github')
+            await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+            await sendText(
+                space,
+                chatGuid,
+                'connect_link',
+                "github isn't connected yet - tap below to connect it (i'll only read repos, issues and PRs) and i'll take it from there:"
+            )
+            await sendText(space, chatGuid, 'connect_link', link)
+        } catch (err) {
+            logErr('github connect link failed', err)
             await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
         }
         return
