@@ -1,14 +1,20 @@
 {
-  "name": "Dock — Your AI First Mate",
-  "short_name": "Dock",
-  "description": "AI assistant that manages email, calendar, GitHub, Notion, and crypto through Telegram.",
+  "name": "Dinghy",
+  "short_name": "Dinghy",
+  "description": "Your AI first mate, living in your iMessage.",
   "start_url": "/harbor",
   "display": "standalone",
-  "background_color": "#d6dce8",
-  "theme_color": "#d6dce8",
+  "background_color": "#0E2030",
+  "theme_color": "#0E2030",
   "icons": [
     {
-      "src": "/logo.png",
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
