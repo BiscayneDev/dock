@@ -235,6 +235,8 @@ const CreateEventInput = z.object({
   location: z.string().optional(),
   attendees: z.array(z.string()).optional().describe('Email addresses of attendees'),
   calendarId: z.string().optional().default('primary'),
+  // Server-set only (not in the model-facing schema): 'all' emails invites.
+  sendUpdates: z.enum(['all', 'externalOnly', 'none']).optional(),
 })
 
 export const gcalCreateEvent: Tool = {
@@ -260,6 +262,7 @@ export const gcalCreateEvent: Tool = {
 
       const res = await cal.events.insert({
         calendarId: parsed.calendarId,
+        ...(parsed.sendUpdates ? { sendUpdates: parsed.sendUpdates } : {}),
         requestBody: {
           summary: parsed.summary,
           start: { dateTime: parsed.start },
