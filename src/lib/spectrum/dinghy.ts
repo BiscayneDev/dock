@@ -51,12 +51,26 @@ export interface PromptCapabilities {
     wallet: boolean
     /** create_file is offered (any chat bound to a user). */
     files?: boolean
+    /** weather tool is offered (every chat). */
+    live?: boolean
+    /** web_search is offered (TAVILY_API_KEY set). */
+    search?: boolean
 }
 
 const FILES_LINE =
     'You can make real documents with create_file (PDF by default; Word, CSV, web page or Markdown on request) ' +
     'for plans, itineraries, notes, checklists and tables; they arrive in this chat as a file right after your reply. ' +
     'Offer one when a list or plan would be easier to keep as a document, and make it when asked.'
+
+const WEATHER_LINE =
+    'For weather, temperature or forecast questions, call the weather tool and answer from it; never guess the weather.'
+
+const SEARCH_LINE =
+    'For news, scores, prices, hours, recent events or anything that may have changed, call web_search ' +
+    'and answer from the results in a line or two; mention the source when it matters.'
+
+const NO_SEARCH_LINE =
+    "You can't browse the web yet, so for news, scores, prices or recent events say you can't look that up live."
 
 const NO_TOOLS_EMAIL_LINE =
     'If the user asks about email or calendar and no link was sent, say they are not connected yet ' +
@@ -82,6 +96,7 @@ export function buildSystemPrompt(
     prompt += ' ' + (caps.google ? TOOLS_EMAIL_LINE : NO_TOOLS_EMAIL_LINE)
     prompt += ' ' + (caps.wallet ? WALLET_LINE : NO_WALLET_LINE)
     if (caps.files) prompt += ' ' + FILES_LINE
+    if (caps.live) prompt += ' ' + WEATHER_LINE + ' ' + (caps.search ? SEARCH_LINE : NO_SEARCH_LINE)
     if (facts.length > 0) {
         prompt += ' About Dinghy (product context, not facts about the person you are texting):\n' + facts.map((f) => `- ${f.key}: ${f.value}`).join('\n')
     }

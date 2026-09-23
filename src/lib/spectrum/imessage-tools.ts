@@ -15,6 +15,8 @@ import type { DecryptedTokens, Tool, UserContext } from '@/lib/llm/types'
 import { gmailSearch, gmailRead, gmailSummarizeInbox } from '@/lib/tools/gmail'
 import { gcalListEvents, gcalTodayBriefing } from '@/lib/tools/gcal'
 import { WALLET_READ_TOOLS } from '@/lib/tools/wallet-read'
+import { webSearch } from '@/lib/tools/web'
+import { weather } from '@/lib/tools/weather'
 
 /**
  * Read tools only (Halsey, 2026-09-22: email + calendar reads first;
@@ -32,19 +34,53 @@ export interface ImessageCapabilities {
     google: boolean
     wallet: boolean
     files: boolean
+    /** weather (always) + web_search (when TAVILY_API_KEY is set). */
+    live: boolean
+    search: boolean
 }
 
-export function capabilitiesFor(ctx: UserContext): ImessageCapabilities {
-    return { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox), files: true }
+/** Web search is offered only when its key is configured. */
+export function searchEnabled(): boolean {
+    return Boolean(process.env.TAVILY_API_KEY)
 }
 
 /**
- * The tool set for this user: Google read tools when Google is connected,
- * PayBox wallet reads when PayBox is connected. Read-only either way.
+ * Live-info tools for every chat, bound or not: public data only, no user
+ * accounts involved. weather needs no key; web_search needs TAVILY_API_KEY.
+ */
+export function liveInfoTools(): Tool[] {
+    return [weather, ...(searchEnabled() ? [webSearch] : [])]
+}
+
+/**
+ * Context for chats with no bound user. Live-info tools ignore it; it only
+ * satisfies the tool-loop signature. No tokens, so no account tool can run.
+ */
+export function guestToolContext(): UserContext {
+    return { userId: '', telegramId: 0, telegramChatId: 0, name: '', timezone: 'America/New_York', tokens: {} }
+}
+
+export function capabilitiesFor(ctx: UserContext): ImessageCapabilities {
+    return { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox), files: true, live: true, search: searchEnabled() }
+}
+
+/**
+ * The tool set for this user: live-info tools always, Google read tools
+ * when Google is connected, PayBox wallet reads when PayBox is connected.
+ * Read-only either way.
  */
 export function toolsFor(ctx: UserContext): Tool[] {
     const caps = capabilitiesFor(ctx)
-    return [...(caps.google ? IMESSAGE_READ_TOOLS : []), ...(caps.wallet ? WALLET_READ_TOOLS : [])]
+    return [
+        ...liveInfoTools(),
+        ...(caps.google ? IMESSAGE_READ_TOOLS : []),
+        ...(caps.wallet ? WALLET_READ_TOOLS : []),
+    ]
+}
+
+/** Capabilities for an unbound chat: live info only. */
+export function guestCapabilities(): ImessageCapabilities {
+    return { google: false, wallet: false, files: false, live: true, search: searchEnabled() }
 }
 
 /**

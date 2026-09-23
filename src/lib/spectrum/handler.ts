@@ -20,7 +20,7 @@ import {
     type HistoryMessage,
 } from '@/spectrum/store'
 import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
-import { capabilitiesFor, loadImessageToolContext, toolsFor } from './imessage-tools'
+import { capabilitiesFor, guestCapabilities, guestToolContext, liveInfoTools, loadImessageToolContext, toolsFor } from './imessage-tools'
 import { EMPTY_MEMORY, loadMemoryContext, renderMemoryBlock, updateMemory } from './memory'
 import { FILE_NUDGE, fileToolsFor, stripFileMarkers, type MadeFile } from '@/lib/files/tool'
 import { sendFileWithPreview } from '@/lib/files/send'
@@ -348,18 +348,23 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         let iterations = 0
         const actions = toolCtx && capabilitiesFor(toolCtx).google ? actionToolsFor(chatGuid) : null
         const fileTools = toolCtx ? fileToolsFor() : null
-        const tools = toolCtx ? [...toolsFor(toolCtx), ...(actions?.tools ?? []), ...(fileTools?.tools ?? [])] : []
-        if (toolCtx && tools.length > 0) {
+        // Unbound chats still get live info (weather, web search): public
+        // data only, run against an empty context with no account tokens.
+        const tools = toolCtx
+            ? [...toolsFor(toolCtx), ...(actions?.tools ?? []), ...(fileTools?.tools ?? [])]
+            : liveInfoTools()
+        const runCtx = toolCtx ?? guestToolContext()
+        if (tools.length > 0) {
             const toolOpts = {
                 gatewayUrl: GATEWAY_URL,
                 apiKey: SHIPYARD_API_KEY,
                 model: SHIPYARD_MODEL,
                 facts,
                 includeOpener,
-                capabilities: capabilitiesFor(toolCtx),
+                capabilities: toolCtx ? capabilitiesFor(toolCtx) : guestCapabilities(),
                 memory: memoryBlock,
             }
-            const r = await chatWithTools(full, toolOpts, tools, toolCtx)
+            const r = await chatWithTools(full, toolOpts, tools, runCtx)
             reply = r.reply
             toolCalls = r.toolCalls
             iterations = r.iterations
@@ -370,7 +375,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                     [...full, { role: 'assistant', content: reply }, { role: 'user', content: FILE_NUDGE }],
                     toolOpts,
                     tools,
-                    toolCtx
+                    runCtx
                 )
                 reply = retry.reply
                 toolCalls += retry.toolCalls
