@@ -7,7 +7,7 @@ const UpdateRecipeBody = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
   instructions: z.string().min(1).optional(),
-  trigger_type: z.enum(['schedule', 'email_event', 'github_event', 'notion_event', 'keyword', 'manual']).optional(),
+  trigger_type: z.enum(['schedule', 'email_event', 'github_event', 'keyword', 'manual']).optional(),
   trigger_config: z.record(z.string(), z.unknown()).optional(),
   enabled: z.boolean().optional(),
   notify_on_run: z.boolean().optional(),

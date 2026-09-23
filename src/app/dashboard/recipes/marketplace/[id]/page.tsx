@@ -14,13 +14,12 @@ interface PublicRecipe {
 
 const TRIGGER_LABELS: Record<string, string> = {
   schedule: 'Schedule', email_event: 'Email', github_event: 'GitHub',
-  notion_event: 'Notion', keyword: 'Keyword', manual: 'Manual',
+  keyword: 'Keyword', manual: 'Manual',
 }
 
 const INTEGRATION_META: Record<string, { label: string; desc: string; icon: string; authPath: string }> = {
   google: { label: 'Google', desc: 'Gmail and Google Calendar', icon: '📧', authPath: '/api/integrations/google/auth' },
   github: { label: 'GitHub', desc: 'Repos, issues, and PRs', icon: '🐙', authPath: '/api/integrations/github/auth' },
-  notion: { label: 'Notion', desc: 'Pages and databases', icon: '📝', authPath: '/api/integrations/notion/auth' },
   openwallet: { label: 'MoonPay Wallet', desc: 'Agent wallet & payments', icon: '💰', authPath: '' },
 }
 

@@ -28,7 +28,6 @@ export const metadata: Metadata = {
     "email automation",
     "calendar management",
     "GitHub integration",
-    "Notion integration",
     "crypto wallet",
     "productivity",
     "automation",

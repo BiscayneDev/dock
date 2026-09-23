@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
-    "@notionhq/client": "^5.14.0",
     "@octokit/rest": "^22.0.1",
     "@paybox-sh/sdk": "^1.0.0",
     "@solana/spl-token": "^0.4.14",

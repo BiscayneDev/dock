@@ -32,7 +32,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 const TRIGGER_LABELS: Record<string, string> = {
   schedule: 'Schedule', email_event: 'Email', github_event: 'GitHub',
-  notion_event: 'Notion', keyword: 'Keyword', manual: 'Manual',
+  keyword: 'Keyword', manual: 'Manual',
 }
 
 const ADMIN_PASSWORD = 'harbor'

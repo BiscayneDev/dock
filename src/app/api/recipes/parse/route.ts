@@ -37,7 +37,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
 Given a user's description, extract:
 1. name - short descriptive name (2-5 words)
-2. trigger_type - one of: schedule, email_event, github_event, notion_event, keyword, manual
+2. trigger_type - one of: schedule, email_event, github_event, keyword, manual
 3. trigger_config - the configuration object for that trigger type
 4. instructions - clear instructions for the AI agent to execute
 5. category - one of: Email, Calendar, Developer, Productivity, Finance, Health, Crypto
@@ -46,7 +46,6 @@ Trigger config formats:
 - schedule: { "time": "HH:MM", "days": [1-7] } (1=Mon, 7=Sun)
 - email_event: { "from": "", "subject_contains": "", "has_attachment": false }
 - github_event: { "event_type": "issue_assigned|pr_review_requested|new_notification|issue_opened" }
-- notion_event: { "event": "new_page|page_updated" }
 - keyword: { "phrase": "...", "match_type": "contains", "case_sensitive": false }
 - manual: {}
 
