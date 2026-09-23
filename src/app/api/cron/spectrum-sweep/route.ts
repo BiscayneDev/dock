@@ -57,9 +57,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     if (SHIPYARD_API_KEY) {
-        for (const guid of await listUnresumedResumeChats().catch(() => [] as string[])) {
-            const claimed = await claimPendingResume(guid)
-            if (!claimed) continue
+        const resumeChats = await listUnresumedResumeChats().catch((err) => {
+            console.error('resume chat list failed:', err instanceof Error ? err.message : String(err))
+            return [] as string[]
+        })
+        for (const guid of resumeChats) {
+            const claimed = await claimPendingResume(guid).catch((err) => {
+                console.error(`resume claim failed (${guid}):`, err instanceof Error ? err.message : String(err))
+                return null
+            })
+            if (!claimed) {
+                console.error(`resume claim returned null (${guid})`)
+                continue
+            }
             try {
                 const history = await loadHistory(guid, MAX_HISTORY)
                 history.push({ role: 'user', content: claimed.pendingRequest })
@@ -69,7 +79,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                     model: SHIPYARD_MODEL,
                 })
                 const space = await im.space.get(guid)
-                await space.send(`google connected ✓\n\n${reply}`)
+                // Halsey, 2026-09-22: the follow-up must say he's connected,
+                // then resume his original request.
+                await space.send(`you're connected — gmail + calendar are in ✓\n\n${reply}`)
                 await ackResume(claimed.id) // ack ONLY after a successful send
                 await saveMessage(guid, 'user', claimed.pendingRequest)
                 await saveMessage(guid, 'assistant', reply)
