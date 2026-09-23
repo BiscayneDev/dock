@@ -109,3 +109,18 @@ describe('outbox lease', () => {
     expect(OUTBOX_LEASE_MS).toBe(60_000)
   })
 })
+
+describe('resolveChatGuid', () => {
+  it('prefers the webhook SDK space id', async () => {
+    const { resolveChatGuid } = await import('@/lib/spectrum/handler')
+    expect(resolveChatGuid({ id: 'iMessage;-;+15550100', send: async () => undefined })).toBe('iMessage;-;+15550100')
+  })
+  it('falls back to the stream SDK guid', async () => {
+    const { resolveChatGuid } = await import('@/lib/spectrum/handler')
+    expect(resolveChatGuid({ guid: 'guid-1', send: async () => undefined })).toBe('guid-1')
+  })
+  it('returns null when neither is present', async () => {
+    const { resolveChatGuid } = await import('@/lib/spectrum/handler')
+    expect(resolveChatGuid({ send: async () => undefined })).toBeNull()
+  })
+})

@@ -136,7 +136,7 @@ export async function createConnectLink(chatGuid: string, pendingRequest: string
   })
   if (error) throw new Error(`Failed to persist connect token: ${error.message}`)
 
-  return `${APP_URL}/api/integrations/google/auth?connect=${encodeURIComponent(token)}`
+  return `${APP_URL}/connect?connect=${encodeURIComponent(token)}`
 }
 
 /**
