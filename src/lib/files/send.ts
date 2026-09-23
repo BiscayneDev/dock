@@ -29,7 +29,7 @@ export function previewLabel(format: FileFormat, bytes: Buffer): string {
     return n > 0 ? `pdf · ${n} ${n === 1 ? 'page' : 'pages'}` : 'pdf'
 }
 
-/** The preview card for a file: sunrise scene, cream panel, title, subtitle. */
+/** The preview card for a file: coast art, cream panel, title, subtitle. */
 export async function renderFilePreview(file: RenderedFile & { format: FileFormat; title: string; subtitle?: string }): Promise<Buffer> {
     const res = renderOgCard({
         label: previewLabel(file.format, file.bytes),
