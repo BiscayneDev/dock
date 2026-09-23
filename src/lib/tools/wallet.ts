@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { getOWSClient } from '@/lib/integrations/openwallet'
 import { isPayboxConnected, payboxRequired } from '@/lib/integrations/paybox'
+import { assertWithinCap } from '@/lib/payments/spend-caps'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 
 function getClient(ctx: UserContext): ReturnType<typeof getOWSClient> {
@@ -137,6 +138,10 @@ export const walletSend: Tool = {
     if (!isPayboxConnected(ctx)) return payboxRequired('sending crypto')
     try {
       const parsed = SendInput.parse(input)
+      // wallet_send is priced in native units, so the exact USD value isn't
+      // known here — check with 0 so a user already over their daily cap is
+      // blocked from moving anything at all.
+      await assertWithinCap(ctx.userId, 0)
       const ows = getClient(ctx)
 
       const transaction: Record<string, unknown> = {
