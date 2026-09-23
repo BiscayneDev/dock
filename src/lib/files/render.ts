@@ -252,7 +252,11 @@ function drawSunriseStrip(pdf: Pdf, width: number, height: number): void {
 
 export function renderPdf(doc: DinghyDoc): Promise<Buffer> {
     return new Promise((resolve, reject) => {
-        const pdf = new PDFDocument({ bufferPages: true, size: 'LETTER', margins: { top: 64, bottom: 64, left: 64, right: 64 }, info: { Title: doc.title, Creator: 'Dinghy' } })
+        const pdf = new PDFDocument({
+            // Our own font as the default: pdfkit otherwise loads its built-in
+            // Helvetica, whose data files are missing from serverless bundles.
+            font: Buffer.from(schibsted400, 'base64') as unknown as string,
+            bufferPages: true, size: 'LETTER', margins: { top: 64, bottom: 64, left: 64, right: 64 }, info: { Title: doc.title, Creator: 'Dinghy' } })
         const chunks: Buffer[] = []
         pdf.on('data', (c: Buffer) => chunks.push(c))
         pdf.on('end', () => resolve(Buffer.concat(chunks)))
