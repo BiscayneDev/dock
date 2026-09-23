@@ -174,8 +174,8 @@ export const payboxRequestWalletSign: Tool = {
     'Sign with a Paybox wallet credential (message, typed data, or a transaction). ' +
     'Signing is non-custodial and runs in-process via the user\'s signing key — the ' +
     'private key never leaves MoonX MPC. Completes immediately on an autonomous grant; ' +
-    'otherwise returns pending_approval (user approves with a passkey) — then poll ' +
-    'paybox_get_request. On success, output holds the signature or serialized transaction.',
+    'if it needs passkey approval, PayBox can\'t finish it from Dinghy yet and the tool ' +
+    'says so. On success, output holds the signature or serialized transaction.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -196,11 +196,39 @@ export const payboxRequestWalletSign: Tool = {
         credentialId: p.credentialId,
         intent: p.intent as Parameters<typeof sdk.requestWalletSign>[0]['intent'],
       })
+      if (resp.status === 'pending_approval') return walletSignNeedsApproval(resp.request_id)
       return agentResultToTool(resp)
     } catch (err) {
       return toError(err)
     }
   },
+}
+
+// PayBox SDK 1.0.0 signs a wallet_sign request in-process only when it comes
+// back cleared (pending_signature). After a passkey approval nothing on our side
+// can finish it, so say that plainly instead of a poll that never lands.
+export function walletSignNeedsApproval(requestId: string): ToolResult {
+  return {
+    success: false,
+    error:
+      `This signature needs the user's approval in PayBox (request ${requestId}), and ` +
+      `PayBox can't yet finish a plain send or signature after approval from Dinghy. ` +
+      `Nothing was signed or sent. Tell the user plainly; do NOT retry or poll. ` +
+      `Swaps and paid services do work with approval.`,
+  }
+}
+
+export const SWAP_APPROVAL_WAIT_MS = 60_000
+
+export function swapApprovalTimedOut(requestId: string): ToolResult {
+  return {
+    success: false,
+    error:
+      `The swap waited a minute for approval in the PayBox app (request ${requestId}) and ` +
+      `didn't get it, so nothing was swapped. PayBox can only complete a swap while ` +
+      `this call is waiting. Tell the user to have the PayBox app open and ask again ` +
+      `when ready; do NOT poll this request_id.`,
+  }
 }
 
 // --- paybox_request_swap ---
@@ -221,7 +249,8 @@ export const payboxRequestSwap: Tool = {
   description:
     'Swap one token for another from a Paybox wallet credential. Paybox quotes the route, ' +
     'builds the transactions, signs in-process, and broadcasts. Completes on an autonomous ' +
-    'grant; otherwise pending_approval (poll paybox_get_request). Call paybox_get_portfolio ' +
+    'grant; otherwise waits up to a minute for the user to approve in the PayBox app ' +
+    '(tell them to watch for it before calling). Call paybox_get_portfolio ' +
     'first to size the amount. On success, output holds the swap transaction hash.',
   inputSchema: {
     type: 'object',
@@ -251,9 +280,15 @@ export const payboxRequestSwap: Tool = {
         amount: p.amount,
         slippageBps: p.slippageBps,
         valueCents: p.valueCents,
+      }, {
+        // The SDK can only sign a swap in the same call that saw the approval
+        // (the signing plan isn't recoverable later), so wait here for the
+        // user to approve in the PayBox app. Bounded well under the 120s turn.
+        waitForApproval: { timeoutMs: SWAP_APPROVAL_WAIT_MS, intervalMs: 2000 },
       })
+      if (result.response.status === 'pending_approval') return swapApprovalTimedOut(result.response.request_id)
       const toolResult = agentResultToTool(result.response)
-      if (toolResult.success) {
+      if (toolResult.success && result.response.status === 'success') {
         // Swap settled (broadcast). Record the sell-side USD estimate — a
         // ledger-write failure fails closed and is surfaced, never swallowed.
         try {
