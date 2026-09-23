@@ -18,6 +18,7 @@ import { WALLET_READ_TOOLS } from '@/lib/tools/wallet-read'
 import { webSearch } from '@/lib/tools/web'
 import { weather } from '@/lib/tools/weather'
 import { twitterSearch, twitterTimeline, twitterUserTweets } from '@/lib/tools/twitter'
+import { xFreeTools, xSearchEnabled } from '@/lib/tools/x-free'
 
 /**
  * Read tools only (Halsey, 2026-09-22: email + calendar reads first;
@@ -40,6 +41,10 @@ export interface ImessageCapabilities {
     search: boolean
     /** X read tools (search, timeline, a user's posts) when X is connected. */
     x?: boolean
+    /** Free X reads (post, profile, recent posts); always on. */
+    xFree?: boolean
+    /** x_search offered (burner cookies configured). */
+    xSearch?: boolean
 }
 
 /** X reads only: no posting, liking or DMs from iMessage. */
@@ -55,7 +60,7 @@ export function searchEnabled(): boolean {
  * accounts involved. weather needs no key; web_search needs TAVILY_API_KEY.
  */
 export function liveInfoTools(): Tool[] {
-    return [weather, ...(searchEnabled() ? [webSearch] : [])]
+    return [weather, ...(searchEnabled() ? [webSearch] : []), ...xFreeTools()]
 }
 
 /**
@@ -67,7 +72,7 @@ export function guestToolContext(): UserContext {
 }
 
 export function capabilitiesFor(ctx: UserContext): ImessageCapabilities {
-    return { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox), files: true, live: true, search: searchEnabled(), x: Boolean(ctx.tokens.twitter) }
+    return { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox), files: true, live: true, search: searchEnabled(), x: Boolean(ctx.tokens.twitter), xFree: true, xSearch: xSearchEnabled() }
 }
 
 /**
@@ -87,7 +92,7 @@ export function toolsFor(ctx: UserContext): Tool[] {
 
 /** Capabilities for an unbound chat: live info only. */
 export function guestCapabilities(): ImessageCapabilities {
-    return { google: false, wallet: false, files: false, live: true, search: searchEnabled(), x: false }
+    return { google: false, wallet: false, files: false, live: true, search: searchEnabled(), x: false, xFree: true, xSearch: xSearchEnabled() }
 }
 
 /**
