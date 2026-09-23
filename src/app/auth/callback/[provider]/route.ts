@@ -28,6 +28,7 @@ import {
 import {
   exchangePayboxCode,
   storePayboxTokens,
+  verifyPayboxConnection,
 } from '@/lib/integrations/paybox'
 
 import {
@@ -51,6 +52,11 @@ export async function GET(
   // consumed at the start is bound to the `state` Google echoes back. ---
   if (provider === 'google' && state && !request.cookies.get('g_oauth_state')) {
     return handleGoogleConnectCallback(code, state, appUrl)
+  }
+  // PayBox in-thread flow: random state bound to the token row (the web
+  // session flow uses the fixed state 'paybox' + PKCE cookies).
+  if (provider === 'paybox' && state && state !== 'paybox' && !request.cookies.get('paybox_cv')) {
+    return handlePayboxConnectCallback(code, state, appUrl)
   }
 
   const session = await getSession()
@@ -300,5 +306,56 @@ async function notifyConnectFailure(connect: ConnectOutcome): Promise<void> {
       chatId: Number(connect.chatId),
       text: "google connect didn't go through — try again and i'll send a fresh link",
     })
+  }
+}
+
+/**
+ * Complete an in-thread (iMessage) PayBox connect. Mirrors the Google flow:
+ * claim by state (provider-bound), exchange with the server-side PKCE
+ * verifier, bind the chat identity (fail-closed on the beta allowlist),
+ * store tokens, verify with a live list-credentials call, and only then
+ * mark complete so the sweep resumes the original request.
+ */
+async function handlePayboxConnectCallback(
+  code: string | null,
+  state: string,
+  appUrl: string
+): Promise<NextResponse> {
+  const { logger } = await import('@/lib/logger')
+  if (!code) return NextResponse.redirect(`${appUrl}/onboarding?error=connect_no_code`)
+
+  const connect = await claimConnectByState(state, 'paybox')
+  if (!connect || !connect.pkceVerifier || !connect.oauthClientId) {
+    if (connect) await markConnectTerminal(connect.id, { failed: true })
+    return NextResponse.redirect(`${appUrl}/onboarding?error=connect_state_invalid`)
+  }
+  if (connect.platform !== 'imessage') {
+    await markConnectTerminal(connect.id, { failed: true })
+    return NextResponse.redirect(`${appUrl}/onboarding?error=connect_state_invalid`)
+  }
+
+  try {
+    // Code is single-use from here: any failure is terminal.
+    const result = await exchangePayboxCode(code, connect.pkceVerifier, connect.oauthClientId)
+    const userId = await bindSpectrumIdentity(connect.chatId)
+    if (!userId) {
+      await markConnectTerminal(connect.id, { failed: true })
+      logger.error('paybox connect: failed to bind identity')
+      return NextResponse.redirect(`${appUrl}/onboarding?error=connect_identity_failed`)
+    }
+    await storePayboxTokens(userId, result, connect.oauthClientId)
+
+    if (!(await verifyPayboxConnection(result.accessToken))) {
+      await markConnectTerminal(connect.id, { failed: true })
+      logger.error('paybox connect: live verification failed')
+      return NextResponse.redirect(`${appUrl}/onboarding?error=connect_verification_failed`)
+    }
+
+    await completeConnect(connect.id)
+    return NextResponse.redirect(`${appUrl}/connect/paybox/success`)
+  } catch (err) {
+    await markConnectTerminal(connect.id, { failed: true })
+    logger.error('paybox connect callback error', { error: err instanceof Error ? err.message : String(err) })
+    return NextResponse.redirect(`${appUrl}/onboarding?error=connect_failed`)
   }
 }

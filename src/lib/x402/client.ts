@@ -122,7 +122,7 @@ async function tryPayboxX402(
   try {
     const sdk = await getPayboxSdk(ctx.tokens.paybox, ctx.userId)
     const creds = await sdk.listCredentials()
-    const wallet = creds.find((c) => c.credential.credential_type === 'wallet')
+    const wallet = creds.credentials.find((c) => c.credential.credential_type === 'wallet')
     if (!wallet) return null // no wallet credential → fall back
 
     let body: unknown

@@ -87,9 +87,9 @@ export async function getAuthServerMetadata(): Promise<AuthServerMetadata> {
 
 // Paybox supports public clients only (no client secret). Reuse an app-wide
 // client via PAYBOX_CLIENT_ID if set; otherwise register one dynamically.
-export async function getOrRegisterClientId(): Promise<string> {
+export async function getOrRegisterClientId(opts?: { forceRegister?: boolean }): Promise<string> {
   const envClientId = process.env.PAYBOX_CLIENT_ID
-  if (envClientId) return envClientId
+  if (envClientId && !opts?.forceRegister) return envClientId
 
   const { registration_endpoint } = await getAuthServerMetadata()
   const res = await fetch(registration_endpoint, {
@@ -118,7 +118,7 @@ export async function getOrRegisterClientId(): Promise<string> {
 
 // --- Authorization URL ---
 
-export function getPayboxAuthUrl(clientId: string, codeChallenge: string): string {
+export function getPayboxAuthUrl(clientId: string, codeChallenge: string, state = 'paybox'): string {
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: clientId,
@@ -127,7 +127,7 @@ export function getPayboxAuthUrl(clientId: string, codeChallenge: string): strin
     resource: getMcpResource(),
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
-    state: 'paybox',
+    state,
   })
 
   return `${getPayboxApiUrl()}/oauth/authorize?${params.toString()}`
@@ -252,24 +252,45 @@ export async function getPayboxAccessToken(
 
   const supabase = createServerClient()
 
-  // client_id lives in provider_account_id (or an app-wide env client).
-  let clientId = process.env.PAYBOX_CLIENT_ID
-  if (!clientId) {
-    const { data } = await supabase
+  // Serverless-safe refresh. PayBox rotates the refresh token on EVERY use
+  // and revokes the client if a spent token is replayed (docs.paybox.sh
+  // /connect/oauth). Two lambdas refreshing at once would disconnect the
+  // user, so only the lease holder refreshes; everyone else waits briefly
+  // and re-reads the rotated token (migration 019).
+  const { data: gotLease, error: leaseErr } = await supabase.rpc('claim_paybox_refresh', {
+    p_user_id: userId,
+    p_lease_ms: PAYBOX_REFRESH_LEASE_MS,
+  })
+  if (leaseErr || gotLease !== true) {
+    if (leaseErr) logger.error('Paybox refresh lease failed', { error: leaseErr.message })
+    return waitForRotatedPayboxToken(userId, tokens.accessToken)
+  }
+
+  try {
+    // Re-read under the lease: another lambda may have rotated the token
+    // between our context load and the lease grab.
+    const fresh = await getPayboxTokensForUser(userId)
+    if (fresh?.expiresAt && new Date(fresh.expiresAt) >= fiveMinFromNow) {
+      return fresh.accessToken
+    }
+    const currentRefresh = fresh?.refreshToken ?? tokens.refreshToken
+
+    // The client that minted this token is recorded in provider_account_id;
+    // prefer it (iMessage connects register their own client), then env.
+    const { data: clientRow } = await supabase
       .from('oauth_tokens')
       .select('provider_account_id')
       .eq('user_id', userId)
       .eq('provider', 'paybox')
       .single()
-    clientId = (data?.provider_account_id as string | undefined) ?? undefined
-  }
-  if (!clientId) {
-    logger.error('Paybox refresh skipped: no client_id on record', { userId })
-    return tokens.accessToken
-  }
+    const clientId =
+      (clientRow?.provider_account_id as string | undefined) ?? process.env.PAYBOX_CLIENT_ID ?? undefined
+    if (!clientId) {
+      logger.error('Paybox refresh skipped: no client_id on record', { userId })
+      return fresh?.accessToken ?? tokens.accessToken
+    }
 
-  try {
-    const refreshed = await refreshPayboxToken(tokens.refreshToken, clientId)
+    const refreshed = await refreshPayboxToken(currentRefresh, clientId)
 
     const updates: Record<string, unknown> = {
       access_token: encryptTokenForDb(refreshed.accessToken),
@@ -293,7 +314,21 @@ export async function getPayboxAccessToken(
       error: err instanceof Error ? err.message : String(err),
     })
     return tokens.accessToken
+  } finally {
+    await supabase.rpc('release_paybox_refresh', { p_user_id: userId })
   }
+}
+
+const PAYBOX_REFRESH_LEASE_MS = 20 * 1000
+
+/** Another lambda holds the refresh lease: poll for the rotated token. */
+async function waitForRotatedPayboxToken(userId: string, fallback: string): Promise<string> {
+  for (let i = 0; i < 6; i++) {
+    await new Promise((r) => setTimeout(r, 750))
+    const t = await getPayboxTokensForUser(userId)
+    if (t?.accessToken && t.accessToken !== fallback) return t.accessToken
+  }
+  return fallback
 }
 
 /**
@@ -389,12 +424,31 @@ export async function getPayboxSdk(
   })
 }
 
+/** Live check after connect: the fresh token can list its granted credentials. */
+export async function verifyPayboxConnection(accessToken: string): Promise<boolean> {
+  try {
+    const sdk = new PayboxSdk({ baseUrl: getPayboxApiUrl(), token: accessToken })
+    await sdk.listCredentials()
+    return true
+  } catch (err) {
+    logger.error('Paybox verification failed', { error: err instanceof Error ? err.message : String(err) })
+    return false
+  }
+}
+
 // Map the SDK's AgentResponse to a ToolResult, honouring the submit-once-then-
 // poll lifecycle. AgentResponse = { request_id, status, output, approval_id,
 // error }; the artifact lives on output.value.
 interface AgentResponseLike {
   request_id: string
-  status: 'pending_approval' | 'pending_signature' | 'success' | 'denied' | 'error'
+  status:
+    | 'pending_approval'
+    | 'pending_signature'
+    | 'pending_settlement'
+    | 'pending_confirmation'
+    | 'success'
+    | 'denied'
+    | 'error'
   output: { value?: unknown } | null
   approval_id: string | null
   error: string | null
@@ -427,6 +481,18 @@ export function agentResultToTool(resp: AgentResponseLike): ToolResult {
             `Cleared to sign but no in-process signing key is configured (or the signing ` +
             `window must finish). Ask the user to add their Paybox signing key in The ` +
             `Harbor, then poll paybox_get_request with this request_id.`,
+        },
+      }
+    case 'pending_settlement':
+    case 'pending_confirmation':
+      return {
+        success: true,
+        data: {
+          status: resp.status,
+          request_id: resp.request_id,
+          instruction:
+            'Broadcast, not yet final. Poll paybox_get_request with this request_id; ' +
+            'do NOT re-issue the original request.',
         },
       }
     case 'denied':

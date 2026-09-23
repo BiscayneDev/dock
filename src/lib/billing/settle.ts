@@ -129,7 +129,7 @@ export async function settleUser(userId: string, chatId: number): Promise<Settle
   try {
     const client = await getPayboxSdk(tokens, userId)
     const creds = await client.listCredentials()
-    const wallet = creds.find(
+    const wallet = creds.credentials.find(
       (c) =>
         c.credential.credential_type === 'wallet' &&
         typeof c.credential.metadata?.address === 'string',

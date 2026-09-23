@@ -59,7 +59,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         const chatGuid = row.chat_guid as string
         try {
             const ctx = await loadImessageToolContext(chatGuid)
-            if (!ctx) {
+            // Briefing is Google-driven; a PayBox-only binding has nothing to brief.
+            if (!ctx || !ctx.tokens.google) {
                 results.skipped++
                 continue
             }
