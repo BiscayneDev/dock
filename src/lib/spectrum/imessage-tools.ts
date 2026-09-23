@@ -31,10 +31,11 @@ export const IMESSAGE_READ_TOOLS: Tool[] = [
 export interface ImessageCapabilities {
     google: boolean
     wallet: boolean
+    files: boolean
 }
 
 export function capabilitiesFor(ctx: UserContext): ImessageCapabilities {
-    return { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox) }
+    return { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox), files: true }
 }
 
 /**

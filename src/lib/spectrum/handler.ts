@@ -21,6 +21,8 @@ import {
 import { chat, chatWithTools, wantsGoogle, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { capabilitiesFor, loadImessageToolContext, toolsFor } from './imessage-tools'
 import { EMPTY_MEMORY, loadMemoryContext, renderMemoryBlock, updateMemory } from './memory'
+import { fileToolsFor, type MadeFile } from '@/lib/files/tool'
+import { attachment } from 'spectrum-ts'
 import { actionToolsFor, cancelPendingActions, executePendingAction, hasPendingAction, parseConfirmation, renderProposal } from './actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { dinghyContactCard } from './contact-card'
@@ -84,6 +86,21 @@ function stopTyping(space: InboundSpace): void {
 
 /** Enqueue-then-send: the row exists before the attempt, so a kill or a
  *  send failure is always retried by the sweep. */
+/** Native attachment; on failure, fall back to the signed link as text. */
+async function sendFile(space: InboundSpace, chatGuid: string, file: MadeFile): Promise<void> {
+    try {
+        await (space as ContentSender).send(attachment(file.bytes, { name: file.filename, mimeType: file.mimeType }))
+        await saveMessage(chatGuid, 'assistant', `[sent file: ${file.filename}]`).catch((err) => logErr('message save failed', err))
+    } catch (err) {
+        logErr('file send failed', err)
+        const fallback = file.link
+            ? `${file.title}: ${file.link}`
+            : `I made ${file.filename} but couldn't send it. Ask me again in a moment.`
+        await sendText(space, chatGuid, 'reply', fallback)
+        await saveMessage(chatGuid, 'assistant', fallback).catch((e) => logErr('message save failed', e))
+    }
+}
+
 async function sendText(space: InboundSpace, chatGuid: string, kind: OutboxKind, text: string): Promise<void> {
     const outboxId = await enqueueOutbox(chatGuid, kind, text)
     try {
@@ -326,7 +343,8 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         let toolCalls = 0
         let iterations = 0
         const actions = toolCtx && capabilitiesFor(toolCtx).google ? actionToolsFor(chatGuid) : null
-        const tools = toolCtx ? [...toolsFor(toolCtx), ...(actions?.tools ?? [])] : []
+        const fileTools = toolCtx ? fileToolsFor() : null
+        const tools = toolCtx ? [...toolsFor(toolCtx), ...(actions?.tools ?? []), ...(fileTools?.tools ?? [])] : []
         if (toolCtx && tools.length > 0) {
             const r = await chatWithTools(
                 full,
@@ -365,6 +383,8 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             await sendText(space, chatGuid, 'reply', preview)
             await saveMessage(chatGuid, 'assistant', preview).catch((err) => logErr('message save failed', err))
         }
+        // Files made this turn go out as native attachments after the text.
+        for (const file of fileTools?.files() ?? []) await sendFile(space, chatGuid, file)
         // Warm-path latency ledger: read these from the function logs.
         console.log(
             `dinghy timing ${JSON.stringify({
