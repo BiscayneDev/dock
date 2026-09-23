@@ -7,6 +7,9 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { retryFetch } from '../lib/supabase/retry-fetch'
+import type { DinghyFact } from '../lib/spectrum/dinghy'
+export type { DinghyFact } from '../lib/spectrum/dinghy'
 import { createHash, createHmac, randomBytes } from 'crypto'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -24,6 +27,7 @@ function db(): SupabaseClient {
   if (!client) {
     client = createClient(SUPABASE_URL, SUPABASE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
+      global: { fetch: retryFetch },
     })
   }
   return client
@@ -169,23 +173,20 @@ export async function claimPendingResume(
   chatGuid: string
 ): Promise<{ id: string; pendingRequest: string } | null> {
   const supabase = db()
-  const { data, error } = await supabase
-    .from('connect_tokens')
-    .update({ delivery_claimed_at: new Date().toISOString() })
-    .eq('platform', 'imessage')
-    .eq('chat_id', chatGuid)
-    .not('completed_at', 'is', null)
-    .is('resumed_at', null)
-    .is('terminal_at', null)
-    .not('pending_request', 'is', null)
-    .or(`delivery_claimed_at.is.null,delivery_claimed_at.lt.${new Date(Date.now() - RESUME_LEASE_MS).toISOString()}`)
-    .order('completed_at', { ascending: false })
-    .limit(1)
-    .select('id, pending_request')
-    .maybeSingle()
+  // RPC (migration 017): a PostgREST schema-cache lag on migration 015's
+  // columns made the table-UPDATE shape fail with 42703 for hours after
+  // reload notifications. RPC bodies are parsed by Postgres at call time.
+  const { data, error } = await supabase.rpc('claim_pending_resume', {
+    p_chat_id: chatGuid,
+    p_lease_ms: RESUME_LEASE_MS,
+  })
 
-  if (error || !data || !data.pending_request) return null
-  return { id: data.id as string, pendingRequest: data.pending_request as string }
+  const row = Array.isArray(data) ? data[0] : data
+  if (error || !row || !row.pending_request) {
+    if (error) console.error('resume claim rpc failed:', error.message)
+    return null
+  }
+  return { id: row.id as string, pendingRequest: row.pending_request as string }
 }
 
 /** Delivery acknowledgement — the ONLY writer of resumed_at. */
@@ -196,4 +197,24 @@ export async function ackResume(tokenRowId: string): Promise<void> {
     .update({ resumed_at: new Date().toISOString(), delivery_claimed_at: null })
     .eq('id', tokenRowId)
     .is('resumed_at', null)
+}
+
+// ── Durable facts (dinghy_facts, migration 016) ─────────────────────────────
+
+let factsCache: { facts: DinghyFact[]; at: number } | null = null
+const FACTS_CACHE_TTL_MS = 5 * 60 * 1000
+
+/**
+ * Global key-value facts injected into the system prompt. Cached per lambda
+ * instance (facts change rarely; the prompt load must not add a network
+ * round trip to every message).
+ */
+export async function loadFacts(): Promise<DinghyFact[]> {
+  if (factsCache && Date.now() - factsCache.at < FACTS_CACHE_TTL_MS) return factsCache.facts
+  const supabase = db()
+  const { data, error } = await supabase.from('dinghy_facts').select('key, value').order('key')
+  if (error) throw new Error(`dinghy_facts load failed: ${error.message}`)
+  const facts = (data ?? []) as DinghyFact[]
+  factsCache = { facts, at: Date.now() }
+  return facts
 }

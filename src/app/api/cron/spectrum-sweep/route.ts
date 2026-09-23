@@ -13,12 +13,16 @@ import { getSpectrumApp, getImessage } from '@/lib/spectrum/app'
 import { claimOutboxBatch, markOutboxFailed, markOutboxSent } from '@/lib/spectrum/outbox'
 import { chat, MAX_HISTORY } from '@/lib/spectrum/dinghy'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from '@/lib/spectrum/config'
+import { typing } from 'spectrum-ts'
 import {
     ackResume,
     claimPendingResume,
     listUnresumedResumeChats,
+    loadFacts,
     loadHistory,
     saveMessage,
+    type DinghyFact,
+    type HistoryMessage,
 } from '@/spectrum/store'
 
 export const runtime = 'nodejs'
@@ -57,6 +61,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     if (SHIPYARD_API_KEY) {
+        const facts = await loadFacts().catch((err) => {
+            console.error('facts load failed:', err instanceof Error ? err.message : String(err))
+            return [] as DinghyFact[]
+        })
         const resumeChats = await listUnresumedResumeChats().catch((err) => {
             console.error('resume chat list failed:', err instanceof Error ? err.message : String(err))
             return [] as string[]
@@ -71,20 +79,31 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 continue
             }
             try {
-                const history = await loadHistory(guid, MAX_HISTORY)
+                // A DB blip degrades to no-history, never a dead resume.
+                const history = await loadHistory(guid, MAX_HISTORY).catch((err) => {
+                    console.error('resume history load failed:', err instanceof Error ? err.message : String(err))
+                    return [] as HistoryMessage[]
+                })
                 history.push({ role: 'user', content: claimed.pendingRequest })
+                const space = await im.space.get(guid)
+                void space.send(typing()).catch(() => {})
                 const reply = await chat(history, {
                     gatewayUrl: GATEWAY_URL,
                     apiKey: SHIPYARD_API_KEY,
                     model: SHIPYARD_MODEL,
+                    facts,
                 })
-                const space = await im.space.get(guid)
                 // Halsey, 2026-09-22: the follow-up must say he's connected,
                 // then resume his original request.
                 await space.send(`you're connected — gmail + calendar are in ✓\n\n${reply}`)
+                void space.send(typing('stop')).catch(() => {})
                 await ackResume(claimed.id) // ack ONLY after a successful send
-                await saveMessage(guid, 'user', claimed.pendingRequest)
-                await saveMessage(guid, 'assistant', reply)
+                await saveMessage(guid, 'user', claimed.pendingRequest).catch((err) =>
+                    console.error('resume message save failed:', err instanceof Error ? err.message : String(err))
+                )
+                await saveMessage(guid, 'assistant', reply).catch((err) =>
+                    console.error('resume message save failed:', err instanceof Error ? err.message : String(err))
+                )
                 results.resumes++
             } catch (err) {
                 // Leave the lease un-acked: it expires and the next sweep retries.
