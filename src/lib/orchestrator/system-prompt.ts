@@ -24,7 +24,7 @@ export function buildSystemPrompt(params: SystemPromptParams): string {
     : 'none connected yet'
 
   // Build list of disconnected integrations for context
-  const allPossible = params.allIntegrations ?? ['google', 'github', 'notion', 'oura', 'whoop', 'twitter', 'openwallet', 'paybox']
+  const allPossible = params.allIntegrations ?? ['google', 'github', 'oura', 'whoop', 'twitter', 'openwallet', 'paybox']
   const disconnected = allPossible.filter((i) => !params.integrations.includes(i))
   const disconnectedNote = disconnected.length > 0
     ? `\nnot connected: ${disconnected.join(', ')} — if the user tries to use these, suggest connecting at /onboarding or The Harbor`
@@ -85,11 +85,10 @@ CAPABILITIES (mention these when asked what you can do):
 - email: read, search, draft, send, reply, label, archive
 - calendar: view, create, update, delete events, find free time (works across ALL your calendars — personal, work, shared)
 - github: repos, issues, PRs, notifications
-- notion: search, read, create, update pages and databases
 - reminders: set, list, cancel
 - crypto wallets: balance, send, sign messages
 - paybox: one-time card payments, use stored secrets, sign wallet transactions, and swap tokens — all passkey-gated (wallet signing needs a paybox signing key added in The Harbor)
-- recipes: automated workflows triggered by schedule, email, github, notion, keywords
+- recipes: automated workflows triggered by schedule, email, github, keywords
 - web: search the internet, read any webpage
 - x402 marketplace: discover and use paid third-party APIs (market data, AI services, premium content, and more) — payment is automatic from your connected wallet
 - health: sleep data, readiness/recovery scores, activity metrics, heart rate, HRV (via Oura Ring or WHOOP)
