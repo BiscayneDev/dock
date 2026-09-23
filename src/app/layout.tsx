@@ -1,26 +1,16 @@
 import type { Metadata, Viewport } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
+import { dmMono, fraunces, schibsted } from "./fonts"
 import "./globals.css"
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-})
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-})
-
 const SITE_URL = "https://getdinghy.sh"
-const TITLE = "Dinghy — Your AI First Mate"
+const TITLE = "Dinghy · your first mate lives in your texts"
 const DESCRIPTION = "dinghy is a first mate that lives in imessage. you text it like a person. it does the work."
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#050a18",
+  themeColor: "#060B1A",
 }
 
 export const metadata: Metadata = {
@@ -45,7 +35,7 @@ export const metadata: Metadata = {
     "recipes",
   ],
   icons: {
-    icon: "/logo.png",
+    icon: "/icon.svg",
     apple: "/logo.png",
   },
   manifest: "/manifest.json",
@@ -62,7 +52,7 @@ export const metadata: Metadata = {
         url: `${SITE_URL}/api/og`,
         width: 1200,
         height: 630,
-        alt: "Dinghy — Your AI first mate, always on deck",
+        alt: "Dinghy · your first mate lives in your texts",
         type: "image/png",
       },
     ],
@@ -96,7 +86,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen`}
+        className={`${fraunces.variable} ${schibsted.variable} ${dmMono.variable} antialiased min-h-screen`}
       >
         {children}
       </body>
