@@ -16,7 +16,7 @@ export async function GET(request?: NextRequest): Promise<NextResponse> {
   const session = await getSession()
   if (!session) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
-    return NextResponse.redirect(`${appUrl}/onboarding`)
+    return NextResponse.redirect(`${appUrl}/login`)
   }
 
   return NextResponse.redirect(getWhoopAuthUrl())
