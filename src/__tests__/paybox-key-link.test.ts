@@ -9,7 +9,7 @@ vi.mock('@/lib/integrations/paybox', () => ({
     getPayboxSigningKey: vi.fn(async () => null),
     storePayboxSigningKey: (...a: unknown[]) => store(...a),
 }))
-const enqueue = vi.fn(async () => 'ob1')
+const enqueue = vi.fn(async (..._a: unknown[]) => 'ob1')
 vi.mock('@/lib/spectrum/outbox', () => ({ enqueueOutbox: (...a: unknown[]) => enqueue(...a) }))
 vi.mock('@paybox-sh/sdk', () => ({
     credsFromToken: (t: string) => {

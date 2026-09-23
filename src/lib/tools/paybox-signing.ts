@@ -17,7 +17,7 @@ export function payboxSigningToolsFor(chatGuid: string): Tool[] {
         async execute(_input: unknown, ctx: UserContext): Promise<ToolResult> {
             if (!isPayboxConnected(ctx)) return payboxRequired('adding a signing key')
             try {
-                const links = await mintKeySetupLinks(ctx.userId, ctx.tokens, chatGuid)
+                const links = await mintKeySetupLinks(ctx.userId, ctx.tokens.paybox!, chatGuid)
                 return {
                     success: true,
                     data: {
