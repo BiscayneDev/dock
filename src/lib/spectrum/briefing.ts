@@ -35,6 +35,28 @@ export async function isBriefingEnabled(userId: string): Promise<boolean> {
     return Boolean(data.enabled) && !Boolean(data.muted)
 }
 
+/**
+ * One-off "brief me now" (migration 037): true when an operator set
+ * force_until in the future. Lets the cron skip the morning window and quiet
+ * hours for this user only. Mute/disable still win (checked separately).
+ */
+export async function isBriefingForced(userId: string): Promise<boolean> {
+    const supabase = createServerClient()
+    const { data, error } = await supabase
+        .from('briefing_settings')
+        .select('force_until')
+        .eq('user_id', userId)
+        .maybeSingle()
+    if (error || !data?.force_until) return false
+    return new Date(data.force_until as string).getTime() > Date.now()
+}
+
+/** Clear a one-off force once the briefing is queued. */
+export async function clearBriefingForce(userId: string): Promise<void> {
+    const supabase = createServerClient()
+    await supabase.from('briefing_settings').update({ force_until: null }).eq('user_id', userId)
+}
+
 /** Resolve the chat's bound user id, or null for a guest chat. */
 export async function briefableUserId(chatGuid: string): Promise<string | null> {
     const supabase = createServerClient()

@@ -22,7 +22,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { getAuthedClient } from '@/lib/integrations/google'
 import { getSpectrumApp, getImessage } from '@/lib/spectrum/app'
 import { IMESSAGE_READ_TOOLS, loadImessageToolContext } from '@/lib/spectrum/imessage-tools'
-import { isBriefingEnabled, MUTE_FOOTER } from '@/lib/spectrum/briefing'
+import { isBriefingEnabled, isBriefingForced, clearBriefingForce, MUTE_FOOTER } from '@/lib/spectrum/briefing'
 import { enqueueOutbox, markOutboxSent } from '@/lib/spectrum/outbox'
 import { chatWithTools } from '@/lib/spectrum/dinghy'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from '@/lib/spectrum/config'
@@ -84,6 +84,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 continue
             }
 
+            // One-off "brief me now" skips the window and quiet hours.
+            const forced = await isBriefingForced(ctx.userId)
+
             // Quiet hours + morning window in the user's timezone.
             const { data: user } = await supabase
                 .from('users')
@@ -92,6 +95,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 .maybeSingle()
             const timezone = ctx.timezone
             if (
+                !forced &&
                 isInQuietHours(
                     (user?.quiet_hours_start as string | null) ?? null,
                     (user?.quiet_hours_end as string | null) ?? null,
@@ -102,7 +106,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 continue
             }
             const hour = getCurrentHour(timezone)
-            if (hour < BRIEFING_WINDOW_START || hour >= BRIEFING_WINDOW_END) {
+            if (!forced && (hour < BRIEFING_WINDOW_START || hour >= BRIEFING_WINDOW_END)) {
                 results.skipped++
                 continue
             }
@@ -148,6 +152,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 results.errors++
                 continue
             }
+            if (forced) await clearBriefingForce(ctx.userId).catch(() => {})
             // Best-effort immediate send; the sweep covers any failure.
             try {
                 const space = await im.space.get(chatGuid)
