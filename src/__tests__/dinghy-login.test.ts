@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const state: {
   identities: Array<{ chat_guid: string; user_id: string | null }>
   allow: Set<string>
-  rpc: ReturnType<typeof vi.fn>
-} = { identities: [], allow: new Set(), rpc: vi.fn() }
+  rpc: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>
+} = { identities: [], allow: new Set(), rpc: vi.fn<(...args: unknown[]) => unknown>() }
 
 vi.mock('@/lib/supabase/server', () => ({
   createServerClient: () => ({
@@ -26,7 +26,7 @@ import { normalizePhone, hashLoginCode, loginCodeText, startLogin, verifyLogin }
 beforeEach(() => {
   state.identities = []
   state.allow = new Set()
-  state.rpc = vi.fn()
+  state.rpc = vi.fn<(...args: unknown[]) => unknown>()
 })
 
 describe('normalizePhone', () => {
@@ -78,7 +78,7 @@ describe('startLogin', () => {
     expect(chat).toBe('c1')
     const code = String(text).slice(0, 6)
     expect(code).toMatch(/^\d{6}$/)
-    const [fn, args] = state.rpc.mock.calls[0]
+    const [fn, args] = state.rpc.mock.calls[0] as [string, Record<string, string>]
     expect(fn).toBe('dinghy_login_code_create')
     expect(args.p_code_hash).toBe(hashLoginCode('+13055550142', code))
     expect(JSON.stringify(args)).not.toContain(`"${code}"`)
@@ -88,7 +88,7 @@ describe('startLogin', () => {
     state.rpc.mockResolvedValue({ data: false, error: null })
     const send = vi.fn()
     expect(await startLogin('+13055550142', send)).toEqual({ sent: false, limited: true })
-    expect(state.rpc.mock.calls[0][1].p_chat_guid).toBe('c1')
+    expect((state.rpc.mock.calls[0][1] as Record<string, string>).p_chat_guid).toBe('c1')
     expect(send).not.toHaveBeenCalled()
   })
 })
