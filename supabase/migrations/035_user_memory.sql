@@ -191,8 +191,8 @@ begin
     'match_user_summaries(uuid, vector, text, int)',
     'claim_user_memory_update(uuid, text, int)',
     'save_dinghy_user_profile(uuid, text)',
-    'add_user_memory(uuid, text, text, text, vector, text)',
-    'add_chat_memory(text, text, text, vector, text)',
+    'add_user_memory(uuid, text, text, text, text, vector, text)',
+    'add_chat_memory(text, text, text, text, vector, text)',
     'forget_user_memories(uuid, text)',
     'user_rows_needing_embedding(uuid, text, int)'
   ] loop

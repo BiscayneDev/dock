@@ -2,7 +2,7 @@
 -- Additive only.
 
 create table if not exists spend_limits (
-  user_id uuid primary key references auth.users (id) on delete cascade,
+  user_id uuid primary key references public.users (id) on delete cascade,
   daily_usd numeric not null default 50,
   updated_at timestamptz not null default now()
 );
