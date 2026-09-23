@@ -2,7 +2,8 @@ import type { Metadata, Viewport } from "next"
 import { dmMono, fraunces, schibsted } from "./fonts"
 import "./globals.css"
 
-const SITE_URL = "https://getdinghy.sh"
+// www is the live host (the apex redirects to it), so canonical URLs use it.
+const SITE_URL = "https://www.getdinghy.sh"
 const TITLE = "Dinghy · your first mate lives in your texts"
 const DESCRIPTION = "dinghy is a first mate that lives in imessage. you text it like a person. it does the work."
 

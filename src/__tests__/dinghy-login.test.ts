@@ -105,3 +105,11 @@ describe('verifyLogin', () => {
     expect(state.rpc.mock.calls[0][1]).toEqual({ p_phone: '+13055550142', p_code_hash: hashLoginCode('+13055550142', '123456') })
   })
 })
+
+describe('Dinghy knows its own site', () => {
+  it('names getdinghy.sh in every prompt', async () => {
+    const { buildSystemPrompt } = await import('@/lib/spectrum/dinghy')
+    expect(buildSystemPrompt([], false)).toContain('getdinghy.sh')
+    expect(buildSystemPrompt([], false, { google: true, wallet: false, live: true, search: true })).toContain("don't web_search for it")
+  })
+})
