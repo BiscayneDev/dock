@@ -1,9 +1,11 @@
-import { Anchor, Sunrise } from './Scene'
+import Image from 'next/image'
+import { Anchor } from './Scene'
 import styles from './PaperPage.module.css'
 
 /**
- * The paper surface: sunrise over water with a cream card rising over it.
- * Used for everything a user reaches by tapping something Dinghy sent them.
+ * The paper surface: Halsey's coast art full-bleed under a navy wash, with one
+ * cream card over it (same family as sign-in and the brief card). Used for
+ * everything a user reaches by tapping something Dinghy sent them.
  */
 export function PaperPage({
   label,
@@ -29,9 +31,13 @@ export function PaperPage({
 }): React.JSX.Element {
   return (
     <main className={styles.page}>
-      <div className={styles.band} aria-hidden="true">
-        <Sunrise id="paper" sunX={900} boatX={300} horizon={430} />
+      <div className={styles.art} aria-hidden="true">
+        <Image src="/hero-coast.jpg" alt="" fill priority sizes="100vw" quality={75} />
       </div>
+      <a className={styles.brand} href="https://www.getdinghy.sh">
+        <Image src="/icon-192.png" alt="" width={28} height={28} />
+        dinghy
+      </a>
       <div className={styles.card}>
         <div className={styles.top}>
           <Anchor size={20} />
