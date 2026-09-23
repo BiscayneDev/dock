@@ -15,7 +15,9 @@ import { chat, chatWithTools, MAX_HISTORY } from '@/lib/spectrum/dinghy'
 import { capabilitiesFor, loadImessageToolContext, toolsFor } from '@/lib/spectrum/imessage-tools'
 import { actionToolsFor, renderProposal } from '@/lib/spectrum/actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from '@/lib/spectrum/config'
-import { typing } from 'spectrum-ts'
+import { attachment, typing } from 'spectrum-ts'
+import { renderFile } from '@/lib/files/render'
+import { parseFileInput } from '@/lib/files/tool'
 import {
     ackResume,
     claimPendingResume,
@@ -52,7 +54,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     for (const row of await claimOutboxBatch()) {
         try {
             const space = await im.space.get(row.chat_guid)
-            await space.send(row.text)
+            if (row.kind === 'file') {
+                // text is the JSON document; render and send as an attachment.
+                const parsed = parseFileInput(JSON.parse(row.text))
+                if ('error' in parsed) throw new Error(`bad file row: ${parsed.error}`)
+                const file = await renderFile(parsed.doc, parsed.format, { ogImage: 'https://www.getdinghy.sh/api/og' })
+                await space.send(attachment(file.bytes, { name: file.filename, mimeType: file.mimeType }))
+                await saveMessage(row.chat_guid, 'assistant', `[sent file: ${file.filename}]`).catch(() => undefined)
+            } else {
+                await space.send(row.text)
+            }
             await markOutboxSent(row.id)
             results.outboxSent++
         } catch (err) {
