@@ -1,6 +1,7 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { getDecryptedOWSTokens, getOWSClient } from '@/lib/integrations/openwallet'
 import { logger } from '@/lib/logger'
+import { assertWithinCap } from './spend-caps'
 import {
   USDC_CONTRACTS,
   CURRENCY,
@@ -61,6 +62,17 @@ export async function processRecipePayment(
 ): Promise<PaymentResult> {
   if (!isSupportedChain(chain)) {
     return { success: false, error: `Unsupported chain: ${chain}` }
+  }
+
+  try {
+    await assertWithinCap(payerId, amount)
+  } catch (err) {
+    logger.warn('Recipe payment blocked by daily spend cap', {
+      payerId,
+      amount,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return { success: false, error: err instanceof Error ? err.message : 'Daily spend cap exceeded' }
   }
 
   const supabase = createServerClient()

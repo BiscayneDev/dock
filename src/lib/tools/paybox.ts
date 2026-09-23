@@ -5,6 +5,7 @@ import {
   payboxRequired,
   agentResultToTool,
 } from '@/lib/integrations/paybox'
+import { assertWithinCap } from '@/lib/payments/spend-caps'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 
 // Paybox — passkey-gated payments, secrets, and non-custodial wallet ops, driven
@@ -72,6 +73,7 @@ export const payboxRequestPayment: Tool = {
     if (!isPayboxConnected(ctx)) return payboxRequired('making a payment')
     try {
       const p = PaymentInput.parse(input)
+      await assertWithinCap(ctx.userId, p.amountCents / 100)
       const resp = await (await sdkFor(ctx)).requestPayment({
         credentialId: p.credentialId,
         merchant: p.merchant,
@@ -218,6 +220,7 @@ export const payboxRequestSwap: Tool = {
     if (!isPayboxConnected(ctx)) return payboxRequired('swapping tokens')
     try {
       const p = SwapInput.parse(input)
+      await assertWithinCap(ctx.userId, (p.valueCents ?? 0) / 100)
       const result = await (await sdkFor(ctx)).requestSwap({
         credentialId: p.credentialId,
         srcChain: p.srcChain,
