@@ -28,7 +28,7 @@ import { reminderToolsFor } from './reminders'
 import { EMPTY_MEMORY, loadMemoryContext, renderMemoryBlock, updateMemory } from './memory'
 import { FILE_NUDGE, fileToolsFor, stripFileMarkers, type MadeFile } from '@/lib/files/tool'
 import { sendFileWithPreview } from '@/lib/files/send'
-import { actionToolsFor, cancelPendingActions, executePendingAction, hasPendingAction, parseConfirmation, renderProposal } from './actions'
+import { actionToolsFor, cancelPendingActions, executePendingActionDetailed, hasPendingAction, parseConfirmation, renderProposal, sendConfirmedReaction } from './actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { dinghyContactCard } from './contact-card'
 import { hitRateLimit, RATE_NOTICE } from './rate-limit'
@@ -384,15 +384,23 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         if (answer === 'yes') {
             await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
             let out: string
+            let executed: Awaited<ReturnType<typeof executePendingActionDetailed>> | null = null
             try {
                 const ctx = await loadImessageToolContext(chatGuid).catch(() => null)
-                out = await executePendingAction(chatGuid, ctx)
+                executed = await executePendingActionDetailed(chatGuid, ctx)
+                out = executed.text
             } catch (err) {
                 logErr('pending action failed', err)
                 out = "that didn't go through - try again in a moment."
             }
             await sendText(space, chatGuid, 'reply', out)
             await saveMessage(chatGuid, 'assistant', out).catch((err) => logErr('message save failed', err))
+            // 👍 on the confirmation itself when the action actually ran.
+            if (executed?.ok) {
+                await sendConfirmedReaction(message, () => sendText(space, chatGuid, 'reply', '👍')).catch((err) =>
+                    logErr('confirmation reaction failed', err)
+                )
+            }
             return
         }
         await cancelPendingActions(chatGuid).catch((err) => logErr('pending action cancel failed', err))
