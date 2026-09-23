@@ -84,12 +84,12 @@ describe('live info wiring', () => {
   it('every chat gets weather; web_search only with a key', async () => {
     const { liveInfoTools, guestCapabilities, toolsFor } = await import('@/lib/spectrum/imessage-tools')
     vi.stubEnv('TAVILY_API_KEY', '')
-    expect(liveInfoTools().map((t) => t.name)).toEqual(['weather'])
+    expect(liveInfoTools().map((t) => t.name)).toEqual(['weather', 'x_read_post', 'x_profile', 'x_recent_posts'])
     expect(guestCapabilities()).toMatchObject({ google: false, wallet: false, files: false, live: true, search: false })
     vi.stubEnv('TAVILY_API_KEY', 'k')
-    expect(liveInfoTools().map((t) => t.name)).toEqual(['weather', 'web_search'])
+    expect(liveInfoTools().map((t) => t.name)).toEqual(['weather', 'web_search', 'x_read_post', 'x_profile', 'x_recent_posts'])
     // A bound user with nothing connected still gets live info, and no account tools.
-    expect(toolsFor(ctx).map((t) => t.name)).toEqual(['weather', 'web_search'])
+    expect(toolsFor(ctx).map((t) => t.name)).toEqual(['weather', 'web_search', 'x_read_post', 'x_profile', 'x_recent_posts'])
   })
 
   it('prompt names the tools that are actually offered', () => {

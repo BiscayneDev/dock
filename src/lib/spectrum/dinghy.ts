@@ -61,6 +61,8 @@ export interface PromptCapabilities {
     reminders?: boolean
     /** X (Twitter) read tools are offered. */
     x?: boolean
+    xFree?: boolean
+    xSearch?: boolean
 }
 
 const FILES_LINE =
@@ -85,6 +87,16 @@ const REMINDERS_LINE =
 const X_LINE =
     'For what people are saying on X (Twitter), their timeline, or a specific account\'s posts, call twitter_search, twitter_timeline or twitter_user_tweets ' +
     'and sum it up in a line or two, naming the accounts. You can only read X; never say you posted, liked or replied.'
+
+const X_FREE_LINE =
+    'For X (Twitter): x_read_post reads a post from its link, x_profile looks up an account, x_recent_posts shows what an account posted lately. ' +
+    'Sum up in a line or two and name the accounts. You can only read X; never say you posted, liked, followed or replied.'
+
+const X_SEARCH_LINE =
+    'To find what people are saying on X about a topic, call x_search and summarize the main takes.'
+
+const NO_X_SEARCH_LINE =
+    "You can't keyword-search X yet; you can read a post from its link or a specific account's recent posts."
 
 const SPEND_LINE =
     'For questions about AI spend, cost or usage, call spend_summary and give the number plainly.'
@@ -115,7 +127,9 @@ export function buildSystemPrompt(
     if (caps.files) prompt += ' ' + FILES_LINE
     if (caps.spend) prompt += ' ' + SPEND_LINE
     if (caps.reminders) prompt += ' ' + REMINDERS_LINE
+    if (caps.xFree) prompt += ' ' + X_FREE_LINE
     if (caps.x) prompt += ' ' + X_LINE
+    else if (caps.xFree) prompt += ' ' + (caps.xSearch ? X_SEARCH_LINE : NO_X_SEARCH_LINE)
     if (caps.live) prompt += ' ' + WEATHER_LINE + ' ' + (caps.search ? SEARCH_LINE : NO_SEARCH_LINE)
     if (facts.length > 0) {
         prompt += ' About Dinghy (product context, not facts about the person you are texting):\n' + facts.map((f) => `- ${f.key}: ${f.value}`).join('\n')
