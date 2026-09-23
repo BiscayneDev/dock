@@ -45,6 +45,7 @@ import {
     type BetaRole,
 } from './beta-gate'
 import { claimInboundDelivery, enqueueOutbox, markOutboxFailed, markOutboxSent, type OutboxKind } from './outbox'
+import { handleMuteIntent } from './briefing'
 
 export interface InboundSpace {
     /** Webhook SDK space objects carry the chat identifier as `id`. */
@@ -339,6 +340,20 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             logErr('paybox connect link failed', err)
             await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
         }
+        return
+    }
+
+    // Morning briefing mute intent: the digest footer's exact opt-out
+    // ("mute mornings"), plus its mirror "unmute mornings". Checked before
+    // the pending-action parse so it works even with a draft open.
+    const muteAck = await handleMuteIntent(chatGuid, text).catch((err) => {
+        logErr('briefing mute intent failed', err)
+        return null
+    })
+    if (muteAck) {
+        await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+        await sendText(space, chatGuid, 'reply', muteAck)
+        await saveMessage(chatGuid, 'assistant', muteAck).catch((err) => logErr('message save failed', err))
         return
     }
 
