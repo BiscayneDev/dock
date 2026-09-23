@@ -279,7 +279,7 @@ export async function ackResume(tokenRowId: string): Promise<void> {
 }
 
 /**
- * Bind an iMessage chat guid to a Dock user (creating the user on first
+ * Bind an iMessage chat guid to a Dinghy user (creating the user on first
  * connect). Telegram users are looked up by telegram_id and need no binding.
  */
 export async function bindSpectrumIdentity(chatGuid: string, handle?: string | null): Promise<string | null> {
@@ -301,7 +301,7 @@ export async function bindSpectrumIdentity(chatGuid: string, handle?: string | n
 
   // Ownership gate: in private beta, only chat guids on the beta allowlist
   // may create a new binding. This prevents a random number texting the
-  // managed iMessage line from binding a Google account to a Dock user.
+  // managed iMessage line from binding a Google account to a Dinghy user.
   // The allowlist is empty by default — binding is CLOSED until Halsey
   // provisions guids operationally from the trusted live Spectrum record.
   // No open fallback, no placeholder seed.
