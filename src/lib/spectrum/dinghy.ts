@@ -59,6 +59,8 @@ export interface PromptCapabilities {
     spend?: boolean
     /** reminder_set / list / cancel are offered. */
     reminders?: boolean
+    /** X (Twitter) read tools are offered. */
+    x?: boolean
 }
 
 const FILES_LINE =
@@ -79,6 +81,10 @@ const NO_SEARCH_LINE =
 const REMINDERS_LINE =
     'When asked to remind them of something, call reminder_set (it texts this chat at that time) and confirm the day and time in plain words. ' +
     'Use reminder_list and reminder_cancel to show or cancel pending reminders. Never say a reminder is set unless the tool succeeded.'
+
+const X_LINE =
+    'For what people are saying on X (Twitter), their timeline, or a specific account\'s posts, call twitter_search, twitter_timeline or twitter_user_tweets ' +
+    'and sum it up in a line or two, naming the accounts. You can only read X; never say you posted, liked or replied.'
 
 const SPEND_LINE =
     'For questions about AI spend, cost or usage, call spend_summary and give the number plainly.'
@@ -109,6 +115,7 @@ export function buildSystemPrompt(
     if (caps.files) prompt += ' ' + FILES_LINE
     if (caps.spend) prompt += ' ' + SPEND_LINE
     if (caps.reminders) prompt += ' ' + REMINDERS_LINE
+    if (caps.x) prompt += ' ' + X_LINE
     if (caps.live) prompt += ' ' + WEATHER_LINE + ' ' + (caps.search ? SEARCH_LINE : NO_SEARCH_LINE)
     if (facts.length > 0) {
         prompt += ' About Dinghy (product context, not facts about the person you are texting):\n' + facts.map((f) => `- ${f.key}: ${f.value}`).join('\n')

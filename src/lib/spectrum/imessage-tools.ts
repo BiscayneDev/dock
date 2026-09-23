@@ -17,6 +17,7 @@ import { gcalListEvents, gcalTodayBriefing } from '@/lib/tools/gcal'
 import { WALLET_READ_TOOLS } from '@/lib/tools/wallet-read'
 import { webSearch } from '@/lib/tools/web'
 import { weather } from '@/lib/tools/weather'
+import { twitterSearch, twitterTimeline, twitterUserTweets } from '@/lib/tools/twitter'
 
 /**
  * Read tools only (Halsey, 2026-09-22: email + calendar reads first;
@@ -37,7 +38,12 @@ export interface ImessageCapabilities {
     /** weather (always) + web_search (when TAVILY_API_KEY is set). */
     live: boolean
     search: boolean
+    /** X read tools (search, timeline, a user's posts) when X is connected. */
+    x?: boolean
 }
+
+/** X reads only: no posting, liking or DMs from iMessage. */
+export const IMESSAGE_X_TOOLS: Tool[] = [twitterSearch, twitterTimeline, twitterUserTweets]
 
 /** Web search is offered only when its key is configured. */
 export function searchEnabled(): boolean {
@@ -61,7 +67,7 @@ export function guestToolContext(): UserContext {
 }
 
 export function capabilitiesFor(ctx: UserContext): ImessageCapabilities {
-    return { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox), files: true, live: true, search: searchEnabled() }
+    return { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox), files: true, live: true, search: searchEnabled(), x: Boolean(ctx.tokens.twitter) }
 }
 
 /**
@@ -75,12 +81,13 @@ export function toolsFor(ctx: UserContext): Tool[] {
         ...liveInfoTools(),
         ...(caps.google ? IMESSAGE_READ_TOOLS : []),
         ...(caps.wallet ? WALLET_READ_TOOLS : []),
+        ...(caps.x ? IMESSAGE_X_TOOLS : []),
     ]
 }
 
 /** Capabilities for an unbound chat: live info only. */
 export function guestCapabilities(): ImessageCapabilities {
-    return { google: false, wallet: false, files: false, live: true, search: searchEnabled() }
+    return { google: false, wallet: false, files: false, live: true, search: searchEnabled(), x: false }
 }
 
 /**
@@ -122,7 +129,7 @@ export async function loadImessageToolContext(chatGuid: string): Promise<UserCon
             // Undecryptable token row — skip rather than kill the chat.
         }
     }
-    if (!tokens.google && !tokens.paybox) return null
+    if (!tokens.google && !tokens.paybox && !tokens.twitter) return null
 
     return {
         userId,
