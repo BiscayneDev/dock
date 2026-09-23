@@ -64,8 +64,9 @@ export default function LandingPage() {
           nav.top { padding: 20px 24px; }
           .cta .btn { flex: 1 1 100%; }
           .hero { min-height: 100svh; }
-          .hero-bg img { object-position: 54% 60%; }
-          .hero::before { background: linear-gradient(to bottom, rgba(6,11,26,.86) 0%, rgba(6,11,26,.7) 42%, rgba(6,11,26,.2) 64%, rgba(6,11,26,0) 76%, rgba(6,11,26,.4) 90%, var(--abyss) 100%); }
+          .hero-bg { top: auto; height: min(78vw, 46svh); }
+          .hero-bg img { object-position: 50% 62%; }
+          .hero::before { background: linear-gradient(to bottom, var(--abyss) 0%, var(--abyss) 48%, rgba(6,11,26,0) 66%, rgba(6,11,26,0) 84%, var(--abyss) 100%); }
           .hero-spacer { min-height: 120px; }
           section.block { padding-bottom: 64px; }
           .panel { padding: 26px 22px; }
