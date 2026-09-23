@@ -110,3 +110,12 @@ describe('voice', () => {
     expect(mod.VOICE_LINE).toMatch(/never answer with a list of things you cannot do/)
   })
 })
+
+describe('agency', () => {
+  it('is in the base prompt and keeps the no-invention guard', async () => {
+    const mod = await import('@/lib/spectrum/dinghy')
+    const prompt = mod.buildSystemPrompt([], false)
+    expect(prompt).toContain('Default to agency')
+    expect(mod.AGENCY_LINE).toMatch(/Never invent a tool/)
+  })
+})
