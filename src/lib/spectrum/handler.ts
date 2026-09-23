@@ -90,6 +90,25 @@ function stopTyping(space: InboundSpace): void {
         .catch((err) => logErr('typing stop failed', err))
 }
 
+/**
+ * Presence: the iMessage typing indicator decays after a few seconds, but
+ * multi-tool turns can run for a minute+. Re-tap typing every 5s while the
+ * turn runs. Never throws into the reply path: every tap is .catch'd, and
+ * stopTypingReTap is safe to call any number of times.
+ */
+function startTypingReTap(space: InboundSpace): ReturnType<typeof setInterval> {
+    startTyping(space)
+    const handle = setInterval(() => startTyping(space), 5_000)
+    // Keep the interval from holding the process open (serverless tails).
+    handle.unref?.()
+    return handle
+}
+
+function stopTypingReTap(space: InboundSpace, handle: ReturnType<typeof setInterval> | null): void {
+    if (handle) clearInterval(handle)
+    stopTyping(space)
+}
+
 /** Enqueue-then-send: the row exists before the attempt, so a kill or a
  *  send failure is always retried by the sweep. */
 /** Native attachment; on failure, fall back to the signed link as text. */
@@ -394,8 +413,8 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     const full: Message[] = [...history, { role: 'user', content: text }]
     await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
 
-    startTyping(space)
     const tChatStart = Date.now()
+    const typingHandle = startTypingReTap(space)
     try {
         // Read tools only for chats bound to a user with Google/PayBox connected;
         // everyone else gets the plain conversational path.
@@ -497,6 +516,6 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         logErr('gateway call failed', err)
         await sendText(space, chatGuid, 'error_notice', 'Something went wrong on my end. Try again in a moment.')
     } finally {
-        stopTyping(space)
+        stopTypingReTap(space, typingHandle)
     }
 }
