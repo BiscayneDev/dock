@@ -349,6 +349,61 @@ export const payboxGetPortfolio: Tool = {
   },
 }
 
+// --- paybox_onramp ---
+
+const OnrampInput = z.object({
+  credentialId: z.string().describe('A Paybox credential id from paybox_list_credentials'),
+  amountUsd: z.number().positive().describe('How much USD of crypto to buy (e.g. 25)'),
+  destinationChain: z
+    .enum(['solana:mainnet', 'eip155:8453', 'eip155:1', 'eip155:4663'])
+    .default('solana:mainnet')
+    .describe('Chain to fund — Solana mainnet by default (x402 settlement + inference rail)'),
+  currencyCode: z.string().default('USDC').describe('Token to buy (USDC default)'),
+})
+
+export const payboxOnramp: Tool = {
+  name: 'paybox_onramp',
+  description:
+    'Get a hosted buy link (Paybox on-ramp, MoonPay-powered) so the user can top up their ' +
+    'wallet with card — for x402 usage and inference spend. Sends a link the user completes ' +
+    'in Paybox with their passkey; nothing is charged by this tool.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      credentialId: { type: 'string', description: 'Paybox credential id (paybox_list_credentials)' },
+      amountUsd: { type: 'number', description: 'USD amount to buy (e.g. 25)' },
+      destinationChain: { type: 'string', enum: ['solana:mainnet', 'eip155:8453', 'eip155:1', 'eip155:4663'], description: 'Chain to fund (default solana:mainnet)' },
+      currencyCode: { type: 'string', description: 'Token to buy (default USDC)' },
+    },
+    required: ['credentialId', 'amountUsd'],
+  },
+  async execute(input: unknown, ctx: UserContext): Promise<ToolResult> {
+    if (!isPayboxConnected(ctx)) return payboxRequired('topping up a wallet')
+    try {
+      const p = OnrampInput.parse(input)
+      const sdk = await sdkFor(ctx)
+      const buy = await sdk.getBuyLink({
+        credentialId: p.credentialId,
+        destinationChain: p.destinationChain,
+        currencyCode: p.currencyCode,
+        amountUsd: p.amountUsd,
+      })
+      return {
+        success: true,
+        data: {
+          buyUrl: buy.url,
+          currency: buy.currency_code,
+          walletAddress: buy.wallet_address,
+          network: buy.network,
+          note: 'user completes the purchase in Paybox with their passkey — funds land directly in their wallet',
+        },
+      }
+    } catch (err) {
+      return toError(err)
+    }
+  },
+}
+
 // --- paybox_get_request ---
 
 const GetRequestInput = z.object({

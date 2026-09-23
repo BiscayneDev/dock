@@ -15,6 +15,7 @@ import type { DecryptedTokens, Tool, UserContext } from '@/lib/llm/types'
 import { gmailSearch, gmailRead, gmailSummarizeInbox } from '@/lib/tools/gmail'
 import { gcalListEvents, gcalTodayBriefing } from '@/lib/tools/gcal'
 import { WALLET_READ_TOOLS } from '@/lib/tools/wallet-read'
+import { payboxOnramp } from '@/lib/tools/paybox'
 import { webSearch } from '@/lib/tools/web'
 import { weather } from '@/lib/tools/weather'
 import { twitterSearch, twitterTimeline, twitterUserTweets } from '@/lib/tools/twitter'
@@ -98,6 +99,7 @@ export function toolsFor(ctx: UserContext): Tool[] {
         ...liveInfoTools(),
         ...(caps.google ? IMESSAGE_READ_TOOLS : []),
         ...(caps.wallet ? WALLET_READ_TOOLS : []),
+        ...(caps.wallet ? [payboxOnramp] : []),
         ...(caps.x ? IMESSAGE_X_TOOLS : []),
         ...(caps.github ? IMESSAGE_GITHUB_TOOLS : []),
         ...(caps.health ? IMESSAGE_HEALTH_TOOLS : []),
