@@ -6,7 +6,6 @@
  * sweep.
  */
 
-import { nativeContactCard } from '@spectrum-ts/imessage'
 import { typing } from 'spectrum-ts'
 import {
     ensureIdentity,
@@ -22,6 +21,7 @@ import {
 import { chat, chatWithTools, wantsGoogle, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { capabilitiesFor, loadImessageToolContext, toolsFor } from './imessage-tools'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
+import { dinghyContactCard } from './contact-card'
 import { claimInboundDelivery, enqueueOutbox, markOutboxFailed, markOutboxSent, type OutboxKind } from './outbox'
 
 export interface InboundSpace {
@@ -110,7 +110,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     // On-demand contact card.
     if (isContactCardRequest(text)) {
         await (space as InboundSpace & { send(b: unknown): Promise<unknown> })
-            .send(nativeContactCard())
+            .send(dinghyContactCard())
             .catch((err) => logErr('contact card failed', err))
         return
     }
@@ -132,10 +132,12 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     const includeOpener = history.length === 0 && facts.length === 0
 
     // First-ever message in this chat: onboarding contact card. DB-backed
-    // (was a process-memory Set on the VPS) so it works statelessly.
+    // (was a process-memory Set on the VPS) so it works statelessly. Our own
+    // vCard, not nativeContactCard(): the shared line's native card is the
+    // pool's "Spectrum" identity.
     if (history.length === 0) {
         await (space as InboundSpace & { send(b: unknown): Promise<unknown> })
-            .send(nativeContactCard())
+            .send(dinghyContactCard())
             .catch((err) => logErr('onboarding contact card failed', err))
     }
 
