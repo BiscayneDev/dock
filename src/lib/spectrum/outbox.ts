@@ -8,7 +8,7 @@ import { randomUUID } from 'crypto'
 import { createServerClient } from '@/lib/supabase/server'
 import { OUTBOX_LEASE_MS, computeBackoffMs } from './config'
 
-export type OutboxKind = 'reply' | 'connect_link' | 'error_notice'
+export type OutboxKind = 'reply' | 'connect_link' | 'error_notice' | 'file'
 
 export interface OutboxRow {
     id: string
