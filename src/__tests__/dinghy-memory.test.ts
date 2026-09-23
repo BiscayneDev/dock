@@ -5,8 +5,9 @@ const fromMock = vi.fn()
 vi.mock('@/lib/supabase/server', () => ({
   createServerClient: () => ({ rpc: rpcMock, from: fromMock }),
 }))
+const embedMock = vi.fn(async (t: string): Promise<number[] | null> => (t ? null : null))
 vi.mock('@/lib/memory/embeddings', () => ({
-  embedText: vi.fn(async () => null),
+  embedText: (t: string) => embedMock(t),
   currentEmbeddingModel: () => 'test-model',
 }))
 
@@ -14,6 +15,9 @@ import {
   cleanFacts,
   cleanProfile,
   loadMemoryContext,
+  mergeFacts,
+  backfillEmbeddings,
+  withTimeout,
   looksSecret,
   parseJsonObject,
   renderMemoryBlock,
@@ -112,5 +116,52 @@ describe('updateMemory', () => {
     expect(rpcMock).toHaveBeenCalledTimes(1)
     expect(rpcMock).toHaveBeenCalledWith('claim_memory_update', { p_chat_guid: 'chat-1', p_every: 10 })
     expect(fromMock).not.toHaveBeenCalled()
+  })
+})
+
+
+describe('embeddings recall', () => {
+  it('ranks matches first, tops up with recent, dedupes, drops weak matches', () => {
+    const out = mergeFacts(
+      [
+        { content: 'Loves kitesurfing at Crandon', similarity: 0.8 },
+        { content: 'Weak match', similarity: 0.1 },
+      ],
+      ['loves kitesurfing at crandon', 'Sister is Pia', 'Works at Biscayne Ventures'],
+      3
+    )
+    expect(out).toEqual(['Loves kitesurfing at Crandon', 'Sister is Pia', 'Works at Biscayne Ventures'])
+  })
+
+  it('pulls relevant older summaries ahead of the latest two', async () => {
+    embedMock.mockResolvedValueOnce([0.1, 0.2])
+    rpcMock.mockImplementation(async (name: string) => {
+      if (name === 'dinghy_memory_context') return { data: { profile: '- Halsey', summaries: ['recent A', 'recent B'] }, error: null }
+      if (name === 'match_chat_summaries')
+        return { data: [{ summary: 'Costa Brava trip planning', last_at: '2026-09-01T00:00:00Z', similarity: 0.7 }, { summary: 'unrelated', last_at: '2026-09-02T00:00:00Z', similarity: 0.1 }], error: null }
+      if (name === 'match_chat_memories') return { data: [{ content: 'Flying to Barcelona Oct 3', similarity: 0.6 }], error: null }
+      if (name === 'recent_chat_memories') return { data: [{ content: 'Sister is Pia' }], error: null }
+      return { data: null, error: null }
+    })
+    const m = await loadMemoryContext('chat1', 'what was the plan for spain?')
+    expect(m.summaries).toEqual(['Costa Brava trip planning', 'recent A', 'recent B'])
+    expect(m.facts).toEqual(['Flying to Barcelona Oct 3', 'Sister is Pia'])
+  })
+
+  it('never lets a slow embed hold the reply', async () => {
+    const slow = new Promise<number>((r) => setTimeout(() => r(1), 200))
+    expect(await withTimeout(slow, 10)).toBeNull()
+  })
+
+  it('backfills missing vectors and stops when embeddings are down', async () => {
+    rpcMock.mockImplementation(async (name: string) => {
+      if (name === 'chat_rows_needing_embedding')
+        return { data: [{ kind: 'fact', id: 'a', content: 'x' }, { kind: 'summary', id: 'b', content: 'y' }, { kind: 'fact', id: 'c', content: 'z' }], error: null }
+      return { data: null, error: null }
+    })
+    embedMock.mockResolvedValueOnce([1]).mockResolvedValueOnce([2]).mockResolvedValueOnce(null)
+    expect(await backfillEmbeddings('chat1')).toBe(2)
+    const sets = rpcMock.mock.calls.filter((c) => c[0] === 'set_chat_embedding')
+    expect(sets.map((c) => c[1].p_kind)).toEqual(['fact', 'summary'])
   })
 })
