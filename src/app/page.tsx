@@ -90,7 +90,7 @@ export default function LandingPage() {
           </div>
           <nav className="top">
             <span className="mark"><Anchor color="#F2A380" size={20} />dinghy</span>
-            <Link href="/onboarding" className="signin">sign in</Link>
+            <Link href="/login" className="signin">sign in</Link>
           </nav>
 
           <section className="wrap" style={{ paddingTop: '152px', paddingBottom: 0 }}>
@@ -100,7 +100,7 @@ export default function LandingPage() {
               dinghy is a first mate that lives in imessage. you text it like a person. <b>it does the work.</b>
             </p>
             <div className="cta">
-              <Link href="/onboarding" className="btn primary">join the beta</Link>
+              <Link href="/login" className="btn primary">join the beta</Link>
               <a href="#waitlist" className="btn quiet">get on the list</a>
             </div>
           </section>

@@ -71,7 +71,7 @@ export async function GET(
 
   const session = await getSession()
   if (!session) {
-    return NextResponse.redirect(`${appUrl}/onboarding`)
+    return NextResponse.redirect(`${appUrl}/login`)
   }
 
   // CSRF check for the session flow: state must round-trip from our cookie.
@@ -189,7 +189,7 @@ export async function GET(
         return NextResponse.redirect(`${appUrl}/dashboard?error=unknown_provider`)
     }
 
-    return NextResponse.redirect(`${appUrl}/onboarding?connected=${provider}`)
+    return NextResponse.redirect(`${appUrl}/profile?connected=${provider}`)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     const { logger } = await import('@/lib/logger')
