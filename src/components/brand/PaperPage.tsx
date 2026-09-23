@@ -13,6 +13,7 @@ export function PaperPage({
   action,
   missing,
   fine,
+  children,
 }: {
   label: string
   /** lowercase headline; `accent` is appended in the italic accent */
@@ -23,6 +24,8 @@ export function PaperPage({
   /** shown instead of the action when the link is unusable */
   missing?: string
   fine?: React.ReactNode
+  /** extra content under the body (e.g. a form) */
+  children?: React.ReactNode
 }): React.JSX.Element {
   return (
     <main className={styles.page}>
@@ -39,6 +42,7 @@ export function PaperPage({
           {accent && <> <em>{accent}</em></>}
         </h1>
         <p className={styles.body}>{body}</p>
+        {children}
         {action ? (
           <a className={styles.button} href={action.href}>{action.label}</a>
         ) : missing ? (

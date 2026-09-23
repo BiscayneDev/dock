@@ -25,6 +25,7 @@ import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsGithub, wantsHe
 import { recordUsage, spendToolFor, type GatewayUsage } from './metering'
 import { capabilitiesFor, guestCapabilities, guestToolContext, liveInfoTools, loadImessageToolContext, toolsFor } from './imessage-tools'
 import { reminderToolsFor } from './reminders'
+import { payboxSigningToolsFor } from '@/lib/tools/paybox-signing'
 import { EMPTY_MEMORY, loadMemoryContext, renderMemoryBlock, updateMemory } from './memory'
 import { FILE_NUDGE, fileToolsFor, stripFileMarkers, type MadeFile } from '@/lib/files/tool'
 import { sendFileWithPreview } from '@/lib/files/send'
@@ -582,7 +583,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         // Reminders for every chat; they only ever text this chat back.
         const reminderTools = reminderToolsFor(chatGuid, toolCtx?.userId ?? null, toolCtx?.timezone)
         const tools = toolCtx
-            ? [...toolsFor(toolCtx), ...(actions?.tools ?? []), ...(fileTools?.tools ?? []), spendTool, ...reminderTools]
+            ? [...toolsFor(toolCtx), ...(actions?.tools ?? []), ...(fileTools?.tools ?? []), spendTool, ...reminderTools, ...(toolCtx.tokens.paybox ? payboxSigningToolsFor(chatGuid) : [])]
             : [...liveInfoTools(), spendTool, ...reminderTools]
         const usage: GatewayUsage[] = []
         const onUsage = (u: GatewayUsage) => usage.push(u)
