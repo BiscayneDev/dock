@@ -138,6 +138,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                         ? "paybox is connected — i can see your wallet balances now (read-only) ✓"
                         : claimed.provider === 'github'
                           ? "github is connected — i can read your repos, issues and PRs now ✓"
+                          : claimed.provider === 'oura' || claimed.provider === 'whoop'
+                            ? `${claimed.provider === 'oura' ? 'oura' : 'whoop'} is connected — i can see your sleep, recovery and activity now ✓`
                           : "you're connected — gmail + calendar are in ✓"
                 await space.send(`${connectedLine}\n\n${reply}`)
                 const proposal = actions?.proposal()
