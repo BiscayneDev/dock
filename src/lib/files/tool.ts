@@ -14,7 +14,8 @@
 import { randomUUID } from 'crypto'
 import { createServerClient } from '@/lib/supabase/server'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
-import { renderFile, type DinghyDoc, type FileFormat, type RenderedFile } from './render'
+import { renderFile, renderHtml, type DinghyDoc, type FileFormat, type RenderedFile } from './render'
+import { publishHtml, shareEnabled } from './share'
 
 export const FILES_BUCKET = 'dinghy-files'
 /** Fallback links stay valid for a week. */
@@ -28,6 +29,8 @@ export interface MadeFile extends RenderedFile {
     subtitle?: string
     /** Signed Storage link, or null when the upload failed. */
     link: string | null
+    /** Public here.now page, only when the user asked for a shareable link. */
+    shareUrl?: string
 }
 
 export interface FileToolset {
@@ -38,7 +41,7 @@ export interface FileToolset {
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 
-export function parseFileInput(input: unknown): { doc: DinghyDoc; format: FileFormat } | { error: string } {
+export function parseFileInput(input: unknown): { doc: DinghyDoc; format: FileFormat; share: boolean } | { error: string } {
     const i = (input ?? {}) as Record<string, unknown>
     const title = str(i.title)
     const body = typeof i.body === 'string' ? i.body : ''
@@ -49,7 +52,7 @@ export function parseFileInput(input: unknown): { doc: DinghyDoc; format: FileFo
     const format = (raw === 'word' ? 'docx' : raw === 'markdown' ? 'md' : raw) as FileFormat
     if (!FORMATS.includes(format)) return { error: `format must be one of ${FORMATS.join(', ')}` }
     const subtitle = str(i.subtitle)
-    return { doc: { title, body, ...(subtitle ? { subtitle } : {}) }, format }
+    return { doc: { title, body, ...(subtitle ? { subtitle } : {}) }, format, share: i.share === true }
 }
 
 async function store(userId: string, file: RenderedFile): Promise<string | null> {
@@ -71,7 +74,8 @@ export function fileToolsFor(): FileToolset {
             'Make a polished document and send it to the user as a file in this chat: plans, itineraries, notes, checklists, summaries, tables. ' +
             'Write the body in Markdown (## headings, - lists, | tables |, > callouts). A list item starting with a time like "09:00" becomes a schedule row. ' +
             'Default format is pdf; use docx only when they want to edit it in Word, csv for a plain table, html for a web page, md for raw Markdown. ' +
-            'The file is sent right after your reply: say one short line about it, do not paste its contents or a link.',
+            'The file is sent right after your reply: say one short line about it, do not paste its contents. ' +
+            'Set share=true only when the user asks for a link they can send to other people: it also publishes the document as a web page anyone with the link can open, and you include that link in your reply.',
         inputSchema: {
             type: 'object',
             properties: {
@@ -79,6 +83,7 @@ export function fileToolsFor(): FileToolset {
                 subtitle: { type: 'string', description: 'Optional one-line subtitle: who, when, where' },
                 body: { type: 'string', description: 'The document body in Markdown' },
                 format: { type: 'string', enum: FORMATS, description: 'pdf (default), docx, html, csv or md' },
+                share: { type: 'boolean', description: 'Also publish a public web page and return its link. Only when the user asked for a shareable link.' },
             },
             required: ['title', 'body'],
         },
@@ -98,14 +103,33 @@ export function fileToolsFor(): FileToolset {
             } catch (err) {
                 console.error('[dinghy] file upload failed', err instanceof Error ? err.message : err)
             }
-            made.push({ ...file, format: parsed.format, title: parsed.doc.title, subtitle: parsed.doc.subtitle, link })
+            let shareUrl: string | undefined
+            let shareError: string | undefined
+            if (parsed.share) {
+                if (!shareEnabled()) shareError = 'shareable links are not set up yet'
+                else {
+                    try {
+                        shareUrl = await publishHtml(renderHtml(parsed.doc, { ogImage: 'https://www.getdinghy.sh/api/og' }), parsed.doc.title)
+                    } catch (err) {
+                        console.error('[dinghy] share publish failed', err instanceof Error ? err.message : err)
+                        shareError = 'could not make the shareable link'
+                    }
+                }
+            }
+            made.push({ ...file, format: parsed.format, title: parsed.doc.title, subtitle: parsed.doc.subtitle, link, ...(shareUrl ? { shareUrl } : {}) })
             return {
                 success: true,
                 data: {
                     status: 'will_send_after_reply',
                     filename: file.filename,
                     format: parsed.format,
-                    note: 'The file goes out as an attachment right after your reply. Keep the reply to one short line; no link, no contents.',
+                    ...(shareUrl ? { share_url: shareUrl } : {}),
+                    ...(shareError ? { share_error: shareError } : {}),
+                    note: shareUrl
+                        ? 'The file goes out as an attachment right after your reply. Put share_url in your reply as the link to send around; keep it short.'
+                        : shareError
+                          ? 'The file still goes out as an attachment. Tell the user the shareable link did not work this time; keep it short.'
+                          : 'The file goes out as an attachment right after your reply. Keep the reply to one short line; no link, no contents.',
                 },
             }
         },
