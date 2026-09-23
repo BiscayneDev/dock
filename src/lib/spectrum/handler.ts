@@ -46,6 +46,15 @@ import {
 } from './beta-gate'
 import { claimInboundDelivery, enqueueOutbox, markOutboxFailed, markOutboxSent, type OutboxKind } from './outbox'
 import { handleMuteIntent } from './briefing'
+import {
+    forgetMatch,
+    handlePendingMemoryWipe,
+    isMemoryCommand,
+    parseForgetIntent,
+    renderMemoryReport,
+    requestMemoryWipe,
+    WIPE_PROMPT,
+} from './memory-commands'
 import { buildIcs } from './ics'
 import { attachment } from 'spectrum-ts'
 
@@ -393,6 +402,62 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
         await sendText(space, chatGuid, 'reply', muteAck)
         await saveMessage(chatGuid, 'assistant', muteAck).catch((err) => logErr('message save failed', err))
+        return
+    }
+
+    // /memory transparency (F1): show exactly what is remembered. Runs
+    // before the pending-action parse so it works even with a draft open.
+    if (isMemoryCommand(text)) {
+        await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+        try {
+            const report = await renderMemoryReport(chatGuid)
+            await sendText(space, chatGuid, 'reply', report)
+            await saveMessage(chatGuid, 'assistant', report).catch((err) => logErr('message save failed', err))
+        } catch (err) {
+            logErr('memory report failed', err)
+            await sendText(space, chatGuid, 'error_notice', "couldn't pull your memories up right now - try again in a moment.")
+        }
+        return
+    }
+
+    // An open "wipe everything" gate (F1) resolves on the very next message:
+    // only an explicit YES wipes; anything else cancels and flows on.
+    const wipeReply = await handlePendingMemoryWipe(chatGuid, text).catch((err) => {
+        logErr('memory wipe gate failed', err)
+        return null
+    })
+    if (wipeReply !== null) {
+        await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+        await sendText(space, chatGuid, 'reply', wipeReply)
+        await saveMessage(chatGuid, 'assistant', wipeReply).catch((err) => logErr('message save failed', err))
+        return
+    }
+
+    // "forget X" (F1): single facts drop right away (soft delete, reversible);
+    // "forget everything" opens the explicit-YES wipe gate instead.
+    const forget = parseForgetIntent(text)
+    if (forget) {
+        await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+        let out: string
+        if (forget.kind === 'all') {
+            try {
+                await requestMemoryWipe(chatGuid)
+                out = WIPE_PROMPT
+            } catch (err) {
+                logErr('memory wipe request failed', err)
+                out = "couldn't open the wipe flow - try again in a moment."
+            }
+        } else {
+            try {
+                const n = await forgetMatch(chatGuid, forget.match)
+                out = n > 0 ? `forgot it${n > 1 ? ` (${n} things actually)` : ''}.` : "nothing like that on file - check '/memory' to see what i've got."
+            } catch (err) {
+                logErr('memory forget failed', err)
+                out = "couldn't forget that just now - try again in a moment."
+            }
+        }
+        await sendText(space, chatGuid, 'reply', out)
+        await saveMessage(chatGuid, 'assistant', out).catch((err) => logErr('message save failed', err))
         return
     }
 
