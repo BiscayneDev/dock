@@ -1,4 +1,5 @@
 import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js'
+import { retryFetch } from './retry-fetch'
 
 // Service role client — bypasses RLS.
 // Uses untyped client to avoid strict generic conflicts on upsert/update
@@ -16,5 +17,6 @@ export function createServerClient(): SupabaseClient {
       autoRefreshToken: false,
       persistSession: false,
     },
+    global: { fetch: retryFetch },
   })
 }

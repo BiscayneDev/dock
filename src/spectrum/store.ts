@@ -7,6 +7,9 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { retryFetch } from '../lib/supabase/retry-fetch'
+import type { DinghyFact } from '../lib/spectrum/dinghy'
+export type { DinghyFact } from '../lib/spectrum/dinghy'
 import { createHash, createHmac, randomBytes } from 'crypto'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -24,6 +27,7 @@ function db(): SupabaseClient {
   if (!client) {
     client = createClient(SUPABASE_URL, SUPABASE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
+      global: { fetch: retryFetch },
     })
   }
   return client
@@ -196,4 +200,24 @@ export async function ackResume(tokenRowId: string): Promise<void> {
     .update({ resumed_at: new Date().toISOString(), delivery_claimed_at: null })
     .eq('id', tokenRowId)
     .is('resumed_at', null)
+}
+
+// ── Durable facts (dinghy_facts, migration 016) ─────────────────────────────
+
+let factsCache: { facts: DinghyFact[]; at: number } | null = null
+const FACTS_CACHE_TTL_MS = 5 * 60 * 1000
+
+/**
+ * Global key-value facts injected into the system prompt. Cached per lambda
+ * instance (facts change rarely; the prompt load must not add a network
+ * round trip to every message).
+ */
+export async function loadFacts(): Promise<DinghyFact[]> {
+  if (factsCache && Date.now() - factsCache.at < FACTS_CACHE_TTL_MS) return factsCache.facts
+  const supabase = db()
+  const { data, error } = await supabase.from('dinghy_facts').select('key, value').order('key')
+  if (error) throw new Error(`dinghy_facts load failed: ${error.message}`)
+  const facts = (data ?? []) as DinghyFact[]
+  factsCache = { facts, at: Date.now() }
+  return facts
 }

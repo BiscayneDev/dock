@@ -1,7 +1,10 @@
 /**
  * Keep-warm (cron, every 5 minutes): one trivial authenticated round trip
- * keeps the lambda and the Supabase connection hot, so the first real
- * message after an idle spell avoids the cold-start second.
+ * keeps this lambda and the Supabase connection hot, and an unsigned POST
+ * at the Spectrum webhook route keeps THAT lambda warm too — the route
+ * initializes the Spectrum app (SDK auth token fetch) before rejecting the
+ * bad signature, so the app singleton + token cache stay pinned in a live
+ * instance and warm-path replies skip the ~60s cold start.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -16,5 +19,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
     const supabase = createServerClient()
     const { error } = await supabase.from('spectrum_inbound_dedupe').select('message_id').limit(1)
-    return NextResponse.json({ warm: !error })
+
+    let webhookWarm = false
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+    if (appUrl) {
+        try {
+            // Unsigned on purpose: 401 is expected — the warm-up is the app
+            // init the route performs before verification.
+            const res = await fetch(`${appUrl}/api/spectrum/webhook`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: '{}',
+            })
+            webhookWarm = res.status === 401
+        } catch (err) {
+            console.error('webhook warm failed:', err instanceof Error ? err.message : String(err))
+        }
+    }
+    return NextResponse.json({ warm: !error, webhookWarm })
 }

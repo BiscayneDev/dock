@@ -7,12 +7,16 @@
  */
 
 import { nativeContactCard } from '@spectrum-ts/imessage'
+import { typing } from 'spectrum-ts'
 import {
     ensureIdentity,
     isGoogleConnected,
+    loadFacts,
     loadHistory,
     saveMessage,
     createConnectLink,
+    type DinghyFact,
+    type HistoryMessage,
 } from '@/spectrum/store'
 import { chat, wantsGoogle, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
@@ -43,6 +47,22 @@ export function resolveChatGuid(space: InboundSpace): string | null {
 
 function logErr(context: string, err: unknown): void {
     console.error(`${context}:`, err instanceof Error ? err.message : String(err))
+}
+
+type ContentSender = InboundSpace & { send(content: unknown): Promise<unknown> }
+
+/** Typing indicator while the LLM call is in flight. Fire-and-forget: a
+ *  typing failure must never block or kill the reply path. */
+function startTyping(space: InboundSpace): void {
+    void (space as ContentSender)
+        .send(typing())
+        .catch((err) => logErr('typing start failed', err))
+}
+
+function stopTyping(space: InboundSpace): void {
+    void (space as ContentSender)
+        .send(typing('stop'))
+        .catch((err) => logErr('typing stop failed', err))
 }
 
 /** Enqueue-then-send: the row exists before the attempt, so a kill or a
@@ -93,7 +113,21 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         return
     }
 
-    const history = await loadHistory(chatGuid, MAX_HISTORY)
+    const t0 = Date.now()
+    // A DB blip degrades to no-history, never a dead tail.
+    const history = await loadHistory(chatGuid, MAX_HISTORY).catch((err) => {
+        logErr('history load failed', err)
+        return [] as HistoryMessage[]
+    })
+    const facts = await loadFacts().catch((err) => {
+        logErr('facts load failed', err)
+        return [] as DinghyFact[]
+    })
+    const tContext = Date.now()
+    // The opener question is for a genuinely new user only: zero facts AND
+    // zero history. Thin history (or a history-load failure) must not
+    // re-ask it.
+    const includeOpener = history.length === 0 && facts.length === 0
 
     // First-ever message in this chat: onboarding contact card. DB-backed
     // (was a process-memory Set on the VPS) so it works statelessly.
@@ -107,7 +141,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     if (wantsGoogle(text) && !(await isGoogleConnected(chatGuid).catch(() => false))) {
         try {
             const link = await createConnectLink(chatGuid, text)
-            await saveMessage(chatGuid, 'user', text)
+            await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
             // URL goes out as its own bubble: iMessage renders the rich
             // link-preview card (OG from /connect) only when the URL stands
             // alone.
@@ -132,18 +166,35 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     }
 
     const full: Message[] = [...history, { role: 'user', content: text }]
-    await saveMessage(chatGuid, 'user', text)
+    await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
 
+    startTyping(space)
+    const tChatStart = Date.now()
     try {
         const reply = await chat(full, {
             gatewayUrl: GATEWAY_URL,
             apiKey: SHIPYARD_API_KEY,
             model: SHIPYARD_MODEL,
+            facts,
+            includeOpener,
         })
+        const tChatEnd = Date.now()
         await sendText(space, chatGuid, 'reply', reply)
-        await saveMessage(chatGuid, 'assistant', reply)
+        await saveMessage(chatGuid, 'assistant', reply).catch((err) => logErr('message save failed', err))
+        // Warm-path latency ledger: read these from the function logs.
+        console.log(
+            `dinghy timing ${JSON.stringify({
+                chatGuid,
+                contextMs: tContext - t0,
+                chatMs: tChatEnd - tChatStart,
+                sendMs: Date.now() - tChatEnd,
+                totalMs: Date.now() - t0,
+            })}`
+        )
     } catch (err) {
         logErr('gateway call failed', err)
         await sendText(space, chatGuid, 'error_notice', 'Something went wrong on my end. Try again in a moment.')
+    } finally {
+        stopTyping(space)
     }
 }
