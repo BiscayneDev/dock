@@ -36,7 +36,6 @@ export async function GET(): Promise<NextResponse> {
 
   return NextResponse.json({
     google: connected.has('google'),
-    notion: connected.has('notion'),
     github: connected.has('github'),
     openwallet: connected.has('openwallet'),
     oura: connected.has('oura'),

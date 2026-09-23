@@ -23,7 +23,6 @@ const ENGAGEMENT_SCHEDULE: Array<{
       const suggestions: string[] = []
       if (integrations.includes('google')) suggestions.push('"summarize my inbox every morning"')
       if (integrations.includes('github')) suggestions.push('"alert me when a PR needs review"')
-      if (integrations.includes('notion')) suggestions.push('"create a notion page for every new github issue"')
       if (suggestions.length === 0) suggestions.push('"remind me to check email every day at 9am"')
       const top = suggestions.slice(0, 2).join(' or ')
       return `hey ${name || 'there'} — you haven't tried recipes yet. recipes are automations that run on their own. try saying ${top} and i'll set it up for you.`

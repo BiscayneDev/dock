@@ -101,11 +101,11 @@ export const RECIPE_TEMPLATES: RecipeTemplate[] = [
     name: 'Meeting Prep',
     description: 'Pull notes + emails before meetings',
     category: 'Calendar',
-    requiredIntegrations: ['google', 'notion'],
+    requiredIntegrations: ['google'],
     triggerType: 'schedule',
     triggerConfig: { cron: '*/15 * * * *', timezone: 'UTC' },
-    instructions: "Check if I have a meeting starting in the next 15 minutes. If so, search my email and Notion for anything related to the meeting topic or attendees. Send me a brief prep summary. If no upcoming meeting, skip this run.",
-    previewOutput: "📅 **Meeting in 15 min: Client call with Acme**\n\n📧 Recent emails with Acme:\n- Proposal feedback (yesterday)\n- Contract questions (2 days ago)\n\n📝 Notion notes: Acme project page updated 3 days ago",
+    instructions: "Check if I have a meeting starting in the next 15 minutes. If so, search my email for anything related to the meeting topic or attendees. Send me a brief prep summary. If no upcoming meeting, skip this run.",
+    previewOutput: "📅 **Meeting in 15 min: Client call with Acme**\n\n📧 Recent emails with Acme:\n- Proposal feedback (yesterday)\n- Contract questions (2 days ago)",
     icon: '📋',
   },
   {
@@ -137,13 +137,13 @@ export const RECIPE_TEMPLATES: RecipeTemplate[] = [
   {
     slug: 'issue-assigned',
     name: 'Issue Assigned',
-    description: 'Notify + create Notion task when assigned',
+    description: 'Notify when assigned',
     category: 'Developer',
-    requiredIntegrations: ['github', 'notion'],
+    requiredIntegrations: ['github'],
     triggerType: 'github_event',
     triggerConfig: { event_type: 'issue_assigned' },
-    instructions: 'When a GitHub issue is assigned to me: 1) Get the issue details. 2) Create a Notion page in my tasks database with the issue title, link, and key details. 3) Notify me with a summary.',
-    previewOutput: "📌 **Issue assigned: #87 — API rate limiting**\nRepo: org/backend\nLabels: bug, priority-high\n\n✅ Created Notion task",
+    instructions: 'When a GitHub issue is assigned to me: 1) Get the issue details. 2) Notify me with a summary.',
+    previewOutput: "📌 **Issue assigned: #87 — API rate limiting**\nRepo: org/backend\nLabels: bug, priority-high",
     icon: '📌',
   },
   {
@@ -181,20 +181,6 @@ export const RECIPE_TEMPLATES: RecipeTemplate[] = [
     instructions: 'When I get a notification about a deployment or CI run, summarize the status: what was deployed, which branch, did it pass or fail, and link to the logs.',
     previewOutput: "🚀 **Deploy: org/frontend**\nBranch: main (merged PR #34)\nStatus: ✅ Passed\nEnvironment: Production\n\nAll checks green.",
     icon: '🚀',
-  },
-
-  // --- Notion ---
-  {
-    slug: 'new-notion-page',
-    name: 'New Notion Page',
-    description: 'Notify when a page is added to a database',
-    category: 'Productivity',
-    requiredIntegrations: ['notion'],
-    triggerType: 'notion_event',
-    triggerConfig: { database_id: '', event: 'new_page' },
-    instructions: 'Read the new page and send me a brief summary of its title and content.',
-    previewOutput: "📝 **New page in Tasks DB**\nTitle: Design system audit\n\nContent preview: Review all components for consistency with new brand guidelines...",
-    icon: '📝',
   },
 
   // --- Crypto ---

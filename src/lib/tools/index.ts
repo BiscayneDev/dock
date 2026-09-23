@@ -21,14 +21,6 @@ import {
   gcalTodayBriefing,
 } from './gcal'
 import {
-  notionSearch,
-  notionReadPage,
-  notionCreatePage,
-  notionUpdatePage,
-  notionQueryDatabase,
-  notionCreateDatabaseItem,
-} from './notion'
-import {
   githubListRepos,
   githubGetRepo,
   githubListIssues,
@@ -98,13 +90,6 @@ export const integrationTools: Tool[] = [
   gcalDeleteEvent,
   gcalFindFreeTime,
   gcalTodayBriefing,
-  // Notion
-  notionSearch,
-  notionReadPage,
-  notionCreatePage,
-  notionUpdatePage,
-  notionQueryDatabase,
-  notionCreateDatabaseItem,
   // GitHub
   githubListRepos,
   githubGetRepo,

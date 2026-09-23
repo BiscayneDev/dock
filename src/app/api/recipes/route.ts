@@ -7,7 +7,7 @@ const CreateRecipeBody = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   instructions: z.string().min(1),
-  trigger_type: z.enum(['schedule', 'email_event', 'github_event', 'notion_event', 'keyword', 'manual']),
+  trigger_type: z.enum(['schedule', 'email_event', 'github_event', 'keyword', 'manual']),
   trigger_config: z.record(z.string(), z.unknown()),
   enabled: z.boolean().optional().default(true),
   notify_on_run: z.boolean().optional().default(true),

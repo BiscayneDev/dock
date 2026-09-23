@@ -8,7 +8,7 @@ import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 const CreateInput = z.object({
   name: z.string(),
   instructions: z.string(),
-  trigger_type: z.enum(['schedule', 'email_event', 'github_event', 'notion_event', 'keyword', 'manual']),
+  trigger_type: z.enum(['schedule', 'email_event', 'github_event', 'keyword', 'manual']),
   trigger_config: z.record(z.string(), z.unknown()),
   notify_on_run: z.boolean().optional().default(true),
   fee_amount: z.number().min(0).max(100).optional().default(0),
@@ -23,7 +23,7 @@ export const recipeCreate: Tool = {
     properties: {
       name: { type: 'string', description: 'Short descriptive name' },
       instructions: { type: 'string', description: 'What the execution agent should do' },
-      trigger_type: { type: 'string', enum: ['schedule', 'email_event', 'github_event', 'notion_event', 'keyword', 'manual'] },
+      trigger_type: { type: 'string', enum: ['schedule', 'email_event', 'github_event', 'keyword', 'manual'] },
       trigger_config: { type: 'object', description: 'Trigger-specific config' },
       notify_on_run: { type: 'boolean', description: 'Notify user after each run (default true)' },
       fee_amount: { type: 'number', description: 'Fee in USDC to charge per run (0-100, default 0)' },

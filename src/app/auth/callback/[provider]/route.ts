@@ -6,10 +6,6 @@ import {
   verifyGoogleConnection,
 } from '@/lib/integrations/google'
 import {
-  exchangeCode as exchangeNotionCode,
-  storeNotionTokens,
-} from '@/lib/integrations/notion'
-import {
   exchangeCode as exchangeGithubCode,
   storeGithubTokens,
 } from '@/lib/integrations/github'
@@ -97,16 +93,6 @@ export async function GET(
           result.expiresAt,
           ['openid', 'email', 'gmail.readonly', 'gmail.send', 'gmail.modify', 'calendar.readonly', 'calendar.events'],
           result.email
-        )
-        break
-      }
-
-      case 'notion': {
-        const result = await exchangeNotionCode(code)
-        await storeNotionTokens(
-          session.userId,
-          result.accessToken,
-          result.workspaceName
         )
         break
       }

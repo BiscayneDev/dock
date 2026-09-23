@@ -20,15 +20,6 @@ const GithubTriggerConfig = z.object({
   label: z.string().optional(),
 })
 
-const NotionTriggerConfig = z.object({
-  database_id: z.string(),
-  event: z.enum(['new_page', 'page_updated']),
-  property_filter: z.object({
-    property: z.string(),
-    value: z.string(),
-  }).optional(),
-})
-
 interface RecipeForTrigger {
   id: string
   user_id: string
@@ -46,8 +37,6 @@ export async function checkTrigger(
       return checkEmailTrigger(recipe, ctx)
     case 'github_event':
       return checkGithubTrigger(recipe, ctx)
-    case 'notion_event':
-      return checkNotionTrigger(recipe, ctx)
     default:
       return []
   }
@@ -155,46 +144,6 @@ async function checkGithubTrigger(
         },
       },
     }))
-}
-
-async function checkNotionTrigger(
-  recipe: RecipeForTrigger,
-  ctx: UserContext
-): Promise<TriggerMatch[]> {
-  const config = NotionTriggerConfig.parse(recipe.trigger_config)
-  const queryDb = integrationTools.find((t) => t.name === 'notion_query_database')
-  if (!queryDb) return []
-
-  const since = recipe.last_checked_at ?? new Date(Date.now() - 5 * 60 * 1000).toISOString()
-
-  const timestampField = config.event === 'new_page' ? 'created_time' : 'last_edited_time'
-
-  const filter = {
-    timestamp: timestampField,
-    [timestampField]: { after: since },
-  }
-
-  const result = await queryDb.execute(
-    { databaseId: config.database_id, filter, pageSize: 10 },
-    ctx
-  )
-
-  if (!result.success || !result.data) return []
-
-  const data = result.data as { results?: Array<{ id: string; title: string; url: string; lastEdited: string }> }
-  const pages = data.results ?? []
-
-  return pages.map((page) => ({
-    externalId: page.id,
-    context: {
-      page: {
-        id: page.id,
-        title: page.title,
-        url: page.url,
-        timestamp: page.lastEdited,
-      },
-    },
-  }))
 }
 
 // --- Keyword trigger check (synchronous in webhook) ---
