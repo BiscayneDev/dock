@@ -152,23 +152,32 @@ export async function cancelPendingActions(chatGuid: string): Promise<number> {
 
 /**
  * Run the chat's open proposal after a "yes". Exactly once (atomic claim),
- * only against the user who proposed it. Returns the text to send back.
+ * only against the user who proposed it. Returns whether it succeeded, the
+ * executed kind/payload (for the .ics attachment), and the text to send.
  */
-export async function executePendingAction(chatGuid: string, ctx: UserContext | null): Promise<string> {
+export async function executePendingActionDetailed(
+    chatGuid: string,
+    ctx: UserContext | null
+): Promise<{ ok: boolean; text: string; kind: PendingKind | null; payload: Record<string, unknown> | null }> {
     const supabase = createServerClient()
     const { data, error } = await supabase.rpc('claim_pending_action', { p_chat_guid: chatGuid })
     if (error) throw new Error(`claim_pending_action failed: ${error.message}`)
     const row = (Array.isArray(data) ? data[0] : null) as
         | { id: string; user_id: string; kind: PendingKind; payload: Record<string, unknown> }
         | null
-    if (!row) return 'that draft expired - ask me again and i\'ll redo it.'
+    if (!row) return { ok: false, text: 'that draft expired - ask me again and i\'ll redo it.', kind: null, payload: null }
 
     const finish = (status: 'done' | 'failed', result: unknown) =>
         supabase.rpc('finish_pending_action', { p_id: row.id, p_status: status, p_result: result as object })
 
     if (!ctx || ctx.userId !== row.user_id || !ctx.tokens.google) {
         await finish('failed', { error: 'google not connected for this chat' })
-        return "couldn't send - your google account isn't connected anymore."
+        return {
+            ok: false,
+            text: "couldn't send - your google account isn't connected anymore.",
+            kind: row.kind,
+            payload: row.payload,
+        }
     }
 
     const tool = row.kind === 'gmail_send' ? gmailSend : row.kind === 'gmail_reply' ? gmailReply : gcalCreateEvent
@@ -185,8 +194,37 @@ export async function executePendingAction(chatGuid: string, ctx: UserContext | 
         result = { success: false, error: err instanceof Error ? err.message : String(err) }
     }
     await finish(result.success ? 'done' : 'failed', result.success ? result.data ?? {} : { error: result.error })
-    if (!result.success) return `that didn't go through: ${result.error ?? 'unknown error'}`
-    if (row.kind === 'gmail_send') return `sent to ${str(row.payload.to)}.`
-    if (row.kind === 'gmail_reply') return 'reply sent.'
-    return 'event created and invites sent.'
+    if (!result.success) {
+        return { ok: false, text: `that didn't go through: ${result.error ?? 'unknown error'}`, kind: row.kind, payload: row.payload }
+    }
+    if (row.kind === 'gmail_send') return { ok: true, text: `sent to ${str(row.payload.to)}.`, kind: row.kind, payload: row.payload }
+    if (row.kind === 'gmail_reply') return { ok: true, text: 'reply sent.', kind: row.kind, payload: row.payload }
+    return { ok: true, text: 'event created and invites sent.', kind: row.kind, payload: row.payload }
+}
+
+/** Run the chat's open proposal after a "yes". Returns the text to send back. */
+export async function executePendingAction(chatGuid: string, ctx: UserContext | null): Promise<string> {
+    return (await executePendingActionDetailed(chatGuid, ctx)).text
+}
+
+/**
+ * Acknowledge a confirmed action with a 👍 reaction on the user's
+ * confirmation message (C4). The SDK Message carries react() when the
+ * platform supports reactions; otherwise a standalone 👍 text goes out.
+ * Never throws into the reply path.
+ */
+export async function sendConfirmedReaction(
+    message: unknown,
+    fallback: () => Promise<void>
+): Promise<void> {
+    try {
+        const react = (message as { react?: (emoji: string) => Promise<unknown> } | null)?.react
+        if (typeof react === 'function') {
+            await react.call(message, '👍')
+            return
+        }
+    } catch {
+        // fall through to the plain-text 👍
+    }
+    await fallback()
 }

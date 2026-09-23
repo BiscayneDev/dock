@@ -28,7 +28,7 @@ import { reminderToolsFor } from './reminders'
 import { EMPTY_MEMORY, loadMemoryContext, renderMemoryBlock, updateMemory } from './memory'
 import { FILE_NUDGE, fileToolsFor, stripFileMarkers, type MadeFile } from '@/lib/files/tool'
 import { sendFileWithPreview } from '@/lib/files/send'
-import { actionToolsFor, cancelPendingActions, executePendingAction, hasPendingAction, parseConfirmation, renderProposal } from './actions'
+import { actionToolsFor, cancelPendingActions, executePendingActionDetailed, hasPendingAction, parseConfirmation, renderProposal, sendConfirmedReaction } from './actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { dinghyContactCard } from './contact-card'
 import { hitRateLimit, RATE_NOTICE } from './rate-limit'
@@ -45,6 +45,9 @@ import {
     type BetaRole,
 } from './beta-gate'
 import { claimInboundDelivery, enqueueOutbox, markOutboxFailed, markOutboxSent, type OutboxKind } from './outbox'
+import { handleMuteIntent } from './briefing'
+import { buildIcs } from './ics'
+import { attachment } from 'spectrum-ts'
 
 export interface InboundSpace {
     /** Webhook SDK space objects carry the chat identifier as `id`. */
@@ -87,6 +90,43 @@ function stopTyping(space: InboundSpace): void {
     void (space as ContentSender)
         .send(typing('stop'))
         .catch((err) => logErr('typing stop failed', err))
+}
+
+/**
+ * Presence: the iMessage typing indicator decays after a few seconds, but
+ * multi-tool turns can run for a minute+. Re-tap typing every 5s while the
+ * turn runs. Never throws into the reply path: every tap is .catch'd, and
+ * stopTypingReTap is safe to call any number of times.
+ */
+function startTypingReTap(space: InboundSpace): ReturnType<typeof setInterval> {
+    startTyping(space)
+    const handle = setInterval(() => startTyping(space), 5_000)
+    // Keep the interval from holding the process open (serverless tails).
+    handle.unref?.()
+    return handle
+}
+
+function stopTypingReTap(space: InboundSpace, handle: ReturnType<typeof setInterval> | null): void {
+    if (handle) clearInterval(handle)
+    stopTyping(space)
+}
+
+/** Native .ics attachment for a just-confirmed calendar invite. Best-effort:
+ *  a failure is logged, never surfaced into the reply path. */
+async function sendIcsAttachment(space: InboundSpace, payload: Record<string, unknown>): Promise<void> {
+    const summary = typeof payload.summary === 'string' ? payload.summary : 'event'
+    const start = typeof payload.start === 'string' ? payload.start : ''
+    const end = typeof payload.end === 'string' ? payload.end : start
+    if (!start) return
+    const attendees = Array.isArray(payload.attendees) ? payload.attendees.filter((a): a is string => typeof a === 'string' && a.includes('@')) : []
+    const ics = buildIcs({
+        summary,
+        start,
+        end,
+        attendees,
+        location: typeof payload.location === 'string' ? payload.location : undefined,
+    })
+    await (space as ContentSender).send(attachment(ics, { name: 'event.ics', mimeType: 'text/calendar' }))
 }
 
 /** Enqueue-then-send: the row exists before the attempt, so a kill or a
@@ -342,6 +382,20 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         return
     }
 
+    // Morning briefing mute intent: the digest footer's exact opt-out
+    // ("mute mornings"), plus its mirror "unmute mornings". Checked before
+    // the pending-action parse so it works even with a draft open.
+    const muteAck = await handleMuteIntent(chatGuid, text).catch((err) => {
+        logErr('briefing mute intent failed', err)
+        return null
+    })
+    if (muteAck) {
+        await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+        await sendText(space, chatGuid, 'reply', muteAck)
+        await saveMessage(chatGuid, 'assistant', muteAck).catch((err) => logErr('message save failed', err))
+        return
+    }
+
     // An open draft (email / invite) runs only on a clear yes as the very
     // next message. "no" or anything else cancels it; anything else then
     // goes through the normal path as a fresh request.
@@ -350,15 +404,27 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         if (answer === 'yes') {
             await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
             let out: string
+            let executed: Awaited<ReturnType<typeof executePendingActionDetailed>> | null = null
             try {
                 const ctx = await loadImessageToolContext(chatGuid).catch(() => null)
-                out = await executePendingAction(chatGuid, ctx)
+                executed = await executePendingActionDetailed(chatGuid, ctx)
+                out = executed.text
             } catch (err) {
                 logErr('pending action failed', err)
                 out = "that didn't go through - try again in a moment."
             }
             await sendText(space, chatGuid, 'reply', out)
             await saveMessage(chatGuid, 'assistant', out).catch((err) => logErr('message save failed', err))
+            // 👍 on the confirmation itself when the action actually ran.
+            if (executed?.ok) {
+                await sendConfirmedReaction(message, () => sendText(space, chatGuid, 'reply', '👍')).catch((err) =>
+                    logErr('confirmation reaction failed', err)
+                )
+                // .ics copy of the event the user just confirmed (C5).
+                if (executed.kind === 'gcal_create_invite' && executed.payload) {
+                    await sendIcsAttachment(space, executed.payload).catch((err) => logErr('ics attachment failed', err))
+                }
+            }
             return
         }
         await cancelPendingActions(chatGuid).catch((err) => logErr('pending action cancel failed', err))
@@ -379,8 +445,8 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     const full: Message[] = [...history, { role: 'user', content: text }]
     await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
 
-    startTyping(space)
     const tChatStart = Date.now()
+    const typingHandle = startTypingReTap(space)
     try {
         // Read tools only for chats bound to a user with Google/PayBox connected;
         // everyone else gets the plain conversational path.
@@ -482,6 +548,6 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         logErr('gateway call failed', err)
         await sendText(space, chatGuid, 'error_notice', 'Something went wrong on my end. Try again in a moment.')
     } finally {
-        stopTyping(space)
+        stopTypingReTap(space, typingHandle)
     }
 }

@@ -4,6 +4,13 @@
  * Dinghy waitlist signups. Delivered through the tool loop so the text is
  * grounded in live Gmail/Calendar reads, in Dinghy's voice.
  *
+ * Delivery goes through the Spectrum outbox (enqueue, then the sweep sends
+ * and retries) — a direct space.send alone dies unretried if the function
+ * is killed mid-tail. Opt-in state lives in briefing_settings (migration
+ * 033): default-on for Google-connected users, muted via the digest
+ * footer's "mute mornings" reply (handled in the webhook path). Quiet
+ * hours via time-utils.
+ *
  * Audience rule: every bound identity gets THEIR OWN briefing (bindings
  * are fail-closed on the beta allowlist). Product-admin data (waitlist)
  * goes only to the chat whose Gmail profile is on the owner domain.
@@ -15,16 +22,22 @@ import { createServerClient } from '@/lib/supabase/server'
 import { getAuthedClient } from '@/lib/integrations/google'
 import { getSpectrumApp, getImessage } from '@/lib/spectrum/app'
 import { IMESSAGE_READ_TOOLS, loadImessageToolContext } from '@/lib/spectrum/imessage-tools'
+import { isBriefingEnabled, MUTE_FOOTER } from '@/lib/spectrum/briefing'
+import { enqueueOutbox, markOutboxSent } from '@/lib/spectrum/outbox'
 import { chatWithTools } from '@/lib/spectrum/dinghy'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from '@/lib/spectrum/config'
 import { loadFacts, saveMessage } from '@/spectrum/store'
-import { typing } from 'spectrum-ts'
+import { isInQuietHours, getCurrentHour } from '@/lib/time-utils'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 const OWNER_DOMAIN = '@biscayneventures.xyz'
+
+// Send inside a morning window (7-10am local); the cron itself fires at 8.
+const BRIEFING_WINDOW_START = 7
+const BRIEFING_WINDOW_END = 10
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
     if (request.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -65,6 +78,35 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 continue
             }
 
+            // Opt-in: a briefing_settings row wins; no row means default-on.
+            if (!(await isBriefingEnabled(ctx.userId))) {
+                results.skipped++
+                continue
+            }
+
+            // Quiet hours + morning window in the user's timezone.
+            const { data: user } = await supabase
+                .from('users')
+                .select('quiet_hours_start, quiet_hours_end')
+                .eq('id', ctx.userId)
+                .maybeSingle()
+            const timezone = ctx.timezone
+            if (
+                isInQuietHours(
+                    (user?.quiet_hours_start as string | null) ?? null,
+                    (user?.quiet_hours_end as string | null) ?? null,
+                    timezone
+                )
+            ) {
+                results.skipped++
+                continue
+            }
+            const hour = getCurrentHour(timezone)
+            if (hour < BRIEFING_WINDOW_START || hour >= BRIEFING_WINDOW_END) {
+                results.skipped++
+                continue
+            }
+
             // Owner check via the Gmail profile on the bound account —
             // product-admin numbers never leave for anyone else.
             let isOwner = false
@@ -81,7 +123,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 weekday: 'long',
                 month: 'long',
                 day: 'numeric',
-                timeZone: ctx.timezone,
+                timeZone: timezone,
             })
             const ask =
                 `Morning briefing for ${today}. Use your tools: today's calendar, ` +
@@ -91,17 +133,33 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                     : '') +
                 '. One short text, your voice, no headers, no bullet spam.'
 
-            const space = await im.space.get(chatGuid)
-            void space.send(typing()).catch(() => {})
             const { reply } = await chatWithTools(
                 [{ role: 'user', content: ask }],
                 { gatewayUrl: GATEWAY_URL, apiKey: SHIPYARD_API_KEY, model: SHIPYARD_MODEL, facts },
                 IMESSAGE_READ_TOOLS,
                 ctx
             )
-            await space.send(reply)
-            void space.send(typing('stop')).catch(() => {})
-            await saveMessage(chatGuid, 'assistant', reply).catch(() => {})
+            const text = `${reply}\n\n${MUTE_FOOTER}`
+            // Outbox first: the row exists before the attempt, so a kill or
+            // a send failure is always retried by the spectrum-sweep cron.
+            const outboxId = await enqueueOutbox(chatGuid, 'reply', text)
+            if (!outboxId) {
+                console.error(`briefing outbox enqueue failed (${chatGuid})`)
+                results.errors++
+                continue
+            }
+            // Best-effort immediate send; the sweep covers any failure.
+            try {
+                const space = await im.space.get(chatGuid)
+                await space.send(text)
+                await markOutboxSent(outboxId)
+            } catch (sendErr) {
+                console.error(
+                    `briefing direct send failed, sweep will retry (${chatGuid}):`,
+                    sendErr instanceof Error ? sendErr.message : String(sendErr)
+                )
+            }
+            await saveMessage(chatGuid, 'assistant', text).catch(() => {})
             results.briefings++
         } catch (err) {
             console.error(`briefing failed (${chatGuid}):`, err instanceof Error ? err.message : String(err))

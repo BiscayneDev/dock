@@ -86,6 +86,12 @@ const REMINDERS_LINE =
     'When asked to remind them of something, call reminder_set (it texts this chat at that time) and confirm the day and time in plain words. ' +
     'Use reminder_list and reminder_cancel to show or cancel pending reminders. Never say a reminder is set unless the tool succeeded.'
 
+/** Morning-briefing behavior note (C2): default-on, muted by exact reply. */
+const BRIEFING_LINE =
+    'Every morning around 8 the user gets a short briefing text (today\'s calendar + unread email); ' +
+    'the last line invites them to reply "mute mornings" to stop it or "unmute mornings" to restart. ' +
+    'You do not send the briefing yourself — if they ask about it, explain that and mention the mute/unmute replies.'
+
 const X_LINE =
     'For what people are saying on X (Twitter), their timeline, or a specific account\'s posts, call twitter_search, twitter_timeline or twitter_user_tweets ' +
     'and sum it up in a line or two, naming the accounts. You can only read X; never say you posted, liked or replied.'
@@ -133,6 +139,7 @@ export function buildSystemPrompt(
         typeof toolsAvailable === 'boolean' ? { google: toolsAvailable, wallet: false } : toolsAvailable
     let prompt = BASE_PROMPT
     prompt += ' ' + (caps.google ? TOOLS_EMAIL_LINE : NO_TOOLS_EMAIL_LINE)
+    if (caps.google) prompt += ' ' + BRIEFING_LINE
     prompt += ' ' + (caps.wallet ? WALLET_LINE : NO_WALLET_LINE)
     if (caps.files) prompt += ' ' + FILES_LINE
     if (caps.spend) prompt += ' ' + SPEND_LINE
