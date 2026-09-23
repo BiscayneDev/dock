@@ -19,7 +19,7 @@ import {
     type DinghyFact,
     type HistoryMessage,
 } from '@/spectrum/store'
-import { chat, chatWithTools, wantsGoogle, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
+import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { capabilitiesFor, loadImessageToolContext, toolsFor } from './imessage-tools'
 import { EMPTY_MEMORY, loadMemoryContext, renderMemoryBlock, updateMemory } from './memory'
 import { FILE_NUDGE, fileToolsFor, stripFileMarkers, type MadeFile } from '@/lib/files/tool'
@@ -231,17 +231,20 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         logErr('history load failed', err)
         return [] as HistoryMessage[]
     })
-    const facts = await loadFacts().catch((err) => {
-        logErr('facts load failed', err)
-        return [] as DinghyFact[]
-    })
+    const facts = productFactsFor(
+        role,
+        await loadFacts().catch((err) => {
+            logErr('facts load failed', err)
+            return [] as DinghyFact[]
+        })
+    )
     const memory = await memoryP
     const memoryBlock = renderMemoryBlock(memory)
     const tContext = Date.now()
-    // The opener question is for a genuinely new user only: zero facts AND
-    // zero history. Thin history (or a history-load failure) must not
-    // re-ask it.
-    const includeOpener = history.length === 0 && facts.length === 0 && !memory.profile
+    // The opener is for a genuinely new chat only: no history and no
+    // profile. dinghy_facts are product-wide context (every chat has them),
+    // so they no longer suppress it.
+    const includeOpener = history.length === 0 && !memory.profile
 
     // First-ever message in this chat: onboarding contact card. DB-backed
     // (was a process-memory Set on the VPS) so it works statelessly. Our own
@@ -265,12 +268,12 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 space,
                 chatGuid,
                 'connect_link',
-                "email + calendar aren't connected yet — tap below to connect google and i'll take it from there:"
+                "email + calendar aren't connected yet - tap below to connect google and i'll take it from there:"
             )
             await sendText(space, chatGuid, 'connect_link', link)
         } catch (err) {
             logErr('connect link failed', err)
-            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow — try again in a moment.")
+            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
         }
         return
     }
@@ -284,12 +287,12 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 space,
                 chatGuid,
                 'connect_link',
-                "your wallet isn't connected yet — tap below to connect paybox (email + passkey, read-only for now) and i'll take it from there:"
+                "your wallet isn't connected yet - tap below to connect paybox (email + passkey, read-only for now) and i'll take it from there:"
             )
             await sendText(space, chatGuid, 'connect_link', link)
         } catch (err) {
             logErr('paybox connect link failed', err)
-            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow — try again in a moment.")
+            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
         }
         return
     }

@@ -17,19 +17,19 @@ export interface DinghyFact {
 export const MAX_HISTORY = 20
 
 const BASE_PROMPT =
-    'You are Dinghy, a personal AI first mate accessible via iMessage. ' +
-    'Right now you can hold a text conversation, share your contact card when asked, ' +
-    'and remember context within the current conversation. There is also a waitlist ' +
-    'site at getdinghy.sh where people can sign up for the beta. ' +
-    'Gmail and Google Calendar connect through a one-tap link you can send in the ' +
-    'chat — but the connect-link message itself (not you) handles that: when the ' +
-    "user's message triggered one, you will not even be called. Do not promise any other " +
-    'integration — GitHub, Notion, and others are not connected. ' +
-    "You're direct, concise, and helpful. You don't waste words on pleasantries."
+    'You are Dinghy, a personal AI first mate that lives in iMessage. ' +
+    'You hold a real conversation, remember what people tell you across conversations, ' +
+    'and share your contact card when asked. ' +
+    'Gmail and Google Calendar connect through a one-tap link: the connect-link message itself (not you) ' +
+    "handles that, and when the user's message triggered one you will not even be called. " +
+    'Only claim abilities this prompt gives you; other integrations (GitHub, Notion and the rest) are not connected. ' +
+    "You're direct, concise, and helpful. You don't waste words on pleasantries. " +
+    'Write like a text: short, lowercase is fine, no markdown headings.'
 
 const OPENER_INSTRUCTION =
-    'In a fresh chat, open with the question: "what\'s eating your time this week?" ' +
-    'and work from their answer.'
+    'This is their very first message to you. If it asks for something, help with it first. ' +
+    'Then, in two short lines at most: say hi as Dinghy, mention your contact card just arrived so they can save you, ' +
+    'and ask: "what\'s eating your time this week?" Work from their answer.'
 
 /**
  * System prompt assembly. Durable facts ride along on every message so a
@@ -83,11 +83,20 @@ export function buildSystemPrompt(
     prompt += ' ' + (caps.wallet ? WALLET_LINE : NO_WALLET_LINE)
     if (caps.files) prompt += ' ' + FILES_LINE
     if (facts.length > 0) {
-        prompt += ' Known facts:\n' + facts.map((f) => `- ${f.key}: ${f.value}`).join('\n')
+        prompt += ' About Dinghy (product context, not facts about the person you are texting):\n' + facts.map((f) => `- ${f.key}: ${f.value}`).join('\n')
     }
     if (includeOpener) prompt += ' ' + OPENER_INSTRUCTION
     return prompt
 }
+/**
+ * dinghy_facts are product context shared by every chat. Beta members get
+ * only the product facts, never owner-specific ones.
+ */
+export function productFactsFor(role: string | null, facts: DinghyFact[]): DinghyFact[] {
+    if (role === 'owner') return facts
+    return facts.filter((f) => f.key !== 'owner')
+}
+
 export const GOOGLE_INTENT =
     /\b(gmail|e-?mails?|inbox|calendar|calender|schedule(d)?|meetings?|appointments?|events? this week|my day)\b/i
 
