@@ -22,6 +22,18 @@ import { chat, chatWithTools, wantsGoogle, wantsWallet, isContactCardRequest, MA
 import { capabilitiesFor, loadImessageToolContext, toolsFor } from './imessage-tools'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { dinghyContactCard } from './contact-card'
+import {
+    claimGateNotice,
+    extractInviteCode,
+    getBetaRole,
+    mintInvite,
+    parseInviteCommand,
+    redeemInvite,
+    GATE_INVALID,
+    GATE_NOTICE,
+    GATE_WELCOME,
+    type BetaRole,
+} from './beta-gate'
 import { claimInboundDelivery, enqueueOutbox, markOutboxFailed, markOutboxSent, type OutboxKind } from './outbox'
 
 export interface InboundSpace {
@@ -86,6 +98,31 @@ async function sendText(space: InboundSpace, chatGuid: string, kind: OutboxKind,
     }
 }
 
+/** A message from a chat that isn't on the beta allowlist. */
+async function handleGatedMessage(space: InboundSpace, chatGuid: string, text: string): Promise<void> {
+    try {
+        const code = extractInviteCode(text)
+        if (code) {
+            const result = await redeemInvite(chatGuid, code)
+            if (result === 'ok' || result === 'already') {
+                await sendText(space, chatGuid, 'reply', GATE_WELCOME)
+                await (space as InboundSpace & { send(b: unknown): Promise<unknown> })
+                    .send(dinghyContactCard())
+                    .catch((err) => logErr('welcome contact card failed', err))
+            } else if (result === 'invalid') {
+                await sendText(space, chatGuid, 'reply', GATE_INVALID)
+            }
+            // locked: stay silent until the lockout expires.
+            return
+        }
+        if (await claimGateNotice(chatGuid)) {
+            await sendText(space, chatGuid, 'reply', GATE_NOTICE)
+        }
+    } catch (err) {
+        logErr('beta gate failed', err)
+    }
+}
+
 export async function handleSpectrumMessage(space: InboundSpace, message: InboundMessage): Promise<void> {
     if (message.content.type !== 'text' || !message.content.text) return
     const text = message.content.text.trim()
@@ -106,6 +143,43 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     await ensureIdentity(chatGuid, message.sender?.handle ?? message.sender?.id ?? null).catch((err) =>
         logErr('identity ensure failed', err)
     )
+
+    // Private-beta gate: only allowlisted chats reach Dinghy. Fails closed
+    // (silently) when the allowlist can't be read.
+    let role: BetaRole | null
+    try {
+        role = await getBetaRole(chatGuid)
+    } catch (err) {
+        logErr('beta gate unavailable (message not processed)', err)
+        return
+    }
+    if (!role) {
+        await handleGatedMessage(space, chatGuid, text)
+        return
+    }
+
+    // Owner: mint an invite code ("invite", "invite 5").
+    if (role === 'owner') {
+        const uses = parseInviteCommand(text)
+        if (uses !== null) {
+            try {
+                const code = await mintInvite(chatGuid, uses)
+                await sendText(
+                    space,
+                    chatGuid,
+                    'reply',
+                    code
+                        ? `invite code: ${code} (${uses} use${uses === 1 ? '' : 's'}, expires in 30 days). they text it to this number.`
+                        : "couldn't mint that invite."
+                )
+                if (code) await sendText(space, chatGuid, 'reply', code)
+            } catch (err) {
+                logErr('invite mint failed', err)
+                await sendText(space, chatGuid, 'error_notice', "couldn't mint an invite - try again in a moment.")
+            }
+            return
+        }
+    }
 
     // On-demand contact card.
     if (isContactCardRequest(text)) {
