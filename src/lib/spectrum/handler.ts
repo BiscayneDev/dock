@@ -18,7 +18,8 @@ import {
     type DinghyFact,
     type HistoryMessage,
 } from '@/spectrum/store'
-import { chat, wantsGoogle, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
+import { chat, chatWithTools, wantsGoogle, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
+import { IMESSAGE_READ_TOOLS, loadImessageToolContext } from './imessage-tools'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { claimInboundDelivery, enqueueOutbox, markOutboxFailed, markOutboxSent, type OutboxKind } from './outbox'
 
@@ -171,13 +172,34 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     startTyping(space)
     const tChatStart = Date.now()
     try {
-        const reply = await chat(full, {
-            gatewayUrl: GATEWAY_URL,
-            apiKey: SHIPYARD_API_KEY,
-            model: SHIPYARD_MODEL,
-            facts,
-            includeOpener,
+        // Read tools only for chats bound to a user with Google connected;
+        // everyone else gets the plain conversational path.
+        const toolCtx = await loadImessageToolContext(chatGuid).catch((err) => {
+            logErr('tool context load failed', err)
+            return null
         })
+        let reply: string
+        let toolCalls = 0
+        let iterations = 0
+        if (toolCtx) {
+            const r = await chatWithTools(
+                full,
+                { gatewayUrl: GATEWAY_URL, apiKey: SHIPYARD_API_KEY, model: SHIPYARD_MODEL, facts, includeOpener },
+                IMESSAGE_READ_TOOLS,
+                toolCtx
+            )
+            reply = r.reply
+            toolCalls = r.toolCalls
+            iterations = r.iterations
+        } else {
+            reply = await chat(full, {
+                gatewayUrl: GATEWAY_URL,
+                apiKey: SHIPYARD_API_KEY,
+                model: SHIPYARD_MODEL,
+                facts,
+                includeOpener,
+            })
+        }
         const tChatEnd = Date.now()
         await sendText(space, chatGuid, 'reply', reply)
         await saveMessage(chatGuid, 'assistant', reply).catch((err) => logErr('message save failed', err))
@@ -189,6 +211,9 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 chatMs: tChatEnd - tChatStart,
                 sendMs: Date.now() - tChatEnd,
                 totalMs: Date.now() - t0,
+                tools: toolCtx ? IMESSAGE_READ_TOOLS.length : 0,
+                toolCalls,
+                iterations,
             })}`
         )
     } catch (err) {

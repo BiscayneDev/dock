@@ -11,7 +11,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getSpectrumApp, getImessage } from '@/lib/spectrum/app'
 import { claimOutboxBatch, markOutboxFailed, markOutboxSent } from '@/lib/spectrum/outbox'
-import { chat, MAX_HISTORY } from '@/lib/spectrum/dinghy'
+import { chat, chatWithTools, MAX_HISTORY } from '@/lib/spectrum/dinghy'
+import { IMESSAGE_READ_TOOLS, loadImessageToolContext } from '@/lib/spectrum/imessage-tools'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from '@/lib/spectrum/config'
 import { typing } from 'spectrum-ts'
 import {
@@ -87,12 +88,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 history.push({ role: 'user', content: claimed.pendingRequest })
                 const space = await im.space.get(guid)
                 void space.send(typing()).catch(() => {})
-                const reply = await chat(history, {
-                    gatewayUrl: GATEWAY_URL,
-                    apiKey: SHIPYARD_API_KEY,
-                    model: SHIPYARD_MODEL,
-                    facts,
-                })
+                // Freshly connected chats resume their original request —
+                // with tools when the binding is in place.
+                const toolCtx = await loadImessageToolContext(guid).catch(() => null)
+                const reply = toolCtx
+                    ? (
+                          await chatWithTools(
+                              history,
+                              { gatewayUrl: GATEWAY_URL, apiKey: SHIPYARD_API_KEY, model: SHIPYARD_MODEL, facts },
+                              IMESSAGE_READ_TOOLS,
+                              toolCtx
+                          )
+                      ).reply
+                    : await chat(history, {
+                          gatewayUrl: GATEWAY_URL,
+                          apiKey: SHIPYARD_API_KEY,
+                          model: SHIPYARD_MODEL,
+                          facts,
+                      })
                 // Halsey, 2026-09-22: the follow-up must say he's connected,
                 // then resume his original request.
                 await space.send(`you're connected — gmail + calendar are in ✓\n\n${reply}`)
