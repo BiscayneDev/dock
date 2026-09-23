@@ -5,6 +5,12 @@ const nextConfig: NextConfig = {
   // We validate these locally before pushing
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },
+  // pdfkit loads its built-in fonts through package "imports"
+  // (#standard-fonts/*), which file tracing misses; ship them explicitly
+  // for every server route that can render a PDF.
+  outputFileTracingIncludes: {
+    "/api/**/*": ["./node_modules/pdfkit/js/standard-fonts/**/*"],
+  },
 };
 
 export default nextConfig;
