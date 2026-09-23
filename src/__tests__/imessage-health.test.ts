@@ -11,7 +11,8 @@ describe('Oura/WHOOP on iMessage', () => {
   it('offers health tools with either wearable, not without', async () => {
     const { toolsFor, capabilitiesFor } = await import('@/lib/spectrum/imessage-tools')
     expect(toolsFor({ ...base, tokens: {} }).some((t) => t.name.startsWith('health_'))).toBe(false)
-    for (const tokens of [{ oura: tok }, { whoop: tok }]) {
+    const sets: Array<Record<string, typeof tok>> = [{ oura: tok }, { whoop: tok }]
+    for (const tokens of sets) {
       const names = toolsFor({ ...base, tokens }).map((t) => t.name)
       expect(names).toEqual(expect.arrayContaining(['health_summary', 'health_sleep', 'health_readiness', 'health_activity', 'health_heart_rate']))
       expect(capabilitiesFor({ ...base, tokens }).health).toBe(true)
