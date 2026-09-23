@@ -55,6 +55,8 @@ export interface PromptCapabilities {
     live?: boolean
     /** web_search is offered (TAVILY_API_KEY set). */
     search?: boolean
+    /** spend_summary is offered. */
+    spend?: boolean
 }
 
 const FILES_LINE =
@@ -71,6 +73,9 @@ const SEARCH_LINE =
 
 const NO_SEARCH_LINE =
     "You can't browse the web yet, so for news, scores, prices or recent events say you can't look that up live."
+
+const SPEND_LINE =
+    'For questions about AI spend, cost or usage, call spend_summary and give the number plainly.'
 
 const NO_TOOLS_EMAIL_LINE =
     'If the user asks about email or calendar and no link was sent, say they are not connected yet ' +
@@ -96,6 +101,7 @@ export function buildSystemPrompt(
     prompt += ' ' + (caps.google ? TOOLS_EMAIL_LINE : NO_TOOLS_EMAIL_LINE)
     prompt += ' ' + (caps.wallet ? WALLET_LINE : NO_WALLET_LINE)
     if (caps.files) prompt += ' ' + FILES_LINE
+    if (caps.spend) prompt += ' ' + SPEND_LINE
     if (caps.live) prompt += ' ' + WEATHER_LINE + ' ' + (caps.search ? SEARCH_LINE : NO_SEARCH_LINE)
     if (facts.length > 0) {
         prompt += ' About Dinghy (product context, not facts about the person you are texting):\n' + facts.map((f) => `- ${f.key}: ${f.value}`).join('\n')
@@ -139,13 +145,27 @@ export function wantsWallet(text: string): boolean {
 /** Shipyard gateway call (OpenAI-compatible). Plain HTTP, works anywhere. */
 export async function chat(
     history: Message[],
-    opts: { gatewayUrl: string; apiKey: string; model: string; facts?: DinghyFact[]; includeOpener?: boolean; memory?: string }
+    opts: {
+        gatewayUrl: string
+        apiKey: string
+        model: string
+        facts?: DinghyFact[]
+        includeOpener?: boolean
+        memory?: string
+        capabilities?: PromptCapabilities
+        /** Called once per gateway call with its token usage (metering.ts). */
+        onUsage?: (u: GatewayUsage) => void
+    }
 ): Promise<string> {
     const messages = [
-        { role: 'system' as const, content: buildSystemPrompt(opts.facts ?? [], opts.includeOpener ?? false) + (opts.memory ?? '') },
+        {
+            role: 'system' as const,
+            content: buildSystemPrompt(opts.facts ?? [], opts.includeOpener ?? false, opts.capabilities ?? false) + (opts.memory ?? ''),
+        },
         ...history,
     ]
 
+    const t0 = Date.now()
     const res = await fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: {
@@ -161,8 +181,11 @@ export async function chat(
     }
 
     const data = (await res.json()) as {
+        model?: string
+        usage?: { prompt_tokens?: number; completion_tokens?: number }
         choices: { message: { content: string | null } }[]
     }
+    reportUsage(opts.onUsage, res, data, opts.model, Date.now() - t0)
 
     return data.choices?.[0]?.message?.content ?? '(no response)'
 }
@@ -172,6 +195,22 @@ export async function chat(
 // hopscotch model) ────────────────────────────────────────────────────────
 
 import type { Tool, UserContext } from '@/lib/llm/types'
+import { readGatewayUsage, type GatewayUsage } from './metering'
+
+function reportUsage(
+    onUsage: ((u: GatewayUsage) => void) | undefined,
+    res: Response,
+    data: { model?: string; usage?: { prompt_tokens?: number; completion_tokens?: number } },
+    model: string,
+    latencyMs: number
+): void {
+    if (!onUsage) return
+    try {
+        onUsage(readGatewayUsage(res, data, model, latencyMs))
+    } catch {
+        // metering never breaks a reply
+    }
+}
 
 const MAX_TOOL_ITERATIONS = 4
 const TOOL_TIMEOUT_MS = 15_000
@@ -206,6 +245,8 @@ export async function chatWithTools(
         capabilities?: PromptCapabilities
         /** Rendered memory block (memory.ts renderMemoryBlock), appended to the system prompt. */
         memory?: string
+        /** Called once per gateway call with its token usage (metering.ts). */
+        onUsage?: (u: GatewayUsage) => void
     },
     tools: Tool[],
     ctx: UserContext
@@ -228,6 +269,7 @@ export async function chatWithTools(
 
     let toolCallCount = 0
     for (let iteration = 1; iteration <= MAX_TOOL_ITERATIONS; iteration++) {
+        const t0 = Date.now()
         const res = await fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
             method: 'POST',
             headers: {
@@ -241,8 +283,11 @@ export async function chatWithTools(
             throw new Error(`Gateway ${res.status}: ${body || res.statusText}`)
         }
         const data = (await res.json()) as {
+            model?: string
+            usage?: { prompt_tokens?: number; completion_tokens?: number }
             choices: { finish_reason: string; message: { content: string | null; tool_calls?: GatewayToolCall[] } }[]
         }
+        reportUsage(opts.onUsage, res, data, opts.model, Date.now() - t0)
         const choice = data.choices?.[0]
         const msg = choice?.message
         const calls = msg?.tool_calls ?? []
@@ -277,13 +322,19 @@ export async function chatWithTools(
         }
     }
     // Loop exhausted: ask for a plain-text answer without tools.
+    const tFinal = Date.now()
     const res = await fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.apiKey}` },
         body: JSON.stringify({ model: opts.model, messages, stream: false }),
     })
     if (!res.ok) throw new Error(`Gateway ${res.status}: ${res.statusText}`)
-    const data = (await res.json()) as { choices: { message: { content: string | null } }[] }
+    const data = (await res.json()) as {
+        model?: string
+        usage?: { prompt_tokens?: number; completion_tokens?: number }
+        choices: { message: { content: string | null } }[]
+    }
+    reportUsage(opts.onUsage, res, data, opts.model, Date.now() - tFinal)
     return {
         reply: data.choices?.[0]?.message?.content ?? '(no response)',
         toolCalls: toolCallCount,
