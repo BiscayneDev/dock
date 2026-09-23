@@ -441,7 +441,14 @@ export async function verifyPayboxConnection(accessToken: string): Promise<boole
 // error }; the artifact lives on output.value.
 interface AgentResponseLike {
   request_id: string
-  status: 'pending_approval' | 'pending_signature' | 'success' | 'denied' | 'error'
+  status:
+    | 'pending_approval'
+    | 'pending_signature'
+    | 'pending_settlement'
+    | 'pending_confirmation'
+    | 'success'
+    | 'denied'
+    | 'error'
   output: { value?: unknown } | null
   approval_id: string | null
   error: string | null
@@ -474,6 +481,18 @@ export function agentResultToTool(resp: AgentResponseLike): ToolResult {
             `Cleared to sign but no in-process signing key is configured (or the signing ` +
             `window must finish). Ask the user to add their Paybox signing key in The ` +
             `Harbor, then poll paybox_get_request with this request_id.`,
+        },
+      }
+    case 'pending_settlement':
+    case 'pending_confirmation':
+      return {
+        success: true,
+        data: {
+          status: resp.status,
+          request_id: resp.request_id,
+          instruction:
+            'Broadcast, not yet final. Poll paybox_get_request with this request_id; ' +
+            'do NOT re-issue the original request.',
         },
       }
     case 'denied':
