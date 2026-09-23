@@ -1,7 +1,9 @@
+import { telegramEnabled, telegramDisabledResponse } from '@/lib/telegram/enabled'
 import { NextResponse } from 'next/server'
 import { setWebhook } from '@/lib/telegram/client'
 
 export async function GET(): Promise<NextResponse> {
+  if (!telegramEnabled()) return telegramDisabledResponse()
   const appUrl = process.env.NEXT_PUBLIC_APP_URL
   const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET
 

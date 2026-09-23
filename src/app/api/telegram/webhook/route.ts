@@ -1,3 +1,4 @@
+import { telegramEnabled, telegramDisabledResponse } from '@/lib/telegram/enabled'
 import { NextRequest, NextResponse } from 'next/server'
 import { after } from 'next/server'
 import { TelegramUpdateSchema } from '@/lib/telegram/types'
@@ -10,6 +11,7 @@ const MAX_REQUESTS_PER_MINUTE = 20
 const WINDOW_MS = 60_000
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  if (!telegramEnabled()) return telegramDisabledResponse()
   // Verify webhook secret
   const secretToken = request.headers.get('x-telegram-bot-api-secret-token')
   if (secretToken !== process.env.TELEGRAM_WEBHOOK_SECRET) {
