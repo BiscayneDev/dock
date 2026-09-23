@@ -1,3 +1,4 @@
+import { telegramEnabled, telegramDisabledResponse } from '@/lib/telegram/enabled'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getDecryptedTokens } from '@/lib/orchestrator/index'
@@ -9,6 +10,7 @@ import { logger } from '@/lib/logger'
 import type { UserContext } from '@/lib/llm/types'
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  if (!telegramEnabled()) return telegramDisabledResponse()
   if (request.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
