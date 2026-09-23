@@ -14,6 +14,7 @@ import {
     loadFacts,
     loadHistory,
     saveMessage,
+    fileMarker,
     createConnectLink,
     type DinghyFact,
     type HistoryMessage,
@@ -21,8 +22,8 @@ import {
 import { chat, chatWithTools, wantsGoogle, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { capabilitiesFor, loadImessageToolContext, toolsFor } from './imessage-tools'
 import { EMPTY_MEMORY, loadMemoryContext, renderMemoryBlock, updateMemory } from './memory'
-import { fileToolsFor, type MadeFile } from '@/lib/files/tool'
-import { attachment } from 'spectrum-ts'
+import { FILE_NUDGE, fileToolsFor, stripFileMarkers, type MadeFile } from '@/lib/files/tool'
+import { sendFileWithPreview } from '@/lib/files/send'
 import { actionToolsFor, cancelPendingActions, executePendingAction, hasPendingAction, parseConfirmation, renderProposal } from './actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { dinghyContactCard } from './contact-card'
@@ -89,8 +90,8 @@ function stopTyping(space: InboundSpace): void {
 /** Native attachment; on failure, fall back to the signed link as text. */
 async function sendFile(space: InboundSpace, chatGuid: string, file: MadeFile): Promise<void> {
     try {
-        await (space as ContentSender).send(attachment(file.bytes, { name: file.filename, mimeType: file.mimeType }))
-        await saveMessage(chatGuid, 'assistant', `[sent file: ${file.filename}]`).catch((err) => logErr('message save failed', err))
+        await sendFileWithPreview(space as ContentSender, file)
+        await saveMessage(chatGuid, 'assistant', fileMarker(file.filename)).catch((err) => logErr('message save failed', err))
     } catch (err) {
         logErr('file send failed', err)
         const fallback = file.link
@@ -346,23 +347,36 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         const fileTools = toolCtx ? fileToolsFor() : null
         const tools = toolCtx ? [...toolsFor(toolCtx), ...(actions?.tools ?? []), ...(fileTools?.tools ?? [])] : []
         if (toolCtx && tools.length > 0) {
-            const r = await chatWithTools(
-                full,
-                {
-                    gatewayUrl: GATEWAY_URL,
-                    apiKey: SHIPYARD_API_KEY,
-                    model: SHIPYARD_MODEL,
-                    facts,
-                    includeOpener,
-                    capabilities: capabilitiesFor(toolCtx),
-                    memory: memoryBlock,
-                },
-                tools,
-                toolCtx
-            )
+            const toolOpts = {
+                gatewayUrl: GATEWAY_URL,
+                apiKey: SHIPYARD_API_KEY,
+                model: SHIPYARD_MODEL,
+                facts,
+                includeOpener,
+                capabilities: capabilitiesFor(toolCtx),
+                memory: memoryBlock,
+            }
+            const r = await chatWithTools(full, toolOpts, tools, toolCtx)
             reply = r.reply
             toolCalls = r.toolCalls
             iterations = r.iterations
+            // The model sometimes writes a "[sent file: x]" marker instead of
+            // calling create_file. Give it one retry to actually make the file.
+            if (stripFileMarkers(reply).hadMarker && (fileTools?.files().length ?? 0) === 0) {
+                const retry = await chatWithTools(
+                    [...full, { role: 'assistant', content: reply }, { role: 'user', content: FILE_NUDGE }],
+                    toolOpts,
+                    tools,
+                    toolCtx
+                )
+                reply = retry.reply
+                toolCalls += retry.toolCalls
+                iterations += retry.iterations
+            }
+            const cleaned = stripFileMarkers(reply)
+            const made = fileTools?.files().length ?? 0
+            reply = cleaned.text || (made > 0 ? 'here you go.' : "I couldn't make that file just now. Ask me again in a moment.")
+            if (cleaned.hadMarker && made === 0) reply = "I couldn't make that file just now. Ask me again in a moment."
         } else {
             reply = await chat(full, {
                 gatewayUrl: GATEWAY_URL,

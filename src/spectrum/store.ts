@@ -94,6 +94,10 @@ export interface HistoryMessage {
   content: string
 }
 
+/** History row recording a file delivery (not shown to the model). */
+export const fileMarker = (filename: string): string => `[sent file: ${filename}]`
+export const isFileMarker = (content: string): boolean => /^\[sent file: [^\]]*\]$/.test(content.trim())
+
 export async function loadHistory(chatGuid: string, limit = 20): Promise<HistoryMessage[]> {
   const supabase = db()
   const { data } = await supabase
@@ -106,6 +110,9 @@ export async function loadHistory(chatGuid: string, limit = 20): Promise<History
   const rows = ((data ?? []) as { role: string; content: string }[]).reverse()
   return rows
     .filter((r) => r.role === 'user' || r.role === 'assistant')
+    // "[sent file: x.pdf]" rows record deliveries for us; the model must not
+    // see them, or it copies the marker as text instead of calling create_file.
+    .filter((r) => !isFileMarker(r.content))
     .map((r) => ({ role: r.role as 'user' | 'assistant', content: r.content }))
 }
 
