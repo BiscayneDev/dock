@@ -212,6 +212,8 @@ export async function chat(
         includeOpener?: boolean
         memory?: string
         capabilities?: PromptCapabilities
+        /** Day-1 interview: one short question this reply should end with (interview.ts). */
+        interviewLine?: string
         /** Called once per gateway call with its token usage (metering.ts). */
         onUsage?: (u: GatewayUsage) => void
     }
@@ -219,7 +221,7 @@ export async function chat(
     const messages = [
         {
             role: 'system' as const,
-            content: buildSystemPrompt(opts.facts ?? [], opts.includeOpener ?? false, opts.capabilities ?? false) + (opts.memory ?? ''),
+            content: buildSystemPrompt(opts.facts ?? [], opts.includeOpener ?? false, opts.capabilities ?? false) + (opts.memory ?? '') + (opts.interviewLine ? ' ' + opts.interviewLine : ''),
         },
         ...history,
     ]
@@ -304,6 +306,8 @@ export async function chatWithTools(
         capabilities?: PromptCapabilities
         /** Rendered memory block (memory.ts renderMemoryBlock), appended to the system prompt. */
         memory?: string
+        /** Day-1 interview: one short question this reply should end with (interview.ts). */
+        interviewLine?: string
         /** Called once per gateway call with its token usage (metering.ts). */
         onUsage?: (u: GatewayUsage) => void
     },
@@ -321,7 +325,7 @@ export async function chatWithTools(
                 opts.facts ?? [],
                 opts.includeOpener ?? false,
                 opts.capabilities ?? { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox) }
-            ) + (opts.memory ?? ''),
+            ) + (opts.memory ?? '') + (opts.interviewLine ? ' ' + opts.interviewLine : ''),
         },
         ...history,
     ]

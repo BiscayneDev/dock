@@ -142,14 +142,14 @@ describe('updateMemory', () => {
     rpcMock.mockResolvedValue({ data: [], error: null })
     await updateMemory('chat-1')
     expect(rpcMock).toHaveBeenCalledTimes(1)
-    expect(rpcMock).toHaveBeenCalledWith('claim_memory_update', { p_chat_guid: 'chat-1', p_every: 10 })
+    expect(rpcMock).toHaveBeenCalledWith('claim_memory_update', { p_chat_guid: 'chat-1', p_every: 4 })
   })
   it('is a no-op when no update is due (bound chat claims at user level)', async () => {
     identity = { data: [{ user_id: 'u-1' }], error: null }
     rpcMock.mockResolvedValue({ data: [], error: null })
     await updateMemory('chat-1')
     expect(rpcMock).toHaveBeenCalledTimes(1)
-    expect(rpcMock).toHaveBeenCalledWith('claim_user_memory_update', { p_user_id: 'u-1', p_chat_guid: 'chat-1', p_every: 10 })
+    expect(rpcMock).toHaveBeenCalledWith('claim_user_memory_update', { p_user_id: 'u-1', p_chat_guid: 'chat-1', p_every: 4 })
   })
 })
 
