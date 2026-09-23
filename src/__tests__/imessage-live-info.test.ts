@@ -97,8 +97,16 @@ describe('live info wiring', () => {
     expect(withSearch).toContain('call the weather tool')
     expect(withSearch).toContain('call web_search')
     const noSearch = buildSystemPrompt([], false, { google: false, wallet: false, live: true, search: false })
-    expect(noSearch).toContain("can't browse the web yet")
+    expect(noSearch).toContain("can't check that live right now")
     expect(noSearch).not.toContain('call web_search')
     expect(buildSystemPrompt([], false, false)).not.toContain('weather tool')
+  })
+})
+
+describe('voice', () => {
+  it('carries the confident voice line and no self-deprecating limits', async () => {
+    const mod = await import('@/lib/spectrum/dinghy')
+    expect(mod.VOICE_LINE).toMatch(/safely, securely and openly/)
+    expect(mod.VOICE_LINE).toMatch(/never answer with a list of things you cannot do/)
   })
 })
