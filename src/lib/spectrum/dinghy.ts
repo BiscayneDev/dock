@@ -49,7 +49,14 @@ const NO_WALLET_LINE =
 export interface PromptCapabilities {
     google: boolean
     wallet: boolean
+    /** create_file is offered (any chat bound to a user). */
+    files?: boolean
 }
+
+const FILES_LINE =
+    'You can make real documents with create_file (PDF by default; Word, CSV, web page or Markdown on request) ' +
+    'for plans, itineraries, notes, checklists and tables; they arrive in this chat as a file right after your reply. ' +
+    'Offer one when a list or plan would be easier to keep as a document, and make it when asked.'
 
 const NO_TOOLS_EMAIL_LINE =
     'If the user asks about email or calendar and no link was sent, say they are not connected yet ' +
@@ -74,6 +81,7 @@ export function buildSystemPrompt(
     let prompt = BASE_PROMPT
     prompt += ' ' + (caps.google ? TOOLS_EMAIL_LINE : NO_TOOLS_EMAIL_LINE)
     prompt += ' ' + (caps.wallet ? WALLET_LINE : NO_WALLET_LINE)
+    if (caps.files) prompt += ' ' + FILES_LINE
     if (facts.length > 0) {
         prompt += ' Known facts:\n' + facts.map((f) => `- ${f.key}: ${f.value}`).join('\n')
     }
