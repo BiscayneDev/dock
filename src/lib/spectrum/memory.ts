@@ -4,10 +4,14 @@
  *   profile    one short document about the person, rewritten over time,
  *              always in the prompt
  *   summaries  episodic summaries of conversation that has scrolled out of
- *              the 20-message history window; latest 2 in the prompt
+ *              the 20-message history window; latest 2 in the prompt,
+ *              plus older ones that match the current message
  *   facts      atomic memories in the shared `memories` table, retrieved by
- *              relevance to the current message (pgvector when an embeddings
- *              key is configured, newest-first otherwise)
+ *              relevance to the current message (pgvector similarity,
+ *              topped up newest-first; newest-first only without a key)
+ *
+ * Summaries carry vectors too (migration 027): older summaries that match
+ * the current message are pulled in alongside the latest two.
  *
  * Reads happen before the reply (one RPC + one embed). Writes happen after
  * the reply is sent, at most once every UPDATE_EVERY messages, so memory
@@ -74,33 +78,77 @@ export function renderMemoryBlock(m: MemoryContext): string {
 
 export async function loadMemoryContext(chatGuid: string, query: string): Promise<MemoryContext> {
     const supabase = createServerClient()
-    const [ctxRes, facts] = await Promise.all([
+    // One embedding per message, shared by fact and summary recall. Bounded
+    // so a slow embeddings API never delays the reply.
+    const embedding = query.trim().length >= 3 ? await withTimeout(embedText(query), EMBED_READ_TIMEOUT_MS).catch(() => null) : null
+    const [ctxRes, facts, older] = await Promise.all([
         supabase.rpc('dinghy_memory_context', { p_chat_guid: chatGuid }),
-        relevantFacts(chatGuid, query).catch(() => [] as string[]),
+        relevantFacts(chatGuid, embedding).catch(() => [] as string[]),
+        relevantSummaries(chatGuid, embedding).catch(() => [] as string[]),
     ])
     if (ctxRes.error) throw new Error(`dinghy_memory_context failed: ${ctxRes.error.message}`)
     const d = (ctxRes.data ?? {}) as { profile?: string; summaries?: string[] }
-    return { profile: d.profile ?? '', summaries: Array.isArray(d.summaries) ? d.summaries : [], facts }
+    const latest = Array.isArray(d.summaries) ? d.summaries : []
+    return { profile: d.profile ?? '', summaries: [...older, ...latest], facts }
 }
 
-async function relevantFacts(chatGuid: string, query: string): Promise<string[]> {
-    const supabase = createServerClient()
-    const embedding = query.trim().length >= 3 ? await embedText(query) : null
-    if (embedding) {
-        const { data, error } = await supabase.rpc('match_chat_memories', {
-            p_chat_guid: chatGuid,
-            p_embedding: JSON.stringify(embedding),
-            p_model: currentEmbeddingModel(),
-            p_limit: FACT_LIMIT,
-        })
-        if (!error && Array.isArray(data) && data.length) {
-            return (data as { content: string; similarity: number }[])
-                .filter((r) => r.similarity >= FACT_MIN_SIMILARITY)
-                .map((r) => r.content)
-        }
+export const EMBED_READ_TIMEOUT_MS = 1500
+const SUMMARY_MIN_SIMILARITY = 0.35
+
+export function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
+    return Promise.race([p, new Promise<null>((resolve) => setTimeout(() => resolve(null), ms))])
+}
+
+/**
+ * Most relevant facts first (cosine similarity above a floor), topped up
+ * with the newest facts so a vague message still gets some context.
+ */
+export function mergeFacts(matched: { content: string; similarity: number }[], recent: string[], limit = FACT_LIMIT): string[] {
+    const out: string[] = []
+    const seen = new Set<string>()
+    const add = (c: string) => {
+        const k = c.toLowerCase().trim()
+        if (!k || seen.has(k) || out.length >= limit) return
+        seen.add(k)
+        out.push(c)
     }
-    const { data } = await supabase.rpc('recent_chat_memories', { p_chat_guid: chatGuid, p_limit: FACT_LIMIT })
-    return ((data ?? []) as { content: string }[]).map((r) => r.content)
+    matched.filter((r) => r.similarity >= FACT_MIN_SIMILARITY).forEach((r) => add(r.content))
+    recent.forEach(add)
+    return out
+}
+
+async function relevantFacts(chatGuid: string, embedding: number[] | null): Promise<string[]> {
+    const supabase = createServerClient()
+    const [matchRes, recentRes] = await Promise.all([
+        embedding
+            ? supabase.rpc('match_chat_memories', {
+                  p_chat_guid: chatGuid,
+                  p_embedding: JSON.stringify(embedding),
+                  p_model: currentEmbeddingModel(),
+                  p_limit: FACT_LIMIT,
+              })
+            : Promise.resolve({ data: [], error: null }),
+        supabase.rpc('recent_chat_memories', { p_chat_guid: chatGuid, p_limit: FACT_LIMIT }),
+    ])
+    const matched = !matchRes.error && Array.isArray(matchRes.data) ? (matchRes.data as { content: string; similarity: number }[]) : []
+    const recent = ((recentRes.data ?? []) as { content: string }[]).map((r) => r.content)
+    return mergeFacts(matched, recent)
+}
+
+/** Older summaries that match this message (the latest 2 are always included separately). */
+async function relevantSummaries(chatGuid: string, embedding: number[] | null): Promise<string[]> {
+    if (!embedding) return []
+    const { data, error } = await createServerClient().rpc('match_chat_summaries', {
+        p_chat_guid: chatGuid,
+        p_embedding: JSON.stringify(embedding),
+        p_model: currentEmbeddingModel(),
+        p_limit: 2,
+    })
+    if (error || !Array.isArray(data)) return []
+    return (data as { summary: string; last_at: string; similarity: number }[])
+        .filter((r) => r.similarity >= SUMMARY_MIN_SIMILARITY)
+        .sort((a, b) => Date.parse(a.last_at) - Date.parse(b.last_at))
+        .map((r) => r.summary)
 }
 
 // ── Write path (after the reply) ──────────────────────────────────────────────
@@ -262,15 +310,49 @@ export async function updateMemory(chatGuid: string): Promise<void> {
         const s = await gatewayJson(SUMMARY_SYSTEM, transcript(chunk, 8000), 300)
         const summary = typeof s?.summary === 'string' ? s.summary.trim() : ''
         if (summary && !looksSecret(summary)) {
-            await supabase.rpc('add_conversation_summary', {
+            const vec = await embedText(summary)
+            await supabase.rpc('add_conversation_summary_v2', {
                 p_chat_guid: chatGuid,
                 p_summary: summary,
                 p_message_count: chunk.length,
                 p_first_at: chunk[0].created_at,
                 p_last_at: chunk[chunk.length - 1].created_at,
+                p_embedding: vec ? JSON.stringify(vec) : null,
+                p_model: vec ? currentEmbeddingModel() : null,
             })
         }
     }
+
+    // 3. Vectors for anything written without one, or under an old model.
+    await backfillEmbeddings(chatGuid).catch(() => 0)
+}
+
+/**
+ * Give vectors to rows that have none (written while embeddings were down)
+ * or that came from a different model (after a model switch). Bounded per
+ * pass; runs inside the after-reply memory update.
+ */
+export async function backfillEmbeddings(chatGuid: string, limit = 20): Promise<number> {
+    const supabase = createServerClient()
+    const { data, error } = await supabase.rpc('chat_rows_needing_embedding', {
+        p_chat_guid: chatGuid,
+        p_model: currentEmbeddingModel(),
+        p_limit: limit,
+    })
+    if (error || !Array.isArray(data)) return 0
+    let n = 0
+    for (const r of data as { kind: string; id: string; content: string }[]) {
+        const vec = await embedText(r.content)
+        if (!vec) break // embeddings unavailable; try again next pass
+        const { error: e } = await supabase.rpc('set_chat_embedding', {
+            p_kind: r.kind,
+            p_id: r.id,
+            p_embedding: JSON.stringify(vec),
+            p_model: currentEmbeddingModel(),
+        })
+        if (!e) n++
+    }
+    return n
 }
 
 /** "forget X" — soft-deletes matching facts (reversible). */
