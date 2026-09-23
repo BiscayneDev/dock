@@ -1,6 +1,8 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { WaitlistSection } from './waitlist-section'
-import { Anchor, FirstLight } from '@/components/brand/Scene'
+import { Anchor } from '@/components/brand/Scene'
+import heroCoast from '../../public/hero-coast.jpg'
 
 export default function LandingPage() {
   return (
@@ -39,10 +41,15 @@ export default function LandingPage() {
         .btn.primary:hover { background: #fff; transform: translateY(-1px); }
         .btn.quiet { box-shadow: inset 0 0 0 1px rgba(183,192,214,.35); color: var(--shell); }
         .btn.quiet:hover { box-shadow: inset 0 0 0 1px var(--shell); }
-        .horizon { position: relative; height: clamp(220px, 34vw, 400px); margin: 24px 0 96px; }
-        .horizon > div, .horizon svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-        .horizon::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 45%; z-index: 1; background: linear-gradient(to top, rgba(6,11,26,0), var(--abyss)); }
-        .horizon::after { content: ""; position: absolute; inset: auto 0 0 0; height: 16%; z-index: 1; background: linear-gradient(to bottom, rgba(6,11,26,0), var(--abyss)); }
+        .hero { position: relative; min-height: min(100svh, 920px); display: flex; flex-direction: column; overflow: hidden; }
+        .hero-bg { position: absolute; inset: 0; z-index: 0; }
+        .hero-bg img { object-fit: cover; object-position: 50% 58%; }
+        .hero::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+          background: linear-gradient(to bottom, rgba(6,11,26,.82) 0%, rgba(6,11,26,.62) 30%, rgba(6,11,26,.18) 56%, rgba(6,11,26,0) 70%, rgba(6,11,26,.35) 88%, var(--abyss) 100%); }
+        .hero .wrap { padding-bottom: 96px; }
+        .hero h1, .hero .hero-sub { text-shadow: 0 1px 24px rgba(6,11,26,.45); }
+        .hero .hero-sub { color: #D3D9E8; }
+        .hero-spacer { flex: 1 1 auto; min-height: clamp(160px, 26vw, 320px); }
         h2 { font-size: clamp(24px, 3.4vw, 30px); line-height: 1.15; letter-spacing: -0.015em; }
         .panel { border: 1px solid var(--line); border-radius: 16px; background: var(--deep); padding: 32px 28px; }
         .panel p { color: var(--mist); font-size: 16px; margin-top: 12px; }
@@ -52,7 +59,10 @@ export default function LandingPage() {
         @media (max-width: 600px) {
           nav.top { padding: 20px 24px; }
           .cta .btn { flex: 1 1 100%; }
-          .horizon { margin-bottom: 64px; }
+          .hero { min-height: 100svh; }
+          .hero-bg img { object-position: 54% 60%; }
+          .hero::before { background: linear-gradient(to bottom, rgba(6,11,26,.86) 0%, rgba(6,11,26,.7) 42%, rgba(6,11,26,.2) 64%, rgba(6,11,26,0) 76%, rgba(6,11,26,.4) 90%, var(--abyss) 100%); }
+          .hero-spacer { min-height: 120px; }
           section.block { padding-bottom: 64px; }
           .panel { padding: 26px 22px; }
           .wl-btn { flex: 1 1 100% !important; }
@@ -60,26 +70,36 @@ export default function LandingPage() {
       `}</style>
 
       <div style={{ position: 'relative', minHeight: '100vh' }}>
-        <nav className="top">
-          <span className="mark"><Anchor color="#F2A380" size={20} />dinghy</span>
-          <Link href="/onboarding" className="signin">sign in</Link>
-        </nav>
-
-        <section className="wrap" style={{ paddingTop: '152px' }}>
-          <div className="label">private beta · imessage</div>
-          <h1 className="serif">your first mate lives in <em>your texts</em></h1>
-          <p className="hero-sub">
-            dinghy is a first mate that lives in imessage. you text it like a person. <b>it does the work.</b>
-          </p>
-          <div className="cta">
-            <Link href="/onboarding" className="btn primary">join the beta</Link>
-            <a href="#waitlist" className="btn quiet">get on the list</a>
+        <header className="hero">
+          <div className="hero-bg" aria-hidden="true">
+            <Image
+              src={heroCoast}
+              alt=""
+              fill
+              priority
+              sizes="100vw"
+              quality={80}
+              placeholder="blur"
+            />
           </div>
-        </section>
+          <nav className="top">
+            <span className="mark"><Anchor color="#F2A380" size={20} />dinghy</span>
+            <Link href="/onboarding" className="signin">sign in</Link>
+          </nav>
 
-        <div className="horizon" aria-hidden="true">
-          <FirstLight id="home" boatX={820} horizon={440} />
-        </div>
+          <section className="wrap" style={{ paddingTop: '152px', paddingBottom: 0 }}>
+            <div className="label">private beta · imessage</div>
+            <h1 className="serif">your first mate lives in <em>your texts</em></h1>
+            <p className="hero-sub">
+              dinghy is a first mate that lives in imessage. you text it like a person. <b>it does the work.</b>
+            </p>
+            <div className="cta">
+              <Link href="/onboarding" className="btn primary">join the beta</Link>
+              <a href="#waitlist" className="btn quiet">get on the list</a>
+            </div>
+          </section>
+          <div className="hero-spacer" />
+        </header>
 
         <section className="wrap block">
           <div className="label">how it&apos;s built</div>
