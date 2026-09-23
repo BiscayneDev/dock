@@ -20,6 +20,7 @@ import {
 } from '@/spectrum/store'
 import { chat, chatWithTools, wantsGoogle, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { capabilitiesFor, loadImessageToolContext, toolsFor } from './imessage-tools'
+import { EMPTY_MEMORY, loadMemoryContext, renderMemoryBlock, updateMemory } from './memory'
 import { actionToolsFor, cancelPendingActions, executePendingAction, hasPendingAction, parseConfirmation, renderProposal } from './actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { dinghyContactCard } from './contact-card'
@@ -202,6 +203,11 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     }
 
     const t0 = Date.now()
+    // Memory loads in parallel with history; any failure means no memory.
+    const memoryP = loadMemoryContext(chatGuid, text).catch((err) => {
+        logErr('memory load failed', err)
+        return EMPTY_MEMORY
+    })
     // A DB blip degrades to no-history, never a dead tail.
     const history = await loadHistory(chatGuid, MAX_HISTORY).catch((err) => {
         logErr('history load failed', err)
@@ -211,11 +217,13 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         logErr('facts load failed', err)
         return [] as DinghyFact[]
     })
+    const memory = await memoryP
+    const memoryBlock = renderMemoryBlock(memory)
     const tContext = Date.now()
     // The opener question is for a genuinely new user only: zero facts AND
     // zero history. Thin history (or a history-load failure) must not
     // re-ask it.
-    const includeOpener = history.length === 0 && facts.length === 0
+    const includeOpener = history.length === 0 && facts.length === 0 && !memory.profile
 
     // First-ever message in this chat: onboarding contact card. DB-backed
     // (was a process-memory Set on the VPS) so it works statelessly. Our own
@@ -329,6 +337,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                     facts,
                     includeOpener,
                     capabilities: capabilitiesFor(toolCtx),
+                    memory: memoryBlock,
                 },
                 tools,
                 toolCtx
@@ -343,6 +352,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 model: SHIPYARD_MODEL,
                 facts,
                 includeOpener,
+                memory: memoryBlock,
             })
         }
         const tChatEnd = Date.now()
@@ -368,6 +378,8 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 iterations,
             })}`
         )
+        // After the reply is out: refresh memory (no-op unless due).
+        await updateMemory(chatGuid).catch((err) => logErr('memory update failed', err))
     } catch (err) {
         logErr('gateway call failed', err)
         await sendText(space, chatGuid, 'error_notice', 'Something went wrong on my end. Try again in a moment.')

@@ -100,11 +100,12 @@ export async function loadHistory(chatGuid: string, limit = 20): Promise<History
     .from('spectrum_messages')
     .select('role, content, created_at')
     .eq('chat_guid', chatGuid)
-    .order('created_at', { ascending: true })
-  const rows = (data ?? []) as { role: string; content: string }[]
+    .in('role', ['user', 'assistant'])
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  const rows = ((data ?? []) as { role: string; content: string }[]).reverse()
   return rows
     .filter((r) => r.role === 'user' || r.role === 'assistant')
-    .slice(-limit)
     .map((r) => ({ role: r.role as 'user' | 'assistant', content: r.content }))
 }
 
