@@ -45,7 +45,8 @@ import {
     type BetaRole,
 } from './beta-gate'
 import { claimInboundDelivery, enqueueOutbox, markOutboxFailed, markOutboxSent, type OutboxKind } from './outbox'
-import { handleMuteIntent } from './briefing'
+import { briefableUserId, handleMuteIntent } from './briefing'
+import { isLocationAttachment, parseLocation, saveUserLocation } from './location'
 import {
     forgetMatch,
     handlePendingMemoryWipe,
@@ -198,7 +199,42 @@ async function handleGatedMessage(space: InboundSpace, chatGuid: string, text: s
     }
 }
 
+export const LOCATION_ACK = "got it. I'll use that for your morning weather."
+
+/**
+ * A shared location (iMessage "Send My Current Location", a dropped maps
+ * pin, or a bare maps link) from a bound chat becomes that person's current
+ * spot for the morning brief. Returns true when the message was handled.
+ * Only the chat's own bound user is updated, and only from their own thread.
+ */
+async function maybeHandleLocationShare(space: InboundSpace, message: InboundMessage): Promise<boolean> {
+    const c = message.content as { type: string; name?: string; mimeType?: string; read?: () => Promise<Buffer>; url?: string; text?: string }
+    let body: string | null = null
+    if (c.type === 'attachment' && c.read && isLocationAttachment(c.name ?? '', c.mimeType ?? '')) {
+        body = (await c.read().catch(() => Buffer.from(''))).toString('utf8')
+    } else if (c.type === 'richlink' && typeof c.url === 'string') {
+        body = c.url
+    } else if (c.type === 'text' && typeof c.text === 'string' && /^\s*\S*(maps\.apple\.com|google\.[a-z.]+\/maps|geo:)\S*\s*$/i.test(c.text)) {
+        body = c.text
+    }
+    if (!body) return false
+    const loc = parseLocation(body)
+    if (!loc) return false
+    const chatGuid = resolveChatGuid(space)
+    if (!chatGuid) return true
+    if (message.id && !(await claimInboundDelivery(message.id, chatGuid))) return true
+    const userId = await briefableUserId(chatGuid).catch(() => null)
+    if (!userId) return true
+    if (await saveUserLocation(userId, loc)) await sendText(space, chatGuid, 'reply', LOCATION_ACK)
+    return true
+}
+
 export async function handleSpectrumMessage(space: InboundSpace, message: InboundMessage): Promise<void> {
+    try {
+        if (await maybeHandleLocationShare(space, message)) return
+    } catch (err) {
+        logErr('location share failed', err)
+    }
     if (message.content.type !== 'text' || !message.content.text) return
     const text = message.content.text.trim()
     if (!text) return
