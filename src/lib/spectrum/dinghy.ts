@@ -57,6 +57,8 @@ export interface PromptCapabilities {
     search?: boolean
     /** spend_summary is offered. */
     spend?: boolean
+    /** reminder_set / list / cancel are offered. */
+    reminders?: boolean
 }
 
 const FILES_LINE =
@@ -73,6 +75,10 @@ const SEARCH_LINE =
 
 const NO_SEARCH_LINE =
     "You can't browse the web yet, so for news, scores, prices or recent events say you can't look that up live."
+
+const REMINDERS_LINE =
+    'When asked to remind them of something, call reminder_set (it texts this chat at that time) and confirm the day and time in plain words. ' +
+    'Use reminder_list and reminder_cancel to show or cancel pending reminders. Never say a reminder is set unless the tool succeeded.'
 
 const SPEND_LINE =
     'For questions about AI spend, cost or usage, call spend_summary and give the number plainly.'
@@ -102,6 +108,7 @@ export function buildSystemPrompt(
     prompt += ' ' + (caps.wallet ? WALLET_LINE : NO_WALLET_LINE)
     if (caps.files) prompt += ' ' + FILES_LINE
     if (caps.spend) prompt += ' ' + SPEND_LINE
+    if (caps.reminders) prompt += ' ' + REMINDERS_LINE
     if (caps.live) prompt += ' ' + WEATHER_LINE + ' ' + (caps.search ? SEARCH_LINE : NO_SEARCH_LINE)
     if (facts.length > 0) {
         prompt += ' About Dinghy (product context, not facts about the person you are texting):\n' + facts.map((f) => `- ${f.key}: ${f.value}`).join('\n')
