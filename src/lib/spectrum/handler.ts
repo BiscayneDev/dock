@@ -108,12 +108,16 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         try {
             const link = await createConnectLink(chatGuid, text)
             await saveMessage(chatGuid, 'user', text)
+            // URL goes out as its own bubble: iMessage renders the rich
+            // link-preview card (OG from /connect) only when the URL stands
+            // alone.
             await sendText(
                 space,
                 chatGuid,
                 'connect_link',
-                `email + calendar aren't connected yet — connect google and i'll take it from there:\n${link}`
+                "email + calendar aren't connected yet — tap below to connect google and i'll take it from there:"
             )
+            await sendText(space, chatGuid, 'connect_link', link)
         } catch (err) {
             logErr('connect link failed', err)
             await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow — try again in a moment.")
