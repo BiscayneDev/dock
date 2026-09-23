@@ -56,6 +56,7 @@ import {
     WIPE_PROMPT,
 } from './memory-commands'
 import { buildIcs } from './ics'
+import { interviewDirective, markOpenerAsked } from './interview'
 import { attachment } from 'spectrum-ts'
 
 export interface InboundSpace {
@@ -298,6 +299,20 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     // profile. dinghy_facts are product-wide context (every chat has them),
     // so they no longer suppress it.
     const includeOpener = history.length === 0 && !memory.profile
+    // Day-1 interview (F2): when the opener's answer arrives, at most two
+    // short follow-ups go out over separate turns (skipped if already
+    // answered); answers land as profile facts via the memory write path.
+    // State failure ends the interview, never the reply.
+    if (includeOpener) {
+        await markOpenerAsked(chatGuid).catch((err) => logErr('interview opener mark failed', err))
+    }
+    const interviewLine =
+        history.length > 0
+            ? await interviewDirective(chatGuid, history[0]?.content ?? '', text).catch((err) => {
+                  logErr('interview step failed', err)
+                  return null
+              })
+            : null
 
     // First-ever message in this chat: onboarding contact card. DB-backed
     // (was a process-memory Set on the VPS) so it works statelessly. Our own
@@ -545,6 +560,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 includeOpener,
                 capabilities: { ...(toolCtx ? capabilitiesFor(toolCtx) : guestCapabilities()), spend: true, reminders: true },
                 memory: memoryBlock,
+                interviewLine: interviewLine ?? undefined,
                 onUsage,
             }
             const r = await chatWithTools(full, toolOpts, tools, runCtx)
@@ -576,6 +592,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 facts,
                 includeOpener,
                 memory: memoryBlock,
+                interviewLine: interviewLine ?? undefined,
                 onUsage,
             })
         }

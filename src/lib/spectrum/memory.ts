@@ -256,7 +256,7 @@ Never include passwords, codes, keys, card or account numbers, or anything secre
 
 const SUMMARY_SYSTEM = `Summarize this stretch of a text conversation between a person and their assistant Dinghy in 2-4 plain sentences: what they talked about, decisions, and anything left open. Include dates when mentioned. Never include secrets, codes, or account numbers. Return ONLY JSON: {"summary": "..."}`
 
-async function storeFacts(chatGuid: string, userId: string | null, sourceChannel: string, facts: { content: string; type: string }[]): Promise<number> {
+export async function storeFacts(chatGuid: string, userId: string | null, sourceChannel: string, facts: { content: string; type: string }[]): Promise<number> {
     const supabase = createServerClient()
     let n = 0
     for (const f of facts) {

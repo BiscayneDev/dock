@@ -23,7 +23,8 @@ import {
 
 // Generic table builder: each from('table') call gets a fresh chain that
 // records its method calls; tests seed results per table.
-function makeBuilder(table: string, results: Record<string, any>) {
+type Bag = { upserts?: unknown[]; deletes?: string[]; maybeSingle?: { data: unknown; error: unknown } | null }
+function makeBuilder(table: string, results: Bag) {
     const b: Record<string, unknown> = {
         upsert: (row: unknown) => {
             ;(results.upserts ??= []).push({ table, row })
@@ -45,7 +46,7 @@ beforeEach(() => {
     rpcMock.mockReset()
     fromMock.mockReset()
     tables = {}
-    fromMock.mockImplementation((table: string) => makeBuilder(table, (tables[table] ??= {}) as Record<string, any>))
+    fromMock.mockImplementation((table: string) => makeBuilder(table, (tables[table] ??= {}) as Bag))
     vi.mocked(resolveUserId).mockResolvedValue(null)
     vi.mocked(forgetMemories).mockResolvedValue(1)
 })
