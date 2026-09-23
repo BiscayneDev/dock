@@ -8,5 +8,9 @@ create table if not exists consumed_magic_tokens (
   consumed_at timestamptz not null default now()
 );
 
+-- Server-only: no anon/authenticated access through PostgREST.
+alter table consumed_magic_tokens enable row level security;
+revoke all on consumed_magic_tokens from anon, authenticated, public;
+
 -- opportunistic cleanup of rows older than a day
 delete from consumed_magic_tokens where consumed_at < now() - interval '1 day';
