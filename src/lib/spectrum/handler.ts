@@ -268,12 +268,12 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 space,
                 chatGuid,
                 'connect_link',
-                "email + calendar aren't connected yet — tap below to connect google and i'll take it from there:"
+                "email + calendar aren't connected yet - tap below to connect google and i'll take it from there:"
             )
             await sendText(space, chatGuid, 'connect_link', link)
         } catch (err) {
             logErr('connect link failed', err)
-            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow — try again in a moment.")
+            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
         }
         return
     }
@@ -287,12 +287,12 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 space,
                 chatGuid,
                 'connect_link',
-                "your wallet isn't connected yet — tap below to connect paybox (email + passkey, read-only for now) and i'll take it from there:"
+                "your wallet isn't connected yet - tap below to connect paybox (email + passkey, read-only for now) and i'll take it from there:"
             )
             await sendText(space, chatGuid, 'connect_link', link)
         } catch (err) {
             logErr('paybox connect link failed', err)
-            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow — try again in a moment.")
+            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
         }
         return
     }
