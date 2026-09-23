@@ -12,6 +12,7 @@ import {
     isGoogleConnected,
     isPayboxConnected,
     isGithubConnected,
+    isHealthConnected,
     loadFacts,
     loadHistory,
     saveMessage,
@@ -20,7 +21,7 @@ import {
     type DinghyFact,
     type HistoryMessage,
 } from '@/spectrum/store'
-import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsGithub, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
+import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsGithub, wantsHealth, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { recordUsage, spendToolFor, type GatewayUsage } from './metering'
 import { capabilitiesFor, guestCapabilities, guestToolContext, liveInfoTools, loadImessageToolContext, toolsFor } from './imessage-tools'
 import { reminderToolsFor } from './reminders'
@@ -295,6 +296,28 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             await sendText(space, chatGuid, 'connect_link', link)
         } catch (err) {
             logErr('github connect link failed', err)
+            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
+        }
+        return
+    }
+
+    // Sleep/recovery asked about with no wearable connected: Oura + WHOOP links.
+    if (wantsHealth(text) && !(await isHealthConnected(chatGuid).catch(() => false))) {
+        try {
+            const oura = await createConnectLink(chatGuid, text, 'oura')
+            const whoop = await createConnectLink(chatGuid, text, 'whoop')
+            await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+            await sendText(
+                space,
+                chatGuid,
+                'connect_link',
+                "no wearable connected yet - tap whichever you use (read-only: sleep, recovery, activity) and i'll take it from there. oura:"
+            )
+            await sendText(space, chatGuid, 'connect_link', oura)
+            await sendText(space, chatGuid, 'connect_link', 'whoop:')
+            await sendText(space, chatGuid, 'connect_link', whoop)
+        } catch (err) {
+            logErr('health connect link failed', err)
             await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
         }
         return

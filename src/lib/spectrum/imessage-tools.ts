@@ -19,6 +19,7 @@ import { webSearch } from '@/lib/tools/web'
 import { weather } from '@/lib/tools/weather'
 import { twitterSearch, twitterTimeline, twitterUserTweets } from '@/lib/tools/twitter'
 import { xFreeTools, xSearchEnabled } from '@/lib/tools/x-free'
+import { healthSleep, healthReadiness, healthActivity, healthHeartRate, healthSummary } from '@/lib/tools/health'
 import { githubListRepos, githubGetRepo, githubListIssues, githubGetIssue, githubListPrs, githubGetPr, githubListNotifications } from '@/lib/tools/github'
 
 /**
@@ -48,10 +49,15 @@ export interface ImessageCapabilities {
     xSearch?: boolean
     /** GitHub read tools when GitHub is connected. */
     github?: boolean
+    /** Oura or WHOOP health reads. */
+    health?: boolean
 }
 
 /** GitHub reads only: no creating issues, commenting or merging from iMessage. */
 export const IMESSAGE_GITHUB_TOOLS: Tool[] = [githubListRepos, githubGetRepo, githubListIssues, githubGetIssue, githubListPrs, githubGetPr, githubListNotifications]
+
+/** Oura / WHOOP reads (whichever is connected). */
+export const IMESSAGE_HEALTH_TOOLS: Tool[] = [healthSummary, healthSleep, healthReadiness, healthActivity, healthHeartRate]
 
 /** X reads only: no posting, liking or DMs from iMessage. */
 export const IMESSAGE_X_TOOLS: Tool[] = [twitterSearch, twitterTimeline, twitterUserTweets]
@@ -78,7 +84,7 @@ export function guestToolContext(): UserContext {
 }
 
 export function capabilitiesFor(ctx: UserContext): ImessageCapabilities {
-    return { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox), files: true, live: true, search: searchEnabled(), x: Boolean(ctx.tokens.twitter), xFree: true, xSearch: xSearchEnabled(), github: Boolean(ctx.tokens.github) }
+    return { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox), files: true, live: true, search: searchEnabled(), x: Boolean(ctx.tokens.twitter), xFree: true, xSearch: xSearchEnabled(), github: Boolean(ctx.tokens.github), health: Boolean(ctx.tokens.oura || ctx.tokens.whoop) }
 }
 
 /**
@@ -94,6 +100,7 @@ export function toolsFor(ctx: UserContext): Tool[] {
         ...(caps.wallet ? WALLET_READ_TOOLS : []),
         ...(caps.x ? IMESSAGE_X_TOOLS : []),
         ...(caps.github ? IMESSAGE_GITHUB_TOOLS : []),
+        ...(caps.health ? IMESSAGE_HEALTH_TOOLS : []),
     ]
 }
 
@@ -141,7 +148,7 @@ export async function loadImessageToolContext(chatGuid: string): Promise<UserCon
             // Undecryptable token row — skip rather than kill the chat.
         }
     }
-    if (!tokens.google && !tokens.paybox && !tokens.twitter && !tokens.github) return null
+    if (!tokens.google && !tokens.paybox && !tokens.twitter && !tokens.github && !tokens.oura && !tokens.whoop) return null
 
     return {
         userId,

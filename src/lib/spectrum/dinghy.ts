@@ -64,6 +64,7 @@ export interface PromptCapabilities {
     xFree?: boolean
     xSearch?: boolean
     github?: boolean
+    health?: boolean
 }
 
 const FILES_LINE =
@@ -103,6 +104,10 @@ const GITHUB_LINE =
     'For GitHub (their repos, issues, pull requests, notifications), use the github_ tools and answer in plain words with the repo and number. ' +
     'You can only read GitHub from here; never say you opened, commented on, merged or closed anything.'
 
+const HEALTH_LINE =
+    'For sleep, recovery, readiness, strain, activity or heart rate, call the health_ tools (their Oura or WHOOP) and give the numbers plainly with one line of takeaway. ' +
+    'No medical advice; suggest a doctor for anything that sounds serious.'
+
 const SPEND_LINE =
     'For questions about AI spend, cost or usage, call spend_summary and give the number plainly.'
 
@@ -133,6 +138,7 @@ export function buildSystemPrompt(
     if (caps.spend) prompt += ' ' + SPEND_LINE
     if (caps.reminders) prompt += ' ' + REMINDERS_LINE
     if (caps.github) prompt += ' ' + GITHUB_LINE
+    if (caps.health) prompt += ' ' + HEALTH_LINE
     if (caps.xFree) prompt += ' ' + X_FREE_LINE
     if (caps.x) prompt += ' ' + X_LINE
     else if (caps.xFree) prompt += ' ' + (caps.xSearch ? X_SEARCH_LINE : NO_X_SEARCH_LINE)
@@ -176,6 +182,12 @@ export const GITHUB_INTENT = /\b(github|git hub|my repos?|repositor(?:y|ies)|pul
 
 export function wantsGithub(text: string): boolean {
     return GITHUB_INTENT.test(text)
+}
+
+export const HEALTH_INTENT = /\b(oura|whoop|my sleep|slept|how did i sleep|sleep last night|sleep score|recovery|readiness|hrv|resting heart rate|heart rate|strain)\b/i
+
+export function wantsHealth(text: string): boolean {
+    return HEALTH_INTENT.test(text)
 }
 
 export function wantsWallet(text: string): boolean {

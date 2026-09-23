@@ -5,15 +5,17 @@ import type { DecryptedTokens } from '@/lib/llm/types'
 
 const WHOOP_AUTH_URL = 'https://api.prod.whoop.com/oauth/oauth2/auth'
 const WHOOP_TOKEN_URL = 'https://api.prod.whoop.com/oauth/oauth2/token'
-const WHOOP_API_BASE = 'https://api.prod.whoop.com/developer/v1'
+// v1 is no longer supported (developer.whoop.com v1-v2 migration); the
+// collection paths used here are unchanged in v2.
+const WHOOP_API_BASE = 'https://api.prod.whoop.com/developer/v2'
 
-export function getWhoopAuthUrl(): string {
+export function getWhoopAuthUrl(state = 'whoop_dock_auth'): string {
   const params = new URLSearchParams({
     client_id: process.env.WHOOP_CLIENT_ID ?? '',
     redirect_uri: process.env.WHOOP_REDIRECT_URI ?? '',
     response_type: 'code',
     scope: 'read:recovery read:cycles read:sleep read:workout read:profile read:body_measurement offline',
-    state: 'whoop_dock_auth',
+    state,
   })
 
   return `${WHOOP_AUTH_URL}?${params.toString()}`
