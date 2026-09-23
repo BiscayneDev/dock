@@ -22,6 +22,7 @@ import { chat, chatWithTools, wantsGoogle, wantsWallet, isContactCardRequest, MA
 import { capabilitiesFor, loadImessageToolContext, toolsFor } from './imessage-tools'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { dinghyContactCard } from './contact-card'
+import { hitRateLimit, RATE_NOTICE } from './rate-limit'
 import {
     claimGateNotice,
     extractInviteCode,
@@ -153,6 +154,16 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         logErr('beta gate unavailable (message not processed)', err)
         return
     }
+
+    // Per-chat rate limit (owner exempt), before any LLM or gate work.
+    if (role !== 'owner') {
+        const rate = await hitRateLimit(chatGuid)
+        if (rate !== 'ok') {
+            if (rate === 'limited_notify' && role) await sendText(space, chatGuid, 'reply', RATE_NOTICE)
+            return
+        }
+    }
+
     if (!role) {
         await handleGatedMessage(space, chatGuid, text)
         return
