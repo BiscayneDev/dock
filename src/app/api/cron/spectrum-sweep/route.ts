@@ -65,6 +65,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 await saveMessage(row.chat_guid, 'assistant', fileMarker(file.filename)).catch(() => undefined)
             } else {
                 await space.send(row.text)
+                // Reminders are server-initiated; keep them in history so a
+                // follow-up ("snooze that") has context.
+                if (row.kind === 'reminder') await saveMessage(row.chat_guid, 'assistant', row.text).catch(() => undefined)
             }
             await markOutboxSent(row.id)
             results.outboxSent++
