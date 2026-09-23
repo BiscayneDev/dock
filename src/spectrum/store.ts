@@ -173,23 +173,20 @@ export async function claimPendingResume(
   chatGuid: string
 ): Promise<{ id: string; pendingRequest: string } | null> {
   const supabase = db()
-  const { data, error } = await supabase
-    .from('connect_tokens')
-    .update({ delivery_claimed_at: new Date().toISOString() })
-    .eq('platform', 'imessage')
-    .eq('chat_id', chatGuid)
-    .not('completed_at', 'is', null)
-    .is('resumed_at', null)
-    .is('terminal_at', null)
-    .not('pending_request', 'is', null)
-    .or(`delivery_claimed_at.is.null,delivery_claimed_at.lt.${new Date(Date.now() - RESUME_LEASE_MS).toISOString()}`)
-    .order('completed_at', { ascending: false })
-    .limit(1)
-    .select('id, pending_request')
-    .maybeSingle()
+  // RPC (migration 017): a PostgREST schema-cache lag on migration 015's
+  // columns made the table-UPDATE shape fail with 42703 for hours after
+  // reload notifications. RPC bodies are parsed by Postgres at call time.
+  const { data, error } = await supabase.rpc('claim_pending_resume', {
+    p_chat_id: chatGuid,
+    p_lease_ms: RESUME_LEASE_MS,
+  })
 
-  if (error || !data || !data.pending_request) return null
-  return { id: data.id as string, pendingRequest: data.pending_request as string }
+  const row = Array.isArray(data) ? data[0] : data
+  if (error || !row || !row.pending_request) {
+    if (error) console.error('resume claim rpc failed:', error.message)
+    return null
+  }
+  return { id: row.id as string, pendingRequest: row.pending_request as string }
 }
 
 /** Delivery acknowledgement — the ONLY writer of resumed_at. */
