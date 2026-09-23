@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { getOWSClient } from '@/lib/integrations/openwallet'
 import { isPayboxConnected, payboxRequired } from '@/lib/integrations/paybox'
-import { assertWithinCap } from '@/lib/payments/spend-caps'
+import { assertWithinCap, recordSpend } from '@/lib/payments/spend-caps'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 
 function getClient(ctx: UserContext): ReturnType<typeof getOWSClient> {
@@ -167,6 +167,27 @@ export const walletSend: Tool = {
 
       if (!res.ok) {
         return { success: false, error: res.error ?? 'Failed to send transaction' }
+      }
+
+      // Send settled. wallet_send amounts are native units without a USD price
+      // here, so record amount_usd = 0 with the raw amount in memo — the row
+      // still exists and the over-cap block still applies.
+      // TODO(follow-up): price wallet_send sends in USD (token price lookup)
+      // so wallet spend counts toward the cap at full value.
+      try {
+        await recordSpend(
+          ctx.userId,
+          'wallet_send',
+          0,
+          `wallet_send ${parsed.amount}${parsed.token ? ` token ${parsed.token}` : ' native'} on ${parsed.chainId} to ${parsed.to}`
+        )
+      } catch (err) {
+        return {
+          success: false,
+          error:
+            `Transaction sent but failed to record spend in ledger: ` +
+            `${err instanceof Error ? err.message : String(err)}`,
+        }
       }
 
       return {
