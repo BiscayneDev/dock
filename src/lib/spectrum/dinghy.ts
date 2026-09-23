@@ -37,6 +37,20 @@ const OPENER_INSTRUCTION =
  * fires ONLY for a genuinely new user (zero facts AND zero history) — it
  * used to be unconditional, so every history-load blip re-asked it.
  */
+const WALLET_LINE =
+    "You have live READ-ONLY access to this user's crypto wallets through PayBox (wallet_balances). " +
+    'Answer balance and holdings questions from it in plain language with USD values. You cannot ' +
+    'send, swap, or sign anything yet — if asked, say sends are coming soon and will always need ' +
+    'their PayBox passkey approval. Never invent balances.'
+const NO_WALLET_LINE =
+    'Crypto wallet access connects through PayBox via a one-tap link that is sent automatically when ' +
+    'the user asks about their wallet or balances. You cannot see any wallet right now; never guess balances.'
+
+export interface PromptCapabilities {
+    google: boolean
+    wallet: boolean
+}
+
 const NO_TOOLS_EMAIL_LINE =
     'If the user asks about email or calendar and no link was sent, say they are not connected yet ' +
     'and that they can ask again to get a connect link.'
@@ -47,16 +61,22 @@ const TOOLS_EMAIL_LINE =
     'tool results in plain language — never dump raw JSON. If a tool reports the ' +
     'integration is not connected, say they can ask for a connect link.'
 
-export function buildSystemPrompt(facts: DinghyFact[], includeOpener: boolean, toolsAvailable = false): string {
+export function buildSystemPrompt(
+    facts: DinghyFact[],
+    includeOpener: boolean,
+    toolsAvailable: boolean | PromptCapabilities = false
+): string {
+    const caps: PromptCapabilities =
+        typeof toolsAvailable === 'boolean' ? { google: toolsAvailable, wallet: false } : toolsAvailable
     let prompt = BASE_PROMPT
-    prompt += ' ' + (toolsAvailable ? TOOLS_EMAIL_LINE : NO_TOOLS_EMAIL_LINE)
+    prompt += ' ' + (caps.google ? TOOLS_EMAIL_LINE : NO_TOOLS_EMAIL_LINE)
+    prompt += ' ' + (caps.wallet ? WALLET_LINE : NO_WALLET_LINE)
     if (facts.length > 0) {
         prompt += ' Known facts:\n' + facts.map((f) => `- ${f.key}: ${f.value}`).join('\n')
     }
     if (includeOpener) prompt += ' ' + OPENER_INSTRUCTION
     return prompt
 }
-
 export const GOOGLE_INTENT =
     /\b(gmail|e-?mails?|inbox|calendar|calender|schedule(d)?|meetings?|appointments?|events? this week|my day)\b/i
 
@@ -72,6 +92,13 @@ export function isContactCardRequest(text: string): boolean {
 
 export function wantsGoogle(text: string): boolean {
     return GOOGLE_INTENT.test(text)
+}
+
+export const WALLET_INTENT =
+    /\b(wallets?|(?:my |wallet |crypto |token )balances?|portfolio|crypto|usdc|usdt|eth|ether|ethereum|sol|solana|base chain|tokens? (do i|i) (have|hold)|paybox|on-?chain)\b/i
+
+export function wantsWallet(text: string): boolean {
+    return WALLET_INTENT.test(text)
 }
 
 /** Shipyard gateway call (OpenAI-compatible). Plain HTTP, works anywhere. */
@@ -135,7 +162,14 @@ export interface ToolChatResult {
  */
 export async function chatWithTools(
     history: Message[],
-    opts: { gatewayUrl: string; apiKey: string; model: string; facts?: DinghyFact[]; includeOpener?: boolean },
+    opts: {
+        gatewayUrl: string
+        apiKey: string
+        model: string
+        facts?: DinghyFact[]
+        includeOpener?: boolean
+        capabilities?: PromptCapabilities
+    },
     tools: Tool[],
     ctx: UserContext
 ): Promise<ToolChatResult> {
@@ -144,7 +178,14 @@ export async function chatWithTools(
         function: { name: t.name, description: t.description, parameters: t.inputSchema },
     }))
     const messages: Record<string, unknown>[] = [
-        { role: 'system', content: buildSystemPrompt(opts.facts ?? [], opts.includeOpener ?? false, true) },
+        {
+            role: 'system',
+            content: buildSystemPrompt(
+                opts.facts ?? [],
+                opts.includeOpener ?? false,
+                opts.capabilities ?? { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox) }
+            ),
+        },
         ...history,
     ]
 

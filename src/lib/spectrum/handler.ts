@@ -11,6 +11,7 @@ import { typing } from 'spectrum-ts'
 import {
     ensureIdentity,
     isGoogleConnected,
+    isPayboxConnected,
     loadFacts,
     loadHistory,
     saveMessage,
@@ -18,8 +19,8 @@ import {
     type DinghyFact,
     type HistoryMessage,
 } from '@/spectrum/store'
-import { chat, chatWithTools, wantsGoogle, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
-import { IMESSAGE_READ_TOOLS, loadImessageToolContext } from './imessage-tools'
+import { chat, chatWithTools, wantsGoogle, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
+import { capabilitiesFor, loadImessageToolContext, toolsFor } from './imessage-tools'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { claimInboundDelivery, enqueueOutbox, markOutboxFailed, markOutboxSent, type OutboxKind } from './outbox'
 
@@ -160,6 +161,25 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         return
     }
 
+    // Wallet asked about while PayBox is unconnected: one-use PayBox connect link.
+    if (wantsWallet(text) && !(await isPayboxConnected(chatGuid).catch(() => false))) {
+        try {
+            const link = await createConnectLink(chatGuid, text, 'paybox')
+            await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+            await sendText(
+                space,
+                chatGuid,
+                'connect_link',
+                "your wallet isn't connected yet — tap below to connect paybox (email + passkey, read-only for now) and i'll take it from there:"
+            )
+            await sendText(space, chatGuid, 'connect_link', link)
+        } catch (err) {
+            logErr('paybox connect link failed', err)
+            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow — try again in a moment.")
+        }
+        return
+    }
+
     if (!SHIPYARD_API_KEY) {
         logErr('reply failed', new Error('SHIPYARD_API_KEY is not set'))
         await sendText(space, chatGuid, 'error_notice', 'Something went wrong on my end. Try again in a moment.')
@@ -172,7 +192,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     startTyping(space)
     const tChatStart = Date.now()
     try {
-        // Read tools only for chats bound to a user with Google connected;
+        // Read tools only for chats bound to a user with Google/PayBox connected;
         // everyone else gets the plain conversational path.
         const toolCtx = await loadImessageToolContext(chatGuid).catch((err) => {
             logErr('tool context load failed', err)
@@ -181,11 +201,19 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         let reply: string
         let toolCalls = 0
         let iterations = 0
-        if (toolCtx) {
+        const tools = toolCtx ? toolsFor(toolCtx) : []
+        if (toolCtx && tools.length > 0) {
             const r = await chatWithTools(
                 full,
-                { gatewayUrl: GATEWAY_URL, apiKey: SHIPYARD_API_KEY, model: SHIPYARD_MODEL, facts, includeOpener },
-                IMESSAGE_READ_TOOLS,
+                {
+                    gatewayUrl: GATEWAY_URL,
+                    apiKey: SHIPYARD_API_KEY,
+                    model: SHIPYARD_MODEL,
+                    facts,
+                    includeOpener,
+                    capabilities: capabilitiesFor(toolCtx),
+                },
+                tools,
                 toolCtx
             )
             reply = r.reply
@@ -211,7 +239,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 chatMs: tChatEnd - tChatStart,
                 sendMs: Date.now() - tChatEnd,
                 totalMs: Date.now() - t0,
-                tools: toolCtx ? IMESSAGE_READ_TOOLS.length : 0,
+                tools: tools.length,
                 toolCalls,
                 iterations,
             })}`

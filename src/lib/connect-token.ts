@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomBytes } from 'crypto'
 import { createServerClient } from '@/lib/supabase/server'
+import { decryptTokenFromDb, encryptTokenForDb } from '@/lib/crypto'
 
 /**
  * Short-lived, signed, ONE-USE connect tokens.
@@ -22,6 +23,10 @@ export const CONNECT_TOKEN_TTL_MS = 10 * 60 * 1000 // 10 minutes
 
 export type ConnectPlatform = 'telegram' | 'imessage'
 
+/** Which account a connect token connects. Tokens are provider-bound: a
+ *  google link can never start a paybox flow (enforced in begin_connect). */
+export type ConnectProvider = 'google' | 'paybox'
+
 export interface ConnectTokenPayload {
   platform: ConnectPlatform
   /** telegram chat id (numeric string) or iMessage chat guid */
@@ -35,6 +40,10 @@ export interface ConnectRow {
   platform: ConnectPlatform
   chatId: string
   pendingRequest: string | null
+  /** PKCE verifier stored server-side at begin (paybox iMessage flow). */
+  pkceVerifier?: string | null
+  /** OAuth client id used at begin (paybox dynamic registration). */
+  oauthClientId?: string | null
 }
 
 function getSecret(): string {
@@ -113,26 +122,31 @@ export async function createConnectToken(
  * the token is invalid, expired, or already used.
  */
 export async function beginConnectByToken(
-  token: string
+  token: string,
+  provider: ConnectProvider = 'google',
+  pkce?: { verifier: string; clientId: string }
 ): Promise<{ oauthState: string; platform: ConnectPlatform; chatId: string } | null> {
   if (!verifyConnectEnvelope(token)) return null
 
   const oauthState = randomBytes(24).toString('hex')
   const supabase = createServerClient()
-  const { data, error } = await supabase
-    .from('connect_tokens')
-    .update({ used_at: new Date().toISOString(), oauth_state: oauthState })
-    .eq('token_hash', hashToken(token))
-    .is('used_at', null)
-    .gt('expires_at', new Date().toISOString())
-    .select('platform, chat_id')
-    .maybeSingle()
-
-  if (error || !data) return null
+  // RPC (migration 019): provider-bound consume; PKCE verifier encrypted at rest.
+  const { data, error } = await supabase.rpc('begin_connect', {
+    p_token_hash: hashToken(token),
+    p_provider: provider,
+    p_oauth_state: oauthState,
+    p_pkce_verifier: pkce ? encryptTokenForDb(pkce.verifier) : null,
+    p_client_id: pkce?.clientId ?? null,
+  })
+  const row = Array.isArray(data) ? data[0] : data
+  if (error || !row) {
+    if (error) console.error('begin_connect rpc failed:', error.message)
+    return null
+  }
   return {
     oauthState,
-    platform: data.platform as ConnectPlatform,
-    chatId: data.chat_id as string,
+    platform: row.platform as ConnectPlatform,
+    chatId: row.chat_id as string,
   }
 }
 
@@ -144,26 +158,35 @@ export async function beginConnectByToken(
  * ONLY after verification succeeds — a failure never burns the token.
  */
 export async function claimConnectByState(
-  oauthState: string
+  oauthState: string,
+  provider: ConnectProvider = 'google'
 ): Promise<ConnectRow | null> {
   const supabase = createServerClient()
-  const { data, error } = await supabase
-    .from('connect_tokens')
-    .update({ claimed_at: new Date().toISOString() })
-    .eq('oauth_state', oauthState)
-    .not('used_at', 'is', null)
-    .is('completed_at', null)
-    .is('claimed_at', null)
-    .is('terminal_at', null) // terminal rows can never be re-claimed
-    .select('id, platform, chat_id, pending_request')
-    .maybeSingle()
-
-  if (error || !data) return null
+  // RPC (migration 019): provider-bound claim; returns + clears the PKCE verifier.
+  const { data, error } = await supabase.rpc('claim_connect_by_state', {
+    p_oauth_state: oauthState,
+    p_provider: provider,
+  })
+  const row = Array.isArray(data) ? data[0] : data
+  if (error || !row) {
+    if (error) console.error('claim_connect_by_state rpc failed:', error.message)
+    return null
+  }
+  let pkceVerifier: string | null = null
+  if (row.pkce_verifier) {
+    try {
+      pkceVerifier = decryptTokenFromDb(row.pkce_verifier as string)
+    } catch {
+      pkceVerifier = null
+    }
+  }
   return {
-    id: data.id as string,
-    platform: data.platform as ConnectPlatform,
-    chatId: data.chat_id as string,
-    pendingRequest: (data.pending_request as string | null) ?? null,
+    id: row.id as string,
+    platform: row.platform as ConnectPlatform,
+    chatId: row.chat_id as string,
+    pendingRequest: (row.pending_request as string | null) ?? null,
+    pkceVerifier,
+    oauthClientId: (row.oauth_client_id as string | null) ?? null,
   }
 }
 

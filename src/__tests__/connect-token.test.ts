@@ -3,8 +3,14 @@ import type { Mock } from 'vitest'
 
 // Mock Supabase before importing the module under test.
 const fromMock = vi.fn()
+const rpcMock = vi.fn()
 vi.mock('@/lib/supabase/server', () => ({
-  createServerClient: () => ({ from: fromMock }),
+  createServerClient: () => ({ from: fromMock, rpc: rpcMock }),
+}))
+
+vi.mock('@/lib/crypto', () => ({
+  encryptTokenForDb: (v: string) => `enc:${Buffer.from(v).toString('base64')}`,
+  decryptTokenFromDb: (v: string) => Buffer.from(v.replace(/^enc:/, ''), 'base64').toString('utf8'),
 }))
 
 process.env.ENCRYPTION_KEY = 'test-encryption-key-0123456789abcdef'
@@ -56,6 +62,7 @@ function tableChains(tables: Record<string, Chain>) {
 
 beforeEach(() => {
   fromMock.mockReset().mockReturnValue(chain({ data: null, error: null }) as never)
+  rpcMock.mockReset().mockResolvedValue({ data: [], error: null })
 })
 
 describe('verifyConnectEnvelope', () => {
@@ -99,21 +106,33 @@ describe('createConnectToken + beginConnectByToken', () => {
 
   it('beginConnectByToken consumes atomically and mints an oauth state', async () => {
     const token = await createConnectToken({ platform: 'telegram', chatId: '123' }) // insert ok via chain
-    const c = chain({ data: { platform: 'telegram', chat_id: '123' }, error: null })
-    fromMock.mockReturnValue(c)
+    rpcMock.mockResolvedValue({ data: [{ platform: 'telegram', chat_id: '123' }], error: null })
 
     const result = await beginConnectByToken(token)
     expect(result).not.toBeNull()
     expect(result!.oauthState).toMatch(/^[0-9a-f]{48}$/)
-    // guard clauses: unused + unexpired filter present
-    expect(c.update).toHaveBeenCalledWith(expect.objectContaining({ used_at: expect.any(String) }))
-    expect(c.is).toHaveBeenCalledWith('used_at', null)
-    expect(c.gt).toHaveBeenCalledWith('expires_at', expect.any(String))
+    // unused + unexpired + provider guards live in the begin_connect RPC (migration 019)
+    expect(rpcMock).toHaveBeenCalledWith('begin_connect', expect.objectContaining({
+      p_token_hash: hashToken(token),
+      p_provider: 'google',
+      p_oauth_state: result!.oauthState,
+      p_pkce_verifier: null,
+    }))
+  })
+
+  it('beginConnectByToken is provider-bound and stores the PKCE verifier encrypted', async () => {
+    const token = await createConnectToken({ platform: 'imessage', chatId: 'g' })
+    rpcMock.mockResolvedValue({ data: [{ platform: 'imessage', chat_id: 'g' }], error: null })
+    await beginConnectByToken(token, 'paybox', { verifier: 'plain-verifier', clientId: 'pbx-oauth-1' })
+    const args = rpcMock.mock.calls[0][1]
+    expect(args.p_provider).toBe('paybox')
+    expect(args.p_client_id).toBe('pbx-oauth-1')
+    expect(args.p_pkce_verifier).toBeTruthy()
+    expect(args.p_pkce_verifier).not.toBe('plain-verifier')
   })
 
   it('beginConnectByToken returns null when the row was already used', async () => {
-    const c = chain({ data: null, error: null })
-    fromMock.mockReturnValue(c)
+    rpcMock.mockResolvedValue({ data: [], error: null })
     const token = `${Buffer.from(JSON.stringify({ platform: 'imessage', chatId: 'g', ts: Date.now() })).toString('base64url')}.${require('crypto').createHmac('sha256', process.env.ENCRYPTION_KEY!).update(Buffer.from(JSON.stringify({ platform: 'imessage', chatId: 'g', ts: Date.now() })).toString('base64url')).digest('base64url')}`
     expect(await beginConnectByToken(token)).toBeNull()
   })
@@ -121,19 +140,16 @@ describe('createConnectToken + beginConnectByToken', () => {
 
 describe('claimConnectByState (retryable claim)', () => {
   it('claims a consumed-but-incomplete row exactly once', async () => {
-    const c = chain({ data: { id: 'row-1', platform: 'imessage', chat_id: 'guid-1', pending_request: 'check my email' }, error: null })
-    fromMock.mockReturnValue(c)
+    rpcMock.mockResolvedValue({ data: [{ id: 'row-1', platform: 'imessage', chat_id: 'guid-1', pending_request: 'check my email' }], error: null })
 
     const row = await claimConnectByState('a'.repeat(48))
     expect(row).toMatchObject({ platform: 'imessage', chatId: 'guid-1', pendingRequest: 'check my email' })
-    // claimed_at set; guard requires unclaimed + unconsumed-complete state
-    expect(c.update).toHaveBeenCalledWith(expect.objectContaining({ claimed_at: expect.any(String) }))
-    expect(c.is).toHaveBeenCalledWith('completed_at', null)
-    expect(c.is).toHaveBeenCalledWith('claimed_at', null)
+    // claimed_at/unclaimed/incomplete/non-terminal guards live in claim_connect_by_state (019)
+    expect(rpcMock).toHaveBeenCalledWith('claim_connect_by_state', { p_oauth_state: 'a'.repeat(48), p_provider: 'google' })
   })
 
   it('returns null for an unknown state', async () => {
-    fromMock.mockReturnValue(chain({ data: null, error: null }))
+    rpcMock.mockResolvedValue({ data: [], error: null })
     expect(await claimConnectByState('f'.repeat(48))).toBeNull()
   })
 })
@@ -141,8 +157,7 @@ describe('claimConnectByState (retryable claim)', () => {
 describe('claim → release → re-claim retry semantics (finding 8)', () => {
   it('a released claim can be re-claimed by the same state', async () => {
     // 1. claim succeeds
-    const claimChain = chain({ data: { id: 'row-1', platform: 'telegram', chat_id: '123', pending_request: null }, error: null })
-    fromMock.mockReturnValue(claimChain)
+    rpcMock.mockResolvedValue({ data: [{ id: 'row-1', platform: 'telegram', chat_id: '123', pending_request: null }], error: null })
     const row = await claimConnectByState('b'.repeat(48))
     expect(row).not.toBeNull()
 
@@ -154,7 +169,6 @@ describe('claim → release → re-claim retry semantics (finding 8)', () => {
     expect(releaseChain.is).toHaveBeenCalledWith('completed_at', null)
 
     // 3. re-claim succeeds (claimed_at guard now matches again)
-    fromMock.mockReturnValue(claimChain)
     expect(await claimConnectByState('b'.repeat(48))).not.toBeNull()
   })
 
@@ -265,10 +279,8 @@ describe('markConnectTerminal (finding 4/round-2 — atomic terminal transition)
     const terminalWrite = chain({ data: null, error: null })
     fromMock.mockReturnValue(terminalWrite)
     await markConnectTerminal('row-1', { failed: true })
-    const claimChain = chain({ data: null, error: null }) // row matches no guard → no row returned
-    fromMock.mockReturnValue(claimChain)
+    rpcMock.mockResolvedValue({ data: [], error: null }) // row matches no guard → no row returned
     expect(await claimConnectByState('c'.repeat(48))).toBeNull()
-    expect(claimChain.is).toHaveBeenCalledWith('terminal_at', null)
   })
 
   it('release after terminal is rejected', async () => {

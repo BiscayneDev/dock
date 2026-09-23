@@ -61,7 +61,7 @@ export async function ensureIdentity(chatGuid: string, handle?: string | null): 
   return null
 }
 
-export async function isGoogleConnected(chatGuid: string): Promise<boolean> {
+export async function isProviderConnected(chatGuid: string, provider: ConnectProvider): Promise<boolean> {
   const supabase = db()
   const { data: identity } = await supabase
     .from('spectrum_identities')
@@ -74,9 +74,17 @@ export async function isGoogleConnected(chatGuid: string): Promise<boolean> {
     .from('oauth_tokens')
     .select('id')
     .eq('user_id', identity.user_id as string)
-    .eq('provider', 'google')
+    .eq('provider', provider)
     .maybeSingle()
   return !!data
+}
+
+export async function isGoogleConnected(chatGuid: string): Promise<boolean> {
+  return isProviderConnected(chatGuid, 'google')
+}
+
+export async function isPayboxConnected(chatGuid: string): Promise<boolean> {
+  return isProviderConnected(chatGuid, 'paybox')
 }
 
 // ── History ─────────────────────────────────────────────────────────────────
@@ -125,22 +133,32 @@ function hashToken(token: string): string {
  * Create a one-use connect link for this iMessage chat. The original
  * request rides in the row so the callback can resume it.
  */
-export async function createConnectLink(chatGuid: string, pendingRequest: string): Promise<string> {
+export type ConnectProvider = 'google' | 'paybox'
+
+export async function createConnectLink(
+  chatGuid: string,
+  pendingRequest: string,
+  provider: ConnectProvider = 'google'
+): Promise<string> {
   const payload = { platform: 'imessage' as const, chatId: chatGuid, pendingRequest, ts: Date.now() }
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url')
   const token = `${encoded}.${sign(encoded)}`
 
   const supabase = db()
-  const { error } = await supabase.from('connect_tokens').insert({
-    token_hash: hashToken(token),
-    platform: 'imessage',
-    chat_id: chatGuid,
-    pending_request: pendingRequest,
-    expires_at: new Date(Date.now() + CONNECT_TOKEN_TTL_MS).toISOString(),
+  // RPC (migration 019): the provider column is new; PostgREST's schema cache
+  // is not trusted with new columns (see 017).
+  const { error } = await supabase.rpc('create_connect_token', {
+    p_token_hash: hashToken(token),
+    p_platform: 'imessage',
+    p_chat_id: chatGuid,
+    p_pending_request: pendingRequest,
+    p_expires_at: new Date(Date.now() + CONNECT_TOKEN_TTL_MS).toISOString(),
+    p_provider: provider,
   })
   if (error) throw new Error(`Failed to persist connect token: ${error.message}`)
 
-  return `${APP_URL}/connect?connect=${encodeURIComponent(token)}`
+  const page = provider === 'paybox' ? '/connect/paybox' : '/connect'
+  return `${APP_URL}${page}?connect=${encodeURIComponent(token)}`
 }
 
 /**
@@ -171,9 +189,9 @@ export const RESUME_LEASE_MS = 60 * 1000
 
 export async function claimPendingResume(
   chatGuid: string
-): Promise<{ id: string; pendingRequest: string } | null> {
+): Promise<{ id: string; pendingRequest: string; provider: ConnectProvider } | null> {
   const supabase = db()
-  // RPC (migration 017): a PostgREST schema-cache lag on migration 015's
+  // RPC (migration 017, provider added in 019): a PostgREST schema-cache lag on migration 015's
   // columns made the table-UPDATE shape fail with 42703 for hours after
   // reload notifications. RPC bodies are parsed by Postgres at call time.
   const { data, error } = await supabase.rpc('claim_pending_resume', {
@@ -186,7 +204,11 @@ export async function claimPendingResume(
     if (error) console.error('resume claim rpc failed:', error.message)
     return null
   }
-  return { id: row.id as string, pendingRequest: row.pending_request as string }
+  return {
+    id: row.id as string,
+    pendingRequest: row.pending_request as string,
+    provider: ((row.provider as string | undefined) ?? 'google') as ConnectProvider,
+  }
 }
 
 /** Delivery acknowledgement — the ONLY writer of resumed_at. */

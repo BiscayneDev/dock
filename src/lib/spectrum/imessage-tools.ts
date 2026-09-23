@@ -14,6 +14,7 @@ import { decryptTokenFromDb } from '@/lib/crypto'
 import type { DecryptedTokens, Tool, UserContext } from '@/lib/llm/types'
 import { gmailSearch, gmailRead, gmailSummarizeInbox } from '@/lib/tools/gmail'
 import { gcalListEvents, gcalTodayBriefing } from '@/lib/tools/gcal'
+import { WALLET_READ_TOOLS } from '@/lib/tools/wallet-read'
 
 /**
  * Read tools only (Halsey, 2026-09-22: email + calendar reads first;
@@ -26,6 +27,24 @@ export const IMESSAGE_READ_TOOLS: Tool[] = [
     gcalListEvents,
     gcalTodayBriefing,
 ]
+
+export interface ImessageCapabilities {
+    google: boolean
+    wallet: boolean
+}
+
+export function capabilitiesFor(ctx: UserContext): ImessageCapabilities {
+    return { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox) }
+}
+
+/**
+ * The tool set for this user: Google read tools when Google is connected,
+ * PayBox wallet reads when PayBox is connected. Read-only either way.
+ */
+export function toolsFor(ctx: UserContext): Tool[] {
+    const caps = capabilitiesFor(ctx)
+    return [...(caps.google ? IMESSAGE_READ_TOOLS : []), ...(caps.wallet ? WALLET_READ_TOOLS : [])]
+}
 
 /**
  * The UserContext for a Spectrum chat, or null when the chat is not bound
@@ -66,7 +85,7 @@ export async function loadImessageToolContext(chatGuid: string): Promise<UserCon
             // Undecryptable token row — skip rather than kill the chat.
         }
     }
-    if (!tokens.google) return null
+    if (!tokens.google && !tokens.paybox) return null
 
     return {
         userId,
