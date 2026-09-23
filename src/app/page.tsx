@@ -47,10 +47,12 @@ export default function LandingPage() {
         .hero-bg { position: absolute; inset: 0; z-index: 0; }
         .hero-bg img { object-fit: cover; object-position: 50% 58%; }
         .hero::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
-          background: linear-gradient(to bottom, rgba(6,11,26,.82) 0%, rgba(6,11,26,.62) 30%, rgba(6,11,26,.18) 56%, rgba(6,11,26,0) 70%, rgba(6,11,26,.35) 88%, var(--abyss) 100%); }
+          background: linear-gradient(to bottom, rgba(6,11,26,.84) 0%, rgba(6,11,26,.72) 34%, rgba(6,11,26,.5) 50%, rgba(6,11,26,.1) 64%, rgba(6,11,26,0) 72%, rgba(6,11,26,.35) 90%, var(--abyss) 100%); }
         .hero .wrap { padding-bottom: 96px; }
         .hero h1, .hero .hero-sub { text-shadow: 0 1px 24px rgba(6,11,26,.45); }
-        .hero .hero-sub { color: #D3D9E8; }
+        .hero .hero-sub { color: #E2E6F0; }
+        .hero .btn.quiet { background: rgba(6,11,26,.38); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); box-shadow: inset 0 0 0 1px rgba(243,237,227,.4); }
+        .hero .btn.quiet:hover { box-shadow: inset 0 0 0 1px var(--shell); }
         .hero-spacer { flex: 1 1 auto; min-height: clamp(160px, 26vw, 320px); }
         h2 { font-size: clamp(24px, 3.4vw, 30px); line-height: 1.15; letter-spacing: -0.015em; }
         .panel { border: 1px solid var(--line); border-radius: 16px; background: var(--deep); padding: 32px 28px; }
