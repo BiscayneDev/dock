@@ -11,12 +11,26 @@ vi.mock('@/lib/memory/embeddings', () => ({
   currentEmbeddingModel: () => 'test-model',
 }))
 
+// spectrum_identities lookup: by default resolves to NO bound user (guest chat).
+// Tests set a bound user via mockIdentity(userId).
+let identity: { data: { user_id: string }[] | null; error: unknown } = { data: [], error: null }
+function identityQuery() {
+  const q = {
+    select: () => q,
+    eq: () => q,
+    not: () => q,
+    limit: () => Promise.resolve(identity),
+  }
+  return q
+}
+
 import {
   cleanFacts,
   cleanProfile,
   loadMemoryContext,
   mergeFacts,
   backfillEmbeddings,
+  resolveUserId,
   withTimeout,
   looksSecret,
   parseJsonObject,
@@ -27,6 +41,8 @@ import {
 beforeEach(() => {
   rpcMock.mockReset()
   fromMock.mockReset()
+  fromMock.mockReturnValue(identityQuery())
+  identity = { data: [], error: null }
 })
 
 describe('looksSecret', () => {
@@ -109,13 +125,31 @@ describe('loadMemoryContext', () => {
   })
 })
 
+describe('resolveUserId', () => {
+  it('returns the bound user id', async () => {
+    identity = { data: [{ user_id: 'u-1' }], error: null }
+    await expect(resolveUserId('chat-9')).resolves.toBe('u-1')
+  })
+  it('returns null for guest chats and on lookup errors', async () => {
+    await expect(resolveUserId('guest-chat')).resolves.toBeNull()
+    identity = { data: null, error: { message: 'boom' } }
+    await expect(resolveUserId('chat-9')).resolves.toBeNull()
+  })
+})
+
 describe('updateMemory', () => {
-  it('is a no-op when no update is due', async () => {
+  it('is a no-op when no update is due (guest chat keeps chat_guid claim)', async () => {
     rpcMock.mockResolvedValue({ data: [], error: null })
     await updateMemory('chat-1')
     expect(rpcMock).toHaveBeenCalledTimes(1)
     expect(rpcMock).toHaveBeenCalledWith('claim_memory_update', { p_chat_guid: 'chat-1', p_every: 10 })
-    expect(fromMock).not.toHaveBeenCalled()
+  })
+  it('is a no-op when no update is due (bound chat claims at user level)', async () => {
+    identity = { data: [{ user_id: 'u-1' }], error: null }
+    rpcMock.mockResolvedValue({ data: [], error: null })
+    await updateMemory('chat-1')
+    expect(rpcMock).toHaveBeenCalledTimes(1)
+    expect(rpcMock).toHaveBeenCalledWith('claim_user_memory_update', { p_user_id: 'u-1', p_chat_guid: 'chat-1', p_every: 10 })
   })
 })
 
