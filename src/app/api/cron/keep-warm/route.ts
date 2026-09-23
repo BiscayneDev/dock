@@ -24,14 +24,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL
     if (appUrl) {
         try {
-            // Unsigned on purpose: 401 is expected — the warm-up is the app
-            // init the route performs before verification.
+            // Unsigned on purpose: the SDK rejects it (400, or 401 on older
+            // builds). The warm-up is the app init the route performs before
+            // verification, so any rejection means the function is warm.
             const res = await fetch(`${appUrl}/api/spectrum/webhook`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: '{}',
             })
-            webhookWarm = res.status === 401
+            webhookWarm = res.status === 400 || res.status === 401
         } catch (err) {
             console.error('webhook warm failed:', err instanceof Error ? err.message : String(err))
         }
