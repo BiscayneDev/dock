@@ -34,17 +34,17 @@ describe('getSpectrumConfig (fail closed)', () => {
   }
 
   it('throws when SPECTRUM_WEBHOOK_SECRET is missing', () => {
-    expect(() => getSpectrumConfig({ ...base } as NodeJS.ProcessEnv)).toThrow(/SPECTRUM_WEBHOOK_SECRET/)
+    expect(() => getSpectrumConfig({ ...base } as unknown as NodeJS.ProcessEnv)).toThrow(/SPECTRUM_WEBHOOK_SECRET/)
   })
 
   it('throws when project credentials are missing', () => {
     expect(() =>
-      getSpectrumConfig({ SPECTRUM_WEBHOOK_SECRET: 'whsec' } as NodeJS.ProcessEnv)
+      getSpectrumConfig({ SPECTRUM_WEBHOOK_SECRET: 'whsec' } as unknown as NodeJS.ProcessEnv)
     ).toThrow(/SPECTRUM_PROJECT_ID/)
   })
 
   it('returns the config when all three are set', () => {
-    const cfg = getSpectrumConfig({ ...base, SPECTRUM_WEBHOOK_SECRET: 'whsec' } as NodeJS.ProcessEnv)
+    const cfg = getSpectrumConfig({ ...base, SPECTRUM_WEBHOOK_SECRET: 'whsec' } as unknown as NodeJS.ProcessEnv)
     expect(cfg.webhookSecret).toBe('whsec')
   })
 })
