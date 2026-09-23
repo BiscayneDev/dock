@@ -20,6 +20,7 @@ import {
     type HistoryMessage,
 } from '@/spectrum/store'
 import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
+import { recordUsage, spendToolFor, type GatewayUsage } from './metering'
 import { capabilitiesFor, guestCapabilities, guestToolContext, liveInfoTools, loadImessageToolContext, toolsFor } from './imessage-tools'
 import { EMPTY_MEMORY, loadMemoryContext, renderMemoryBlock, updateMemory } from './memory'
 import { FILE_NUDGE, fileToolsFor, stripFileMarkers, type MadeFile } from '@/lib/files/tool'
@@ -350,9 +351,13 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         const fileTools = toolCtx ? fileToolsFor() : null
         // Unbound chats still get live info (weather, web search): public
         // data only, run against an empty context with no account tokens.
+        // Every chat can ask what it has spent; the owner sees all chats.
+        const spendTool = spendToolFor(chatGuid, role === 'owner')
         const tools = toolCtx
-            ? [...toolsFor(toolCtx), ...(actions?.tools ?? []), ...(fileTools?.tools ?? [])]
-            : liveInfoTools()
+            ? [...toolsFor(toolCtx), ...(actions?.tools ?? []), ...(fileTools?.tools ?? []), spendTool]
+            : [...liveInfoTools(), spendTool]
+        const usage: GatewayUsage[] = []
+        const onUsage = (u: GatewayUsage) => usage.push(u)
         const runCtx = toolCtx ?? guestToolContext()
         if (tools.length > 0) {
             const toolOpts = {
@@ -361,8 +366,9 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 model: SHIPYARD_MODEL,
                 facts,
                 includeOpener,
-                capabilities: toolCtx ? capabilitiesFor(toolCtx) : guestCapabilities(),
+                capabilities: { ...(toolCtx ? capabilitiesFor(toolCtx) : guestCapabilities()), spend: true },
                 memory: memoryBlock,
+                onUsage,
             }
             const r = await chatWithTools(full, toolOpts, tools, runCtx)
             reply = r.reply
@@ -393,6 +399,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 facts,
                 includeOpener,
                 memory: memoryBlock,
+                onUsage,
             })
         }
         const tChatEnd = Date.now()
@@ -420,6 +427,9 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 iterations,
             })}`
         )
+        // After the reply is out: meter this turn's gateway calls. Errors are
+        // logged, never surfaced; awaited so serverless doesn't drop the write.
+        await recordUsage(chatGuid, 'reply', usage).catch((err) => logErr('usage record failed', err))
         // After the reply is out: refresh memory (no-op unless due).
         await updateMemory(chatGuid).catch((err) => logErr('memory update failed', err))
     } catch (err) {
