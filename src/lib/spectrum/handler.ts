@@ -22,7 +22,7 @@ import { chat, chatWithTools, wantsGoogle, wantsWallet, isContactCardRequest, MA
 import { capabilitiesFor, loadImessageToolContext, toolsFor } from './imessage-tools'
 import { EMPTY_MEMORY, loadMemoryContext, renderMemoryBlock, updateMemory } from './memory'
 import { fileToolsFor, type MadeFile } from '@/lib/files/tool'
-import { attachment } from 'spectrum-ts'
+import { sendFileWithPreview } from '@/lib/files/send'
 import { actionToolsFor, cancelPendingActions, executePendingAction, hasPendingAction, parseConfirmation, renderProposal } from './actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { dinghyContactCard } from './contact-card'
@@ -89,7 +89,7 @@ function stopTyping(space: InboundSpace): void {
 /** Native attachment; on failure, fall back to the signed link as text. */
 async function sendFile(space: InboundSpace, chatGuid: string, file: MadeFile): Promise<void> {
     try {
-        await (space as ContentSender).send(attachment(file.bytes, { name: file.filename, mimeType: file.mimeType }))
+        await sendFileWithPreview(space as ContentSender, file)
         await saveMessage(chatGuid, 'assistant', `[sent file: ${file.filename}]`).catch((err) => logErr('message save failed', err))
     } catch (err) {
         logErr('file send failed', err)

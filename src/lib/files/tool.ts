@@ -25,6 +25,7 @@ const MAX_BODY_CHARS = 60_000
 export interface MadeFile extends RenderedFile {
     format: FileFormat
     title: string
+    subtitle?: string
     /** Signed Storage link, or null when the upload failed. */
     link: string | null
 }
@@ -97,7 +98,7 @@ export function fileToolsFor(): FileToolset {
             } catch (err) {
                 console.error('[dinghy] file upload failed', err instanceof Error ? err.message : err)
             }
-            made.push({ ...file, format: parsed.format, title: parsed.doc.title, link })
+            made.push({ ...file, format: parsed.format, title: parsed.doc.title, subtitle: parsed.doc.subtitle, link })
             return {
                 success: true,
                 data: {
