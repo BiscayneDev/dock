@@ -16,8 +16,6 @@ export const MUTE_ACK = 'ok, mornings muted. say "unmute mornings" any time to b
 export const UNMUTE_ACK = 'mornings are back on — expect the next briefing around 8.'
 export const NO_BOUND_ACCOUNT_ACK = "no account is connected to this chat, so there's no briefing to mute."
 
-const MUTE_RE = /^unmute\b|\bunmute mornings\b/i
-
 /**
  * Whether this chat should receive today's briefing. A settings row wins;
  * no row means default-on (the caller has already checked Google).

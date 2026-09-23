@@ -46,6 +46,8 @@ import {
 } from './beta-gate'
 import { claimInboundDelivery, enqueueOutbox, markOutboxFailed, markOutboxSent, type OutboxKind } from './outbox'
 import { handleMuteIntent } from './briefing'
+import { buildIcs } from './ics'
+import { attachment } from 'spectrum-ts'
 
 export interface InboundSpace {
     /** Webhook SDK space objects carry the chat identifier as `id`. */
@@ -107,6 +109,24 @@ function startTypingReTap(space: InboundSpace): ReturnType<typeof setInterval> {
 function stopTypingReTap(space: InboundSpace, handle: ReturnType<typeof setInterval> | null): void {
     if (handle) clearInterval(handle)
     stopTyping(space)
+}
+
+/** Native .ics attachment for a just-confirmed calendar invite. Best-effort:
+ *  a failure is logged, never surfaced into the reply path. */
+async function sendIcsAttachment(space: InboundSpace, payload: Record<string, unknown>): Promise<void> {
+    const summary = typeof payload.summary === 'string' ? payload.summary : 'event'
+    const start = typeof payload.start === 'string' ? payload.start : ''
+    const end = typeof payload.end === 'string' ? payload.end : start
+    if (!start) return
+    const attendees = Array.isArray(payload.attendees) ? payload.attendees.filter((a): a is string => typeof a === 'string' && a.includes('@')) : []
+    const ics = buildIcs({
+        summary,
+        start,
+        end,
+        attendees,
+        location: typeof payload.location === 'string' ? payload.location : undefined,
+    })
+    await (space as ContentSender).send(attachment(ics, { name: 'event.ics', mimeType: 'text/calendar' }))
 }
 
 /** Enqueue-then-send: the row exists before the attempt, so a kill or a
@@ -400,6 +420,10 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 await sendConfirmedReaction(message, () => sendText(space, chatGuid, 'reply', '👍')).catch((err) =>
                     logErr('confirmation reaction failed', err)
                 )
+                // .ics copy of the event the user just confirmed (C5).
+                if (executed.kind === 'gcal_create_invite' && executed.payload) {
+                    await sendIcsAttachment(space, executed.payload).catch((err) => logErr('ics attachment failed', err))
+                }
             }
             return
         }
