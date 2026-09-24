@@ -31,7 +31,7 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 
 ## Memory
 
-Dock has a persistent memory layer on top of the raw message history:
+Dinghy has a persistent memory layer on top of the raw message history:
 
 - **Raw messages** live in Supabase and are the source of truth — rows are never deleted. Older messages are marked `compacted` during summarization but stay searchable.
 - **Background fact extractor**: every ~10 messages, a lightweight extractor pulls durable facts out of the conversation and writes them to the `memories` table (new facts supersede outdated ones).

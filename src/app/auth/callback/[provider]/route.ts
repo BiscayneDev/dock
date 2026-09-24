@@ -212,7 +212,7 @@ async function handleGoogleConnectCallback(
     // We mark the attempt terminal and require a fresh connect token.
     const result = await exchangeGoogleCode(code)
 
-    // Bind the chat identity to a Dock user before storing tokens.
+    // Bind the chat identity to a Dinghy user before storing tokens.
     let userId: string | null = null
     if (connect.platform === 'imessage') {
       userId = await bindSpectrumIdentity(connect.chatId)

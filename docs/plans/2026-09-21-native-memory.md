@@ -1,8 +1,8 @@
-# Dock Native Memory Layer — Implementation Plan
+# Dinghy Native Memory Layer — Implementation Plan
 
 > **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task.
 
-**Goal:** Replace Dock's lossy 50-message window + flat JSON preferences with an in-house memory layer on Supabase: semantic+keyword recall over full history, durable entity/fact memories with superseding, and a dynamic profile injected into the system prompt — zero recurring vendor cost.
+**Goal:** Replace Dinghy's lossy 50-message window + flat JSON preferences with an in-house memory layer on Supabase: semantic+keyword recall over full history, durable entity/fact memories with superseding, and a dynamic profile injected into the system prompt — zero recurring vendor cost.
 
 **Architecture:** New `memories` table with pgvector embeddings + a `match_memories` RPC. Facts extracted in the background by a cheap LLM after each turn (replacing the `user_preferences` JSON extractor). A `memory_search` / `memory_forget` tool pair exposes recall to the agent. Prompt build injects top-k relevant memories + a static profile section. Summarization stops deleting raw messages (marks `compacted=true` instead).
 

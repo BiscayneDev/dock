@@ -1,5 +1,5 @@
 /**
- * iMessage tool context: resolve a Spectrum chat guid to its bound Dock
+ * iMessage tool context: resolve a Spectrum chat guid to its bound Dinghy
  * user + decrypted Google tokens, and the read-only tool set offered on
  * the iMessage path.
  *

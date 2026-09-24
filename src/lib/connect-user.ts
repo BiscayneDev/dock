@@ -1,7 +1,7 @@
 import { createServerClient } from '@/lib/supabase/server'
 
 /**
- * Look up (or lazily create) the Dock user row for a Telegram id.
+ * Look up (or lazily create) the Dinghy user row for a Telegram id.
  * Used by the connect flow, which runs outside the Telegram webhook and
  * therefore cannot reuse the orchestrator's message-scoped getOrCreateUser.
  */

@@ -1,4 +1,4 @@
-// Quick smoke test: prove Dock's getLLMProvider() routes through UsePod and
+// Quick smoke test: prove Dinghy's getLLMProvider() routes through UsePod and
 // the response makes it back. Run from the dock repo root:
 //
 //   LLM_PROVIDER=usepod USEPOD_TOKEN=<your-uuid> \
