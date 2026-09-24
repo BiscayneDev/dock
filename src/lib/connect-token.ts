@@ -25,7 +25,7 @@ export type ConnectPlatform = 'telegram' | 'imessage'
 
 /** Which account a connect token connects. Tokens are provider-bound: a
  *  google link can never start a paybox flow (enforced in begin_connect). */
-export type ConnectProvider = 'google' | 'paybox'
+export type ConnectProvider = 'google' | 'paybox' | 'github' | 'oura' | 'whoop'
 
 export interface ConnectTokenPayload {
   platform: ConnectPlatform

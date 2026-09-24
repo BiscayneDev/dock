@@ -11,21 +11,25 @@ import {
     ensureIdentity,
     isGoogleConnected,
     isPayboxConnected,
+    isGithubConnected,
+    isHealthConnected,
     loadFacts,
     loadHistory,
     saveMessage,
-    fileMarker,
     createConnectLink,
     type DinghyFact,
     type HistoryMessage,
 } from '@/spectrum/store'
-import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
+import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsGithub, wantsHealth, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { recordUsage, spendToolFor, type GatewayUsage } from './metering'
+import { allowanceUsedUpMessage, claimLimitNotice, isOverDailyAllowance } from '@/lib/allowance'
 import { capabilitiesFor, guestCapabilities, guestToolContext, liveInfoTools, loadImessageToolContext, toolsFor } from './imessage-tools'
+import { reminderToolsFor } from './reminders'
+import { payboxSigningToolsFor } from '@/lib/tools/paybox-signing'
 import { EMPTY_MEMORY, loadMemoryContext, renderMemoryBlock, updateMemory } from './memory'
 import { FILE_NUDGE, fileToolsFor, stripFileMarkers, type MadeFile } from '@/lib/files/tool'
-import { sendFileWithPreview } from '@/lib/files/send'
-import { actionToolsFor, cancelPendingActions, executePendingAction, hasPendingAction, parseConfirmation, renderProposal } from './actions'
+import { hostedHistoryLine, sendFileWithPreview, sendHostedFile } from '@/lib/files/send'
+import { actionToolsFor, cancelPendingActions, executePendingActionDetailed, hasPendingAction, lastLooseProposal, parseConfirmation, renderProposal, sendConfirmedReaction } from './actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { dinghyContactCard } from './contact-card'
 import { hitRateLimit, RATE_NOTICE } from './rate-limit'
@@ -42,6 +46,20 @@ import {
     type BetaRole,
 } from './beta-gate'
 import { claimInboundDelivery, enqueueOutbox, markOutboxFailed, markOutboxSent, type OutboxKind } from './outbox'
+import { briefableUserId, handleMuteIntent } from './briefing'
+import { isLocationAttachment, parseLocation, saveUserLocation } from './location'
+import {
+    forgetMatch,
+    handlePendingMemoryWipe,
+    isMemoryCommand,
+    parseForgetIntent,
+    renderMemoryReport,
+    requestMemoryWipe,
+    WIPE_PROMPT,
+} from './memory-commands'
+import { buildIcs } from './ics'
+import { interviewDirective, markOpenerAsked } from './interview'
+import { attachment } from 'spectrum-ts'
 
 export interface InboundSpace {
     /** Webhook SDK space objects carry the chat identifier as `id`. */
@@ -86,13 +104,62 @@ function stopTyping(space: InboundSpace): void {
         .catch((err) => logErr('typing stop failed', err))
 }
 
+/**
+ * Presence: the iMessage typing indicator decays after a few seconds, but
+ * multi-tool turns can run for a minute+. Re-tap typing every 5s while the
+ * turn runs. Never throws into the reply path: every tap is .catch'd, and
+ * stopTypingReTap is safe to call any number of times.
+ */
+function startTypingReTap(space: InboundSpace): ReturnType<typeof setInterval> {
+    startTyping(space)
+    const handle = setInterval(() => startTyping(space), 5_000)
+    // Keep the interval from holding the process open (serverless tails).
+    handle.unref?.()
+    return handle
+}
+
+function stopTypingReTap(space: InboundSpace, handle: ReturnType<typeof setInterval> | null): void {
+    if (handle) clearInterval(handle)
+    stopTyping(space)
+}
+
+/** Native .ics attachment for a just-confirmed calendar invite. Best-effort:
+ *  a failure is logged, never surfaced into the reply path. */
+async function sendIcsAttachment(space: InboundSpace, payload: Record<string, unknown>): Promise<void> {
+    const summary = typeof payload.summary === 'string' ? payload.summary : 'event'
+    const start = typeof payload.start === 'string' ? payload.start : ''
+    const end = typeof payload.end === 'string' ? payload.end : start
+    if (!start) return
+    const attendees = Array.isArray(payload.attendees) ? payload.attendees.filter((a): a is string => typeof a === 'string' && a.includes('@')) : []
+    const ics = buildIcs({
+        summary,
+        start,
+        end,
+        attendees,
+        location: typeof payload.location === 'string' ? payload.location : undefined,
+    })
+    await (space as ContentSender).send(attachment(ics, { name: 'event.ics', mimeType: 'text/calendar' }))
+}
+
 /** Enqueue-then-send: the row exists before the attempt, so a kill or a
  *  send failure is always retried by the sweep. */
 /** Native attachment; on failure, fall back to the signed link as text. */
 async function sendFile(space: InboundSpace, chatGuid: string, file: MadeFile): Promise<void> {
+    if (file.hosted) {
+        const hosted = { ...file, hosted: file.hosted }
+        const line = hostedHistoryLine(hosted)
+        try {
+            await sendHostedFile(space as ContentSender, hosted)
+        } catch (err) {
+            logErr('page send failed', err)
+            await sendText(space, chatGuid, 'reply', `${file.title}: ${file.hosted.url}`)
+        }
+        await saveMessage(chatGuid, 'assistant', line).catch((err) => logErr('message save failed', err))
+        return
+    }
     try {
         await sendFileWithPreview(space as ContentSender, file)
-        await saveMessage(chatGuid, 'assistant', fileMarker(file.filename)).catch((err) => logErr('message save failed', err))
+        await saveMessage(chatGuid, 'assistant', `[file: ${file.title}] sent as a ${file.format} attachment`).catch((err) => logErr('message save failed', err))
     } catch (err) {
         logErr('file send failed', err)
         const fallback = file.link
@@ -145,7 +212,42 @@ async function handleGatedMessage(space: InboundSpace, chatGuid: string, text: s
     }
 }
 
+export const LOCATION_ACK = "got it. I'll use that for your morning weather."
+
+/**
+ * A shared location (iMessage "Send My Current Location", a dropped maps
+ * pin, or a bare maps link) from a bound chat becomes that person's current
+ * spot for the morning brief. Returns true when the message was handled.
+ * Only the chat's own bound user is updated, and only from their own thread.
+ */
+async function maybeHandleLocationShare(space: InboundSpace, message: InboundMessage): Promise<boolean> {
+    const c = message.content as { type: string; name?: string; mimeType?: string; read?: () => Promise<Buffer>; url?: string; text?: string }
+    let body: string | null = null
+    if (c.type === 'attachment' && c.read && isLocationAttachment(c.name ?? '', c.mimeType ?? '')) {
+        body = (await c.read().catch(() => Buffer.from(''))).toString('utf8')
+    } else if (c.type === 'richlink' && typeof c.url === 'string') {
+        body = c.url
+    } else if (c.type === 'text' && typeof c.text === 'string' && /^\s*\S*(maps\.apple\.com|google\.[a-z.]+\/maps|geo:)\S*\s*$/i.test(c.text)) {
+        body = c.text
+    }
+    if (!body) return false
+    const loc = parseLocation(body)
+    if (!loc) return false
+    const chatGuid = resolveChatGuid(space)
+    if (!chatGuid) return true
+    if (message.id && !(await claimInboundDelivery(message.id, chatGuid))) return true
+    const userId = await briefableUserId(chatGuid).catch(() => null)
+    if (!userId) return true
+    if (await saveUserLocation(userId, loc)) await sendText(space, chatGuid, 'reply', LOCATION_ACK)
+    return true
+}
+
 export async function handleSpectrumMessage(space: InboundSpace, message: InboundMessage): Promise<void> {
+    try {
+        if (await maybeHandleLocationShare(space, message)) return
+    } catch (err) {
+        logErr('location share failed', err)
+    }
     if (message.content.type !== 'text' || !message.content.text) return
     const text = message.content.text.trim()
     if (!text) return
@@ -246,6 +348,20 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     // profile. dinghy_facts are product-wide context (every chat has them),
     // so they no longer suppress it.
     const includeOpener = history.length === 0 && !memory.profile
+    // Day-1 interview (F2): when the opener's answer arrives, at most two
+    // short follow-ups go out over separate turns (skipped if already
+    // answered); answers land as profile facts via the memory write path.
+    // State failure ends the interview, never the reply.
+    if (includeOpener) {
+        await markOpenerAsked(chatGuid).catch((err) => logErr('interview opener mark failed', err))
+    }
+    const interviewLine =
+        history.length > 0
+            ? await interviewDirective(chatGuid, history[0]?.content ?? '', text).catch((err) => {
+                  logErr('interview step failed', err)
+                  return null
+              })
+            : null
 
     // First-ever message in this chat: onboarding contact card. DB-backed
     // (was a process-memory Set on the VPS) so it works statelessly. Our own
@@ -279,6 +395,47 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         return
     }
 
+    // GitHub asked about while unconnected: one-use GitHub connect link.
+    if (wantsGithub(text) && !(await isGithubConnected(chatGuid).catch(() => false))) {
+        try {
+            const link = await createConnectLink(chatGuid, text, 'github')
+            await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+            await sendText(
+                space,
+                chatGuid,
+                'connect_link',
+                "github isn't connected yet - tap below to connect it (i'll only read repos, issues and PRs) and i'll take it from there:"
+            )
+            await sendText(space, chatGuid, 'connect_link', link)
+        } catch (err) {
+            logErr('github connect link failed', err)
+            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
+        }
+        return
+    }
+
+    // Sleep/recovery asked about with no wearable connected: Oura + WHOOP links.
+    if (wantsHealth(text) && !(await isHealthConnected(chatGuid).catch(() => false))) {
+        try {
+            const oura = await createConnectLink(chatGuid, text, 'oura')
+            const whoop = await createConnectLink(chatGuid, text, 'whoop')
+            await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+            await sendText(
+                space,
+                chatGuid,
+                'connect_link',
+                "no wearable connected yet - tap whichever you use (read-only: sleep, recovery, activity) and i'll take it from there. oura:"
+            )
+            await sendText(space, chatGuid, 'connect_link', oura)
+            await sendText(space, chatGuid, 'connect_link', 'whoop:')
+            await sendText(space, chatGuid, 'connect_link', whoop)
+        } catch (err) {
+            logErr('health connect link failed', err)
+            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
+        }
+        return
+    }
+
     // Wallet asked about while PayBox is unconnected: one-use PayBox connect link.
     if (wantsWallet(text) && !(await isPayboxConnected(chatGuid).catch(() => false))) {
         try {
@@ -298,6 +455,76 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         return
     }
 
+    // Morning briefing mute intent: the digest footer's exact opt-out
+    // ("mute mornings"), plus its mirror "unmute mornings". Checked before
+    // the pending-action parse so it works even with a draft open.
+    const muteAck = await handleMuteIntent(chatGuid, text).catch((err) => {
+        logErr('briefing mute intent failed', err)
+        return null
+    })
+    if (muteAck) {
+        await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+        await sendText(space, chatGuid, 'reply', muteAck)
+        await saveMessage(chatGuid, 'assistant', muteAck).catch((err) => logErr('message save failed', err))
+        return
+    }
+
+    // /memory transparency (F1): show exactly what is remembered. Runs
+    // before the pending-action parse so it works even with a draft open.
+    if (isMemoryCommand(text)) {
+        await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+        try {
+            const report = await renderMemoryReport(chatGuid)
+            await sendText(space, chatGuid, 'reply', report)
+            await saveMessage(chatGuid, 'assistant', report).catch((err) => logErr('message save failed', err))
+        } catch (err) {
+            logErr('memory report failed', err)
+            await sendText(space, chatGuid, 'error_notice', "couldn't pull your memories up right now - try again in a moment.")
+        }
+        return
+    }
+
+    // An open "wipe everything" gate (F1) resolves on the very next message:
+    // only an explicit YES wipes; anything else cancels and flows on.
+    const wipeReply = await handlePendingMemoryWipe(chatGuid, text).catch((err) => {
+        logErr('memory wipe gate failed', err)
+        return null
+    })
+    if (wipeReply !== null) {
+        await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+        await sendText(space, chatGuid, 'reply', wipeReply)
+        await saveMessage(chatGuid, 'assistant', wipeReply).catch((err) => logErr('message save failed', err))
+        return
+    }
+
+    // "forget X" (F1): single facts drop right away (soft delete, reversible);
+    // "forget everything" opens the explicit-YES wipe gate instead.
+    const forget = parseForgetIntent(text)
+    if (forget) {
+        await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+        let out: string
+        if (forget.kind === 'all') {
+            try {
+                await requestMemoryWipe(chatGuid)
+                out = WIPE_PROMPT
+            } catch (err) {
+                logErr('memory wipe request failed', err)
+                out = "couldn't open the wipe flow - try again in a moment."
+            }
+        } else {
+            try {
+                const n = await forgetMatch(chatGuid, forget.match)
+                out = n > 0 ? `forgot it${n > 1 ? ` (${n} things actually)` : ''}.` : "nothing like that on file - check '/memory' to see what i've got."
+            } catch (err) {
+                logErr('memory forget failed', err)
+                out = "couldn't forget that just now - try again in a moment."
+            }
+        }
+        await sendText(space, chatGuid, 'reply', out)
+        await saveMessage(chatGuid, 'assistant', out).catch((err) => logErr('message save failed', err))
+        return
+    }
+
     // An open draft (email / invite) runs only on a clear yes as the very
     // next message. "no" or anything else cancels it; anything else then
     // goes through the normal path as a fresh request.
@@ -306,15 +533,27 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         if (answer === 'yes') {
             await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
             let out: string
+            let executed: Awaited<ReturnType<typeof executePendingActionDetailed>> | null = null
             try {
                 const ctx = await loadImessageToolContext(chatGuid).catch(() => null)
-                out = await executePendingAction(chatGuid, ctx)
+                executed = await executePendingActionDetailed(chatGuid, ctx)
+                out = executed.text
             } catch (err) {
                 logErr('pending action failed', err)
                 out = "that didn't go through - try again in a moment."
             }
             await sendText(space, chatGuid, 'reply', out)
             await saveMessage(chatGuid, 'assistant', out).catch((err) => logErr('message save failed', err))
+            // 👍 on the confirmation itself when the action actually ran.
+            if (executed?.ok) {
+                await sendConfirmedReaction(message, () => sendText(space, chatGuid, 'reply', '👍')).catch((err) =>
+                    logErr('confirmation reaction failed', err)
+                )
+                // .ics copy of the event the user just confirmed (C5).
+                if (executed.kind === 'gcal_create_invite' && executed.payload) {
+                    await sendIcsAttachment(space, executed.payload).catch((err) => logErr('ics attachment failed', err))
+                }
+            }
             return
         }
         await cancelPendingActions(chatGuid).catch((err) => logErr('pending action cancel failed', err))
@@ -332,11 +571,27 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         return
     }
 
+    // Daily usage allowance: invisible until it matters. Everything above
+    // (connect links, memory commands, mutes, confirmations) is free
+    // deterministic work; the model loop below is what costs. At the
+    // limit: one plain message, then quiet until midnight their time.
+    // Fails open — a broken meter never mutes the product.
+    const allowance = await isOverDailyAllowance({ chatGuid })
+    if (allowance.over) {
+        await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+        if (await claimLimitNotice(chatGuid)) {
+            const notice = allowanceUsedUpMessage()
+            await sendText(space, chatGuid, 'reply', notice)
+            await saveMessage(chatGuid, 'assistant', notice).catch((err) => logErr('message save failed', err))
+        }
+        return
+    }
+
     const full: Message[] = [...history, { role: 'user', content: text }]
     await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
 
-    startTyping(space)
     const tChatStart = Date.now()
+    const typingHandle = startTypingReTap(space)
     try {
         // Read tools only for chats bound to a user with Google/PayBox connected;
         // everyone else gets the plain conversational path.
@@ -353,9 +608,11 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         // data only, run against an empty context with no account tokens.
         // Every chat can ask what it has spent; the owner sees all chats.
         const spendTool = spendToolFor(chatGuid, role === 'owner')
+        // Reminders for every chat; they only ever text this chat back.
+        const reminderTools = reminderToolsFor(chatGuid, toolCtx?.userId ?? null, toolCtx?.timezone)
         const tools = toolCtx
-            ? [...toolsFor(toolCtx), ...(actions?.tools ?? []), ...(fileTools?.tools ?? []), spendTool]
-            : [...liveInfoTools(), spendTool]
+            ? [...toolsFor(toolCtx), ...(actions?.tools ?? []), ...(fileTools?.tools ?? []), spendTool, ...reminderTools, ...(toolCtx.tokens.paybox ? payboxSigningToolsFor(chatGuid) : [])]
+            : [...liveInfoTools(), spendTool, ...reminderTools]
         const usage: GatewayUsage[] = []
         const onUsage = (u: GatewayUsage) => usage.push(u)
         const runCtx = toolCtx ?? guestToolContext()
@@ -366,8 +623,9 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 model: SHIPYARD_MODEL,
                 facts,
                 includeOpener,
-                capabilities: { ...(toolCtx ? capabilitiesFor(toolCtx) : guestCapabilities()), spend: true },
+                capabilities: { ...(toolCtx ? capabilitiesFor(toolCtx) : guestCapabilities()), spend: true, reminders: true },
                 memory: memoryBlock,
+                interviewLine: interviewLine ?? undefined,
                 onUsage,
             }
             const r = await chatWithTools(full, toolOpts, tools, runCtx)
@@ -399,6 +657,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 facts,
                 includeOpener,
                 memory: memoryBlock,
+                interviewLine: interviewLine ?? undefined,
                 onUsage,
             })
         }
@@ -406,13 +665,13 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         await sendText(space, chatGuid, 'reply', reply)
         await saveMessage(chatGuid, 'assistant', reply).catch((err) => logErr('message save failed', err))
         // The exact draft, rendered by the server, as its own bubble.
-        const proposal = actions?.proposal()
+        const proposal = actions?.proposal() ?? lastLooseProposal()
         if (proposal) {
             const preview = renderProposal(proposal)
             await sendText(space, chatGuid, 'reply', preview)
             await saveMessage(chatGuid, 'assistant', preview).catch((err) => logErr('message save failed', err))
         }
-        // Files made this turn go out as native attachments after the text.
+        // Files made this turn go out after the text: a file link, or an attachment.
         for (const file of fileTools?.files() ?? []) await sendFile(space, chatGuid, file)
         // Warm-path latency ledger: read these from the function logs.
         console.log(
@@ -436,6 +695,6 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         logErr('gateway call failed', err)
         await sendText(space, chatGuid, 'error_notice', 'Something went wrong on my end. Try again in a moment.')
     } finally {
-        stopTyping(space)
+        stopTypingReTap(space, typingHandle)
     }
 }

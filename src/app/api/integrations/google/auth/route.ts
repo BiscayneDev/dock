@@ -29,7 +29,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // --- Session flow (The Harbor / onboarding web UI) ---
   const session = await getSession()
   if (!session) {
-    return NextResponse.redirect(`${appUrl()}/onboarding`)
+    return NextResponse.redirect(`${appUrl()}/login`)
   }
 
   // CSRF protection: bind this browser session to the OAuth round trip.

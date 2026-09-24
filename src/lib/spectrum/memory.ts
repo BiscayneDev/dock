@@ -1,5 +1,5 @@
 /**
- * Dinghy memory (migration 024). Three layers, all keyed by chat_guid:
+ * Dinghy memory (migrations 024/027/035). Three layers:
  *
  *   profile    one short document about the person, rewritten over time,
  *              always in the prompt
@@ -10,8 +10,12 @@
  *              relevance to the current message (pgvector similarity,
  *              topped up newest-first; newest-first only without a key)
  *
- * Summaries carry vectors too (migration 027): older summaries that match
- * the current message are pulled in alongside the latest two.
+ * Scope: when the chat is bound to a Dock user via `spectrum_identities`
+ * (migration 011), memory is USER-level — facts learned in one chat are
+ * retrievable in every other chat of the same person (migration 035 RPCs).
+ * Unbound/guest chats stay chat_guid-isolated on the 024 RPCs. Summaries
+ * stay per-chat (they describe one conversation) but are recalled across
+ * the user's chats when bound. Each fact row is tagged with source_channel.
  *
  * Reads happen before the reply (one RPC + one embed). Writes happen after
  * the reply is sent, at most once every UPDATE_EVERY messages, so memory
@@ -21,8 +25,18 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { embedText, currentEmbeddingModel } from '@/lib/memory/embeddings'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
+import { cleanPlans, isAbsence, loadUpcomingPlans, recentFiles, renderFileLine, renderPlan, savePlans } from './plans'
 
-export const UPDATE_EVERY = 10
+/**
+ * Extraction cadence (F3 audit + fix): UPDATE_EVERY used to be 10, so a
+ * stated personal fact could sit un-extracted for ten messages. Lowered to
+ * 4 — at most a few messages of delay — while keeping the atomic
+ * claim/lease semantics: the claim still fires at most once per window
+ * (one cheap extraction call), and the extraction window still spans the
+ * full gap since the previous claim (total - previously_seen), so nothing
+ * is missed by the tighter cadence.
+ */
+export const UPDATE_EVERY = 4
 export const HISTORY_WINDOW = 20
 const SUMMARIZE_MIN = 20
 const SUMMARIZE_MAX = 60
@@ -37,9 +51,13 @@ export interface MemoryContext {
     profile: string
     summaries: string[]
     facts: string[]
+    /** Upcoming trips/events (migration 046), rendered one per line. */
+    plans?: string[]
+    /** Files Dinghy made for this person, newest first, rendered one per line. */
+    files?: string[]
 }
 
-export const EMPTY_MEMORY: MemoryContext = { profile: '', summaries: [], facts: [] }
+export const EMPTY_MEMORY: MemoryContext = { profile: '', summaries: [], facts: [], plans: [], files: [] }
 
 // ── Secret guard: nothing that looks like a credential is ever stored. ──────
 
@@ -65,6 +83,8 @@ export function renderMemoryBlock(m: MemoryContext): string {
     if (m.summaries.length) {
         parts.push(`Earlier conversation (summaries, oldest first):\n${m.summaries.map((s) => `- ${s.slice(0, SUMMARY_CAP)}`).join('\n')}`)
     }
+    if (m.plans?.length) parts.push(`Upcoming plans (keep these in mind; update them when they change):\n${m.plans.map((p) => `- ${p}`).join('\n')}`)
+    if (m.files?.length) parts.push(`Files you made for them (newest first; recall_file opens one):\n${m.files.map((f) => `- ${f}`).join('\n')}`)
     if (m.facts.length) parts.push(`Possibly relevant memories:\n${m.facts.map((f) => `- ${f}`).join('\n')}`)
     if (!parts.length) return ''
     return (
@@ -74,22 +94,42 @@ export function renderMemoryBlock(m: MemoryContext): string {
     )
 }
 
+// ── Scope: chat_guid → user_id via the spectrum_identities binding ───────────
+
+/** Null for guest/unbound chats — their memory stays chat_guid-isolated. */
+export async function resolveUserId(chatGuid: string): Promise<string | null> {
+    const { data, error } = await createServerClient()
+        .from('spectrum_identities')
+        .select('user_id')
+        .eq('chat_guid', chatGuid)
+        .not('user_id', 'is', null)
+        .limit(1)
+    if (error) return null
+    const row = (data as { user_id: string }[] | null)?.[0]
+    return row?.user_id ?? null
+}
+
 // ── Read path ─────────────────────────────────────────────────────────────────
 
 export async function loadMemoryContext(chatGuid: string, query: string): Promise<MemoryContext> {
     const supabase = createServerClient()
+    const userId = await resolveUserId(chatGuid).catch(() => null)
     // One embedding per message, shared by fact and summary recall. Bounded
     // so a slow embeddings API never delays the reply.
     const embedding = query.trim().length >= 3 ? await withTimeout(embedText(query), EMBED_READ_TIMEOUT_MS).catch(() => null) : null
-    const [ctxRes, facts, older] = await Promise.all([
-        supabase.rpc('dinghy_memory_context', { p_chat_guid: chatGuid }),
-        relevantFacts(chatGuid, embedding).catch(() => [] as string[]),
-        relevantSummaries(chatGuid, embedding).catch(() => [] as string[]),
+    const ctxRpc = userId ? 'dinghy_user_memory_context' : 'dinghy_memory_context'
+    const ctxArgs = userId ? { p_user_id: userId } : { p_chat_guid: chatGuid }
+    const [ctxRes, facts, older, plans, files] = await Promise.all([
+        supabase.rpc(ctxRpc, ctxArgs),
+        relevantFacts(chatGuid, userId, embedding).catch(() => [] as string[]),
+        relevantSummaries(chatGuid, userId, embedding).catch(() => [] as string[]),
+        userId ? loadUpcomingPlans(userId).then((r) => r.map(renderPlan)).catch(() => [] as string[]) : Promise.resolve([] as string[]),
+        userId ? recentFiles(userId, 5).then((r) => r.map((f) => renderFileLine(f))).catch(() => [] as string[]) : Promise.resolve([] as string[]),
     ])
-    if (ctxRes.error) throw new Error(`dinghy_memory_context failed: ${ctxRes.error.message}`)
+    if (ctxRes.error) throw new Error(`${ctxRpc} failed: ${ctxRes.error.message}`)
     const d = (ctxRes.data ?? {}) as { profile?: string; summaries?: string[] }
     const latest = Array.isArray(d.summaries) ? d.summaries : []
-    return { profile: d.profile ?? '', summaries: [...older, ...latest], facts }
+    return { profile: d.profile ?? '', summaries: [...older, ...latest], facts, plans, files }
 }
 
 export const EMBED_READ_TIMEOUT_MS = 1500
@@ -117,18 +157,19 @@ export function mergeFacts(matched: { content: string; similarity: number }[], r
     return out
 }
 
-async function relevantFacts(chatGuid: string, embedding: number[] | null): Promise<string[]> {
+async function relevantFacts(chatGuid: string, userId: string | null, embedding: number[] | null): Promise<string[]> {
     const supabase = createServerClient()
+    const matchRpc = userId ? 'match_user_memories' : 'match_chat_memories'
+    const matchArgs = userId
+        ? { p_user_id: userId, p_embedding: JSON.stringify(embedding), p_model: currentEmbeddingModel(), p_limit: FACT_LIMIT }
+        : { p_chat_guid: chatGuid, p_embedding: JSON.stringify(embedding), p_model: currentEmbeddingModel(), p_limit: FACT_LIMIT }
     const [matchRes, recentRes] = await Promise.all([
         embedding
-            ? supabase.rpc('match_chat_memories', {
-                  p_chat_guid: chatGuid,
-                  p_embedding: JSON.stringify(embedding),
-                  p_model: currentEmbeddingModel(),
-                  p_limit: FACT_LIMIT,
-              })
+            ? supabase.rpc(matchRpc, matchArgs)
             : Promise.resolve({ data: [], error: null }),
-        supabase.rpc('recent_chat_memories', { p_chat_guid: chatGuid, p_limit: FACT_LIMIT }),
+        userId
+            ? supabase.rpc('recent_user_memories', { p_user_id: userId, p_limit: FACT_LIMIT })
+            : supabase.rpc('recent_chat_memories', { p_chat_guid: chatGuid, p_limit: FACT_LIMIT }),
     ])
     const matched = !matchRes.error && Array.isArray(matchRes.data) ? (matchRes.data as { content: string; similarity: number }[]) : []
     const recent = ((recentRes.data ?? []) as { content: string }[]).map((r) => r.content)
@@ -136,14 +177,13 @@ async function relevantFacts(chatGuid: string, embedding: number[] | null): Prom
 }
 
 /** Older summaries that match this message (the latest 2 are always included separately). */
-async function relevantSummaries(chatGuid: string, embedding: number[] | null): Promise<string[]> {
+async function relevantSummaries(chatGuid: string, userId: string | null, embedding: number[] | null): Promise<string[]> {
     if (!embedding) return []
-    const { data, error } = await createServerClient().rpc('match_chat_summaries', {
-        p_chat_guid: chatGuid,
-        p_embedding: JSON.stringify(embedding),
-        p_model: currentEmbeddingModel(),
-        p_limit: 2,
-    })
+    const rpc = userId ? 'match_user_summaries' : 'match_chat_summaries'
+    const args = userId
+        ? { p_user_id: userId, p_embedding: JSON.stringify(embedding), p_model: currentEmbeddingModel(), p_limit: 2 }
+        : { p_chat_guid: chatGuid, p_embedding: JSON.stringify(embedding), p_model: currentEmbeddingModel(), p_limit: 2 }
+    const { data, error } = await createServerClient().rpc(rpc, args)
     if (error || !Array.isArray(data)) return []
     return (data as { summary: string; last_at: string; similarity: number }[])
         .filter((r) => r.similarity >= SUMMARY_MIN_SIMILARITY)
@@ -204,7 +244,7 @@ export function cleanFacts(raw: unknown, existing: string[]): { content: string;
     for (const f of raw) {
         const content = typeof f?.content === 'string' ? f.content.trim() : ''
         const type = typeof f?.type === 'string' && VALID_TYPES.has(f.type) ? f.type : 'fact'
-        if (content.length < 4 || content.length > 300 || looksSecret(content)) continue
+        if (content.length < 4 || content.length > 300 || looksSecret(content) || isAbsence(content)) continue
         const key = content.toLowerCase()
         if (seen.has(key)) continue
         seen.add(key)
@@ -220,42 +260,39 @@ export function cleanProfile(raw: unknown): string | null {
     const lines = raw
         .split('\n')
         .map((l) => l.trimEnd())
-        .filter((l) => l.trim() && !looksSecret(l))
+        .filter((l) => l.trim() && !looksSecret(l) && !isAbsence(l))
     const text = lines.join('\n').slice(0, PROFILE_CAP).trim()
     return text || null
 }
 
 const PROFILE_SYSTEM = `You maintain memory for Dinghy, a personal assistant that texts with one person.
-Given the current profile, known facts, and recent messages, return ONLY JSON:
-{"profile": "...", "facts": [{"content": "...", "type": "fact|person|preference|org|event"}]}
-profile: the full updated profile of this person in short "- " lines (name, work, people in their life, preferences, ongoing plans). Rewrite it: keep what is still true, fix what changed, drop what is stale. Max ~15 lines.
+Given the current profile, known facts, known plans, and recent messages, return ONLY JSON:
+{"profile": "...", "facts": [{"content": "...", "type": "fact|person|preference|org|event"}], "plans": [{"title": "...", "kind": "trip|event|other", "starts_on": "YYYY-MM-DD or null", "ends_on": "YYYY-MM-DD or null", "places": ["..."], "people": ["..."], "details": "...", "source": "user|file|email|calendar"}]}
+profile: the full updated profile of this person in short "- " lines (name, work, people in their life, preferences). Rewrite it: keep what is still true, fix what changed, drop what is stale. Max ~15 lines. Trips and events go in plans, not the profile.
 facts: up to 5 NEW concrete, reusable facts from the recent messages not already known. Include dates for time-bound facts.
+plans: trips and events mentioned in the recent messages, new or changed (repeat the known title to update one). Keep dates, places, flights, hotels, reservations, and who is going word for word in details. Use absolute dates; today is {TODAY}.
+Only save what the person said, or what a source Dinghy read (their email, calendar, a file) actually showed; set source to match. Never save an absence or a failed lookup as memory: no "has not booked", "not on the calendar", "no emails found", "nothing scheduled". If a search came up empty, save nothing about it.
 Never include passwords, codes, keys, card or account numbers, or anything secret. Only facts about the person, never about Dinghy itself.`
 
 const SUMMARY_SYSTEM = `Summarize this stretch of a text conversation between a person and their assistant Dinghy in 2-4 plain sentences: what they talked about, decisions, and anything left open. Include dates when mentioned. Never include secrets, codes, or account numbers. Return ONLY JSON: {"summary": "..."}`
 
-async function storeFacts(chatGuid: string, facts: { content: string; type: string }[]): Promise<number> {
+export async function storeFacts(chatGuid: string, userId: string | null, sourceChannel: string, facts: { content: string; type: string }[]): Promise<number> {
     const supabase = createServerClient()
     let n = 0
     for (const f of facts) {
         const embedding = await embedText(f.content)
         if (embedding) {
-            const { data } = await supabase.rpc('match_chat_memories', {
-                p_chat_guid: chatGuid,
-                p_embedding: JSON.stringify(embedding),
-                p_model: currentEmbeddingModel(),
-                p_limit: 1,
-            })
+            const [matchRpc, matchArgs] = userId
+                ? ['match_user_memories', { p_user_id: userId, p_embedding: JSON.stringify(embedding), p_model: currentEmbeddingModel(), p_limit: 1 }]
+                : ['match_chat_memories', { p_chat_guid: chatGuid, p_embedding: JSON.stringify(embedding), p_model: currentEmbeddingModel(), p_limit: 1 }]
+            const { data } = await supabase.rpc(matchRpc as string, matchArgs)
             const top = (data as { similarity: number }[] | null)?.[0]
             if (top && top.similarity > DUPLICATE_SIMILARITY) continue
         }
-        const { error } = await supabase.rpc('add_chat_memory', {
-            p_chat_guid: chatGuid,
-            p_type: f.type,
-            p_content: f.content,
-            p_embedding: embedding ? JSON.stringify(embedding) : null,
-            p_model: embedding ? currentEmbeddingModel() : null,
-        })
+        const [addRpc, addArgs] = userId
+            ? ['add_user_memory', { p_user_id: userId, p_chat_guid: chatGuid, p_channel: sourceChannel, p_type: f.type, p_content: f.content, p_embedding: embedding ? JSON.stringify(embedding) : null, p_model: embedding ? currentEmbeddingModel() : null }]
+            : ['add_chat_memory', { p_chat_guid: chatGuid, p_channel: sourceChannel, p_type: f.type, p_content: f.content, p_embedding: embedding ? JSON.stringify(embedding) : null, p_model: embedding ? currentEmbeddingModel() : null }]
+        const { error } = await supabase.rpc(addRpc as string, addArgs)
         if (!error) n++
     }
     return n
@@ -263,14 +300,17 @@ async function storeFacts(chatGuid: string, facts: { content: string; type: stri
 
 /**
  * Called after each reply. Cheap no-op unless UPDATE_EVERY new messages have
- * arrived (atomic claim). Then: rewrite the profile + extract facts from the
- * new messages, and summarize any stretch that has scrolled out of the
- * history window.
+ * arrived (atomic claim, per-chat cadence — unchanged). When the chat is
+ * bound to a user, the claim is guarded to bound chats and the profile +
+ * facts are written at user level; summaries stay per-chat.
  */
-export async function updateMemory(chatGuid: string): Promise<void> {
+export async function updateMemory(chatGuid: string, sourceChannel = 'imessage'): Promise<void> {
     const supabase = createServerClient()
-    const { data: claim, error } = await supabase.rpc('claim_memory_update', { p_chat_guid: chatGuid, p_every: UPDATE_EVERY })
-    if (error) throw new Error(`claim_memory_update failed: ${error.message}`)
+    const userId = await resolveUserId(chatGuid).catch(() => null)
+    const claimRpc = userId ? 'claim_user_memory_update' : 'claim_memory_update'
+    const claimArgs = userId ? { p_user_id: userId, p_chat_guid: chatGuid, p_every: UPDATE_EVERY } : { p_chat_guid: chatGuid, p_every: UPDATE_EVERY }
+    const { data: claim, error } = await supabase.rpc(claimRpc, claimArgs)
+    if (error) throw new Error(`${claimRpc} failed: ${error.message}`)
     const c = (Array.isArray(claim) ? claim[0] : null) as { total: number; previously_seen: number; last_summary_at: string | null } | null
     if (!c) return
 
@@ -285,21 +325,34 @@ export async function updateMemory(chatGuid: string): Promise<void> {
 
     // 1. Profile + facts from the messages since the last update.
     const fresh = rows.slice(-Math.min(Math.max(c.total - c.previously_seen, UPDATE_EVERY), 30))
+    const [ctxRpc, ctxArgs] = userId
+        ? ['dinghy_user_memory_context', { p_user_id: userId }]
+        : ['dinghy_memory_context', { p_chat_guid: chatGuid }]
+    const [recentRpc, recentArgs] = userId
+        ? ['recent_user_memories', { p_user_id: userId, p_limit: 30 }]
+        : ['recent_chat_memories', { p_chat_guid: chatGuid, p_limit: 30 }]
     const [{ data: ctx }, { data: recent }] = await Promise.all([
-        supabase.rpc('dinghy_memory_context', { p_chat_guid: chatGuid }),
-        supabase.rpc('recent_chat_memories', { p_chat_guid: chatGuid, p_limit: 30 }),
+        supabase.rpc(ctxRpc as string, ctxArgs),
+        supabase.rpc(recentRpc as string, recentArgs),
     ])
     const profile = ((ctx ?? {}) as { profile?: string }).profile ?? ''
     const known = ((recent ?? []) as { content: string }[]).map((r) => r.content)
+    const knownPlans = userId ? await loadUpcomingPlans(userId).catch(() => []) : []
     const out = await gatewayJson(
-        PROFILE_SYSTEM,
-        `current profile:\n${profile || '(empty)'}\n\nknown facts:\n${known.map((k) => `- ${k}`).join('\n') || '(none)'}\n\nrecent messages:\n${transcript(fresh, 6000)}`,
-        700
+        PROFILE_SYSTEM.replace('{TODAY}', new Date().toISOString().slice(0, 10)),
+        `current profile:\n${profile || '(empty)'}\n\nknown facts:\n${known.map((k) => `- ${k}`).join('\n') || '(none)'}\n\nknown plans:\n${knownPlans.map((p) => `- ${renderPlan(p)}`).join('\n') || '(none)'}\n\nrecent messages:\n${transcript(fresh, 6000)}`,
+        1100
     )
     if (out) {
         const nextProfile = cleanProfile(out.profile)
-        if (nextProfile) await supabase.rpc('save_dinghy_profile', { p_chat_guid: chatGuid, p_profile: nextProfile })
-        await storeFacts(chatGuid, cleanFacts(out.facts, known))
+        if (nextProfile) {
+            const [saveRpc, saveArgs] = userId
+                ? ['save_dinghy_user_profile', { p_user_id: userId, p_profile: nextProfile }]
+                : ['save_dinghy_profile', { p_chat_guid: chatGuid, p_profile: nextProfile }]
+            await supabase.rpc(saveRpc as string, saveArgs)
+        }
+        await storeFacts(chatGuid, userId, sourceChannel, cleanFacts(out.facts, known))
+        if (userId) await savePlans(userId, chatGuid, cleanPlans(out.plans)).catch((err) => console.error('[dinghy] plans save failed', err instanceof Error ? err.message : err))
     }
 
     // 2. Episodic summary of what scrolled out of the history window.
@@ -334,11 +387,11 @@ export async function updateMemory(chatGuid: string): Promise<void> {
  */
 export async function backfillEmbeddings(chatGuid: string, limit = 20): Promise<number> {
     const supabase = createServerClient()
-    const { data, error } = await supabase.rpc('chat_rows_needing_embedding', {
-        p_chat_guid: chatGuid,
-        p_model: currentEmbeddingModel(),
-        p_limit: limit,
-    })
+    const userId = await resolveUserId(chatGuid).catch(() => null)
+    const [rpc, args] = userId
+        ? ['user_rows_needing_embedding', { p_user_id: userId, p_model: currentEmbeddingModel(), p_limit: limit }]
+        : ['chat_rows_needing_embedding', { p_chat_guid: chatGuid, p_model: currentEmbeddingModel(), p_limit: limit }]
+    const { data, error } = await supabase.rpc(rpc as string, args)
     if (error || !Array.isArray(data)) return 0
     let n = 0
     for (const r of data as { kind: string; id: string; content: string }[]) {
@@ -355,9 +408,13 @@ export async function backfillEmbeddings(chatGuid: string, limit = 20): Promise<
     return n
 }
 
-/** "forget X" — soft-deletes matching facts (reversible). */
+/** "forget X" — soft-deletes matching facts (reversible), user-wide when bound. */
 export async function forgetMemories(chatGuid: string, match: string): Promise<number> {
-    const { data, error } = await createServerClient().rpc('forget_chat_memories', { p_chat_guid: chatGuid, p_match: match })
-    if (error) throw new Error(`forget_chat_memories failed: ${error.message}`)
+    const userId = await resolveUserId(chatGuid).catch(() => null)
+    const [rpc, args] = userId
+        ? ['forget_user_memories', { p_user_id: userId, p_match: match }]
+        : ['forget_chat_memories', { p_chat_guid: chatGuid, p_match: match }]
+    const { data, error } = await createServerClient().rpc(rpc as string, args)
+    if (error) throw new Error(`${rpc} failed: ${error.message}`)
     return (data as number) ?? 0
 }

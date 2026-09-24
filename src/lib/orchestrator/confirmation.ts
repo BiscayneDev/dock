@@ -6,7 +6,13 @@ export const CONFIRM_TOOLS = new Set([
   'gmail_reply',
   'gcal_delete_event',
   'wallet_send',
+  'wallet_sign_message',
+  'paybox_request_payment',
+  'paybox_request_swap',
+  'paybox_request_wallet_sign',
+  'x402_fetch',
   'recipe_delete',
+  'computer_overage',
 ])
 
 const TOOL_DESCRIPTIONS: Record<string, string> = {
@@ -14,7 +20,13 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
   gmail_reply: '📧 Reply to email',
   gcal_delete_event: '📅 Delete calendar event',
   wallet_send: '🔐 Send crypto',
+  wallet_sign_message: '✍️ Sign message with wallet',
+  paybox_request_payment: '💳 Make a payment',
+  paybox_request_swap: '🔁 Swap tokens',
+  paybox_request_wallet_sign: '🔐 Sign with Paybox wallet',
+  x402_fetch: '🌐 Call a paid API (costs USDC)',
   recipe_delete: '🤖 Delete recipe',
+  computer_overage: '🖥️ Buy more computer time ($1 → 6h sandbox)',
 }
 
 interface PendingConfirmation {
@@ -40,6 +52,10 @@ function buildConfirmMessage(toolName: string, toolInput: Record<string, unknown
   if (toolInput.to) details.push(`to: ${toolInput.to}`)
   if (toolInput.subject) details.push(`subject: ${toolInput.subject}`)
   if (toolInput.amount) details.push(`amount: ${toolInput.amount}`)
+  if (toolInput.amountCents) details.push(`amount: $${(Number(toolInput.amountCents) / 100).toFixed(2)}`)
+  if (toolInput.valueCents) details.push(`value: ~$${(Number(toolInput.valueCents) / 100).toFixed(2)}`)
+  if (toolInput.merchant) details.push(`merchant: ${toolInput.merchant}`)
+  if (toolInput.message) details.push(`message: ${toolInput.message}`)
   if (toolInput.eventId) details.push(`event: ${toolInput.eventId}`)
 
   const detailStr = details.length > 0 ? `\n${details.join('\n')}` : ''

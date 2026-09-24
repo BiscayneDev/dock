@@ -8,12 +8,10 @@ function inferRequiredIntegrations(triggerType: string, instructions: string): s
   // Infer from trigger type
   if (triggerType === 'email_event' || triggerType === 'schedule') integrations.add('google')
   if (triggerType === 'github_event') integrations.add('github')
-  if (triggerType === 'notion_event') integrations.add('notion')
 
   // Infer from instructions keywords
   if (lower.includes('email') || lower.includes('gmail') || lower.includes('inbox') || lower.includes('calendar') || lower.includes('gcal') || lower.includes('meeting')) integrations.add('google')
   if (lower.includes('github') || lower.includes('pull request') || lower.includes('issue') || lower.includes('repo')) integrations.add('github')
-  if (lower.includes('notion') || lower.includes('database') || lower.includes('page')) integrations.add('notion')
   if (lower.includes('wallet') || lower.includes('crypto') || lower.includes('usdc') || lower.includes('balance') || lower.includes('transaction')) integrations.add('openwallet')
 
   return [...integrations]

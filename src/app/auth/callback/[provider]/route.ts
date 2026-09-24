@@ -6,10 +6,6 @@ import {
   verifyGoogleConnection,
 } from '@/lib/integrations/google'
 import {
-  exchangeCode as exchangeNotionCode,
-  storeNotionTokens,
-} from '@/lib/integrations/notion'
-import {
   exchangeCode as exchangeGithubCode,
   storeGithubTokens,
 } from '@/lib/integrations/github'
@@ -58,10 +54,20 @@ export async function GET(
   if (provider === 'paybox' && state && state !== 'paybox' && !request.cookies.get('paybox_cv')) {
     return handlePayboxConnectCallback(code, state, appUrl)
   }
+  // GitHub in-thread flow: the web session flow sends no state, so a state
+  // here always means a connect-token round trip.
+  if (provider === 'github' && state) {
+    return handleGithubConnectCallback(code, state, appUrl)
+  }
+  // Oura / WHOOP in-thread flow: the web session flow uses fixed states
+  // ('oura' / 'whoop_dock_auth'); a random state means a connect token.
+  if ((provider === 'oura' && state && state !== 'oura') || (provider === 'whoop' && state && state !== 'whoop_dock_auth')) {
+    return handleHealthConnectCallback(provider, code, state, appUrl)
+  }
 
   const session = await getSession()
   if (!session) {
-    return NextResponse.redirect(`${appUrl}/onboarding`)
+    return NextResponse.redirect(`${appUrl}/login`)
   }
 
   // CSRF check for the session flow: state must round-trip from our cookie.
@@ -87,16 +93,6 @@ export async function GET(
           result.expiresAt,
           ['openid', 'email', 'gmail.readonly', 'gmail.send', 'gmail.modify', 'calendar.readonly', 'calendar.events'],
           result.email
-        )
-        break
-      }
-
-      case 'notion': {
-        const result = await exchangeNotionCode(code)
-        await storeNotionTokens(
-          session.userId,
-          result.accessToken,
-          result.workspaceName
         )
         break
       }
@@ -179,7 +175,7 @@ export async function GET(
         return NextResponse.redirect(`${appUrl}/dashboard?error=unknown_provider`)
     }
 
-    return NextResponse.redirect(`${appUrl}/onboarding?connected=${provider}`)
+    return NextResponse.redirect(`${appUrl}/profile?connected=${provider}`)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     const { logger } = await import('@/lib/logger')
@@ -356,6 +352,107 @@ async function handlePayboxConnectCallback(
   } catch (err) {
     await markConnectTerminal(connect.id, { failed: true })
     logger.error('paybox connect callback error', { error: err instanceof Error ? err.message : String(err) })
+    return NextResponse.redirect(`${appUrl}/onboarding?error=connect_failed`)
+  }
+}
+
+/**
+ * Complete an in-thread (iMessage) GitHub connect: claim by state
+ * (provider-bound), exchange the code, bind the chat identity (fail-closed on
+ * the beta allowlist), store the token, verify with a live /user call, and
+ * only then mark complete so the sweep resumes the original request.
+ */
+async function handleGithubConnectCallback(
+  code: string | null,
+  state: string,
+  appUrl: string
+): Promise<NextResponse> {
+  const { logger } = await import('@/lib/logger')
+  if (!code) return NextResponse.redirect(`${appUrl}/onboarding?error=connect_no_code`)
+
+  const connect = await claimConnectByState(state, 'github')
+  if (!connect) return NextResponse.redirect(`${appUrl}/onboarding?error=connect_state_invalid`)
+  if (connect.platform !== 'imessage') {
+    await markConnectTerminal(connect.id, { failed: true })
+    return NextResponse.redirect(`${appUrl}/onboarding?error=connect_state_invalid`)
+  }
+
+  try {
+    const result = await exchangeGithubCode(code)
+    const userId = await bindSpectrumIdentity(connect.chatId)
+    if (!userId) {
+      await markConnectTerminal(connect.id, { failed: true })
+      logger.error('github connect: failed to bind identity')
+      return NextResponse.redirect(`${appUrl}/onboarding?error=connect_identity_failed`)
+    }
+    await storeGithubTokens(userId, result.accessToken, result.username)
+
+    const check = await fetch('https://api.github.com/user', {
+      headers: { Authorization: `Bearer ${result.accessToken}`, Accept: 'application/vnd.github+json', 'User-Agent': 'dinghy' },
+    }).catch(() => null)
+    if (!check?.ok) {
+      await markConnectTerminal(connect.id, { failed: true })
+      logger.error('github connect: live verification failed')
+      return NextResponse.redirect(`${appUrl}/onboarding?error=connect_verification_failed`)
+    }
+
+    await completeConnect(connect.id)
+    return NextResponse.redirect(`${appUrl}/connect/github/success`)
+  } catch (err) {
+    await markConnectTerminal(connect.id, { failed: true })
+    logger.error('github connect callback error', { error: err instanceof Error ? err.message : String(err) })
+    return NextResponse.redirect(`${appUrl}/onboarding?error=connect_failed`)
+  }
+}
+
+/**
+ * Complete an in-thread (iMessage) Oura or WHOOP connect: claim by state
+ * (provider-bound), exchange the code, bind the chat identity (fail-closed on
+ * the beta allowlist), store tokens, verify with a live profile read, and only
+ * then mark complete so the sweep resumes the original request.
+ */
+async function handleHealthConnectCallback(
+  provider: 'oura' | 'whoop',
+  code: string | null,
+  state: string,
+  appUrl: string
+): Promise<NextResponse> {
+  const { logger } = await import('@/lib/logger')
+  if (!code) return NextResponse.redirect(`${appUrl}/onboarding?error=connect_no_code`)
+
+  const connect = await claimConnectByState(state, provider)
+  if (!connect) return NextResponse.redirect(`${appUrl}/onboarding?error=connect_state_invalid`)
+  if (connect.platform !== 'imessage') {
+    await markConnectTerminal(connect.id, { failed: true })
+    return NextResponse.redirect(`${appUrl}/onboarding?error=connect_state_invalid`)
+  }
+
+  try {
+    const result = provider === 'oura' ? await exchangeOuraCode(code) : await exchangeWhoopCode(code)
+    const userId = await bindSpectrumIdentity(connect.chatId)
+    if (!userId) {
+      await markConnectTerminal(connect.id, { failed: true })
+      logger.error(`${provider} connect: failed to bind identity`)
+      return NextResponse.redirect(`${appUrl}/onboarding?error=connect_identity_failed`)
+    }
+    if (provider === 'oura') await storeOuraTokens(userId, result.accessToken, result.refreshToken, result.expiresAt)
+    else await storeWhoopTokens(userId, result.accessToken, result.refreshToken, result.expiresAt)
+
+    const verifyUrl = provider === 'oura'
+      ? 'https://api.ouraring.com/v2/usercollection/personal_info'
+      : 'https://api.prod.whoop.com/developer/v2/user/profile/basic'
+    const check = await fetch(verifyUrl, { headers: { Authorization: `Bearer ${result.accessToken}` } }).catch(() => null)
+    if (!check?.ok) {
+      await markConnectTerminal(connect.id, { failed: true })
+      logger.error(`${provider} connect: live verification failed`)
+      return NextResponse.redirect(`${appUrl}/onboarding?error=connect_verification_failed`)
+    }
+
+    await completeConnect(connect.id)
+    return NextResponse.redirect(`${appUrl}/connect/${provider}/success`)
+  } catch (err) {
+    await markConnectTerminal(connect.id, { failed: true })
+    logger.error(`${provider} connect callback error`, { error: err instanceof Error ? err.message : String(err) })
     return NextResponse.redirect(`${appUrl}/onboarding?error=connect_failed`)
   }
 }

@@ -21,7 +21,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .from('recipes')
     .select('*, users!inner(id, telegram_id, name, timezone)')
     .eq('enabled', true)
-    .in('trigger_type', ['schedule', 'email_event', 'github_event', 'notion_event'])
+    .in('trigger_type', ['schedule', 'email_event', 'github_event'])
     .order('last_checked_at', { ascending: true, nullsFirst: true })
     .limit(50)
 
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             triggeredCount++
           }
         } else {
-          // Handle event-based triggers (email, github, notion)
+          // Handle event-based triggers (email, github)
           const tokens = await getDecryptedTokens(user.id)
           const ctx: UserContext = {
             userId: user.id,

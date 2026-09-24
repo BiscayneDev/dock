@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { getOWSClient } from '@/lib/integrations/openwallet'
 import { isPayboxConnected, payboxRequired } from '@/lib/integrations/paybox'
+import { assertWithinCap, recordSpend } from '@/lib/payments/spend-caps'
+import { getTokenUsdPrice, nativeSymbolForChain } from '@/lib/tools/crypto'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 
 function getClient(ctx: UserContext): ReturnType<typeof getOWSClient> {
@@ -137,6 +139,18 @@ export const walletSend: Tool = {
     if (!isPayboxConnected(ctx)) return payboxRequired('sending crypto')
     try {
       const parsed = SendInput.parse(input)
+      // Price the send in USD for the daily cap. Native currency is priced
+      // via CoinGecko; ERC-20/SPL contract addresses can't be priced here,
+      // and a price-outage degrades to 0 (the over-cap block still applies —
+      // a user already over cap can't move anything at all).
+      let sendUsd = 0
+      if (!parsed.token) {
+        const symbol = nativeSymbolForChain(parsed.chainId)
+        const price = await getTokenUsdPrice(symbol)
+        const amt = parseFloat(parsed.amount)
+        if (price != null && Number.isFinite(amt)) sendUsd = price * amt
+      }
+      await assertWithinCap(ctx.userId, sendUsd)
       const ows = getClient(ctx)
 
       const transaction: Record<string, unknown> = {
@@ -162,6 +176,25 @@ export const walletSend: Tool = {
 
       if (!res.ok) {
         return { success: false, error: res.error ?? 'Failed to send transaction' }
+      }
+
+      // Send settled. Record the priced USD value (0 when the token couldn't
+      // be priced — contract-address tokens and price outages) with the raw
+      // amount still in the memo for audit.
+      try {
+        await recordSpend(
+          ctx.userId,
+          'wallet_send',
+          sendUsd,
+          `wallet_send ${parsed.amount}${parsed.token ? ` token ${parsed.token}` : ' native'} on ${parsed.chainId} to ${parsed.to}${sendUsd === 0 ? ' (unpriced)' : ''}`
+        )
+      } catch (err) {
+        return {
+          success: false,
+          error:
+            `Transaction sent but failed to record spend in ledger: ` +
+            `${err instanceof Error ? err.message : String(err)}`,
+        }
       }
 
       return {

@@ -87,6 +87,15 @@ export async function isPayboxConnected(chatGuid: string): Promise<boolean> {
   return isProviderConnected(chatGuid, 'paybox')
 }
 
+export async function isGithubConnected(chatGuid: string): Promise<boolean> {
+  return isProviderConnected(chatGuid, 'github')
+}
+
+/** Either wearable counts: health tools use whichever is connected. */
+export async function isHealthConnected(chatGuid: string): Promise<boolean> {
+  return (await isProviderConnected(chatGuid, 'oura')) || (await isProviderConnected(chatGuid, 'whoop'))
+}
+
 // ── History ─────────────────────────────────────────────────────────────────
 
 export interface HistoryMessage {
@@ -141,7 +150,7 @@ function hashToken(token: string): string {
  * Create a one-use connect link for this iMessage chat. The original
  * request rides in the row so the callback can resume it.
  */
-export type ConnectProvider = 'google' | 'paybox'
+export type ConnectProvider = 'google' | 'paybox' | 'github' | 'oura' | 'whoop'
 
 export async function createConnectLink(
   chatGuid: string,
@@ -165,7 +174,7 @@ export async function createConnectLink(
   })
   if (error) throw new Error(`Failed to persist connect token: ${error.message}`)
 
-  const page = provider === 'paybox' ? '/connect/paybox' : '/connect'
+  const page = provider === 'google' ? '/connect' : `/connect/${provider}`
   return `${APP_URL}${page}?connect=${encodeURIComponent(token)}`
 }
 

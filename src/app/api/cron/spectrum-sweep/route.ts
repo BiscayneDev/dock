@@ -17,6 +17,7 @@ import { actionToolsFor, renderProposal } from '@/lib/spectrum/actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from '@/lib/spectrum/config'
 import { typing } from 'spectrum-ts'
 import { sendFileWithPreview } from '@/lib/files/send'
+import { sendBrief, type BriefPayload } from '@/lib/spectrum/brief-card-send'
 import { renderFile } from '@/lib/files/render'
 import { parseFileInput } from '@/lib/files/tool'
 import {
@@ -26,7 +27,6 @@ import {
     loadFacts,
     loadHistory,
     saveMessage,
-    fileMarker,
     type DinghyFact,
     type HistoryMessage,
 } from '@/spectrum/store'
@@ -62,9 +62,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 if ('error' in parsed) throw new Error(`bad file row: ${parsed.error}`)
                 const file = await renderFile(parsed.doc, parsed.format, { ogImage: 'https://www.getdinghy.sh/api/og' })
                 await sendFileWithPreview(space, { ...file, format: parsed.format, title: parsed.doc.title, subtitle: parsed.doc.subtitle })
-                await saveMessage(row.chat_guid, 'assistant', fileMarker(file.filename)).catch(() => undefined)
+                await saveMessage(row.chat_guid, 'assistant', `[file: ${parsed.doc.title}] sent as a ${parsed.format} attachment`).catch(() => undefined)
+            } else if (row.kind === 'brief') {
+                // text is JSON {card, text}: the card, or the text if it can't render.
+                const payload = JSON.parse(row.text) as BriefPayload
+                await sendBrief(space, payload)
+                await saveMessage(row.chat_guid, 'assistant', payload.text).catch(() => undefined)
             } else {
                 await space.send(row.text)
+                // Reminders are server-initiated; keep them in history so a
+                // follow-up ("snooze that") has context.
+                if (row.kind === 'reminder') await saveMessage(row.chat_guid, 'assistant', row.text).catch(() => undefined)
             }
             await markOutboxSent(row.id)
             results.outboxSent++
@@ -133,7 +141,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 const connectedLine =
                     claimed.provider === 'paybox'
                         ? "paybox is connected — i can see your wallet balances now (read-only) ✓"
-                        : "you're connected — gmail + calendar are in ✓"
+                        : claimed.provider === 'github'
+                          ? "github is connected — i can read your repos, issues and PRs now ✓"
+                          : claimed.provider === 'oura' || claimed.provider === 'whoop'
+                            ? `${claimed.provider === 'oura' ? 'oura' : 'whoop'} is connected — i can see your sleep, recovery and activity now ✓`
+                          : "you're connected — gmail + calendar are in ✓"
                 await space.send(`${connectedLine}\n\n${reply}`)
                 const proposal = actions?.proposal()
                 if (proposal) await space.send(renderProposal(proposal))

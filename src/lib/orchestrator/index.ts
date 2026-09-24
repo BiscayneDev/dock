@@ -462,7 +462,7 @@ async function handleBotCommand(text: string, user: DbUser, chatId: number): Pro
     case '/help': {
       await sendMessage({
         chatId,
-        text: `here's what i can do:\n\n📧 email — search, read, draft, send, reply, archive\n📅 calendar — view events, create, update, delete, find free time\n🐙 github — repos, issues, PRs, notifications\n📝 notion — search, read, create, update pages & databases\n🔐 wallet — check balances, send crypto, sign messages\n⏰ reminders — set, list, cancel\n⚡ recipes — automated workflows on triggers\n🔍 web — search the internet, read any page\n💤 health — sleep, recovery, activity (Oura/WHOOP)\n🐦 twitter — timeline, search, bookmarks\n🛒 x402 — paid third-party APIs\n\ntry one of these to get started:`,
+        text: `here's what i can do:\n\n📧 email — search, read, draft, send, reply, archive\n📅 calendar — view events, create, update, delete, find free time\n🐙 github — repos, issues, PRs, notifications\n🔐 wallet — check balances, send crypto, sign messages\n⏰ reminders — set, list, cancel\n⚡ recipes — automated workflows on triggers\n🔍 web — search the internet, read any page\n💤 health — sleep, recovery, activity (Oura/WHOOP)\n🐦 twitter — timeline, search, bookmarks\n🛒 x402 — paid third-party APIs\n\ntry one of these to get started:`,
         replyMarkup: {
           inline_keyboard: [
             [

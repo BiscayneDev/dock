@@ -54,5 +54,22 @@ describe('file markers', () => {
     const r = stripFileMarkers('Updated itinerary is in your PDF.\n\n[sent file: spain-trip.pdf]')
     expect(r).toEqual({ text: 'Updated itinerary is in your PDF.', hadMarker: true })
     expect(stripFileMarkers('all good')).toEqual({ text: 'all good', hadMarker: false })
+    expect(stripFileMarkers('Here it is.\n[file: Spain itinerary]').text).toBe('Here it is.')
+  })
+})
+
+import { hostedHistoryLine, sendHostedFile } from '@/lib/files/send'
+
+describe('file link send', () => {
+  const f = { title: 'Heat Schedule', format: 'pdf' as const, hosted: { url: 'https://calm-boat-1a2b.here.now/', expiresAt: '2026-10-24T16:00:00Z' } }
+
+  it('sends just the link, alone, so it unfurls into the file card', async () => {
+    const sent: unknown[] = []
+    await sendHostedFile({ send: async (c) => void sent.push(c) }, f)
+    expect(sent).toEqual(['https://calm-boat-1a2b.here.now/'])
+  })
+
+  it('history line keeps the link for later revoke_file calls', () => {
+    expect(hostedHistoryLine(f)).toBe('[file: Heat Schedule] https://calm-boat-1a2b.here.now/ (expires oct 24)')
   })
 })

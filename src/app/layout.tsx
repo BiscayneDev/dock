@@ -2,7 +2,8 @@ import type { Metadata, Viewport } from "next"
 import { dmMono, fraunces, schibsted } from "./fonts"
 import "./globals.css"
 
-const SITE_URL = "https://getdinghy.sh"
+// www is the live host (the apex redirects to it), so canonical URLs use it.
+const SITE_URL = "https://www.getdinghy.sh"
 const TITLE = "Dinghy · your first mate lives in your texts"
 const DESCRIPTION = "dinghy is a first mate that lives in imessage. you text it like a person. it does the work."
 
@@ -28,15 +29,18 @@ export const metadata: Metadata = {
     "email automation",
     "calendar management",
     "GitHub integration",
-    "Notion integration",
     "crypto wallet",
     "productivity",
     "automation",
     "recipes",
   ],
   icons: {
-    icon: "/icon.svg",
-    apple: "/logo.png",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon-32.png", type: "image/png", sizes: "32x32" },
+      { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
+    ],
+    apple: { url: "/apple-touch-icon.png", sizes: "180x180" },
   },
   manifest: "/manifest.json",
 

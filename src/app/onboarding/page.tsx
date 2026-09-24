@@ -4,11 +4,10 @@ import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { HarborShell } from '@/components/HarborShell'
 
-interface ConnectedIntegrations { google: boolean; notion: boolean; github: boolean; openwallet: boolean; oura: boolean; whoop: boolean; twitter: boolean; paybox: boolean }
+interface ConnectedIntegrations { google: boolean; github: boolean; openwallet: boolean; oura: boolean; whoop: boolean; twitter: boolean; paybox: boolean }
 
 const INTEGRATIONS = [
   { key: 'google', label: 'Google', desc: 'Gmail and Google Calendar', authPath: '/api/integrations/google/auth', icon: 'M4 7L10.2 11.65C11.27 12.45 12.73 12.45 13.8 11.65L20 7M3 5h18v14H3z' },
-  { key: 'notion', label: 'Notion', desc: 'Pages and databases', authPath: '/api/integrations/notion/auth', icon: 'M4 4h16v16H4zM8 4v16M4 8h4M4 12h4' },
   { key: 'github', label: 'GitHub', desc: 'Repos, issues, and PRs', authPath: '/api/integrations/github/auth', icon: 'M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65S8.93 17.38 9 18v4' },
   { key: 'oura', label: 'Oura Ring', desc: 'Sleep, readiness, and activity', authPath: '/api/integrations/oura/auth', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6a6 6 0 1 1 0 12 6 6 0 0 1 0-12z' },
   { key: 'whoop', label: 'WHOOP', desc: 'Recovery, strain, and heart rate', authPath: '/api/integrations/whoop/auth', icon: 'M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z' },
@@ -29,7 +28,7 @@ function OnboardingPage() {
   const searchParams = useSearchParams()
   const justConnected = searchParams.get('connected')
   const [authenticated, setAuthenticated] = useState(false)
-  const [integrations, setIntegrations] = useState<ConnectedIntegrations>({ google: false, notion: false, github: false, openwallet: false, oura: false, whoop: false, twitter: false, paybox: false })
+  const [integrations, setIntegrations] = useState<ConnectedIntegrations>({ google: false, github: false, openwallet: false, oura: false, whoop: false, twitter: false, paybox: false })
   const [loading, setLoading] = useState(true)
   const [owsForm, setOwsForm] = useState({ endpoint: '', apiKey: '' })
   const [owsSaving, setOwsSaving] = useState(false)

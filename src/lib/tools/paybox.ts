@@ -5,6 +5,7 @@ import {
   payboxRequired,
   agentResultToTool,
 } from '@/lib/integrations/paybox'
+import { assertWithinCap, recordSpend } from '@/lib/payments/spend-caps'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 
 // Paybox — passkey-gated payments, secrets, and non-custodial wallet ops, driven
@@ -72,6 +73,7 @@ export const payboxRequestPayment: Tool = {
     if (!isPayboxConnected(ctx)) return payboxRequired('making a payment')
     try {
       const p = PaymentInput.parse(input)
+      await assertWithinCap(ctx.userId, p.amountCents / 100)
       const resp = await (await sdkFor(ctx)).requestPayment({
         credentialId: p.credentialId,
         merchant: p.merchant,
@@ -79,7 +81,28 @@ export const payboxRequestPayment: Tool = {
         amountCents: p.amountCents,
         currency: p.currency,
       })
-      return agentResultToTool(resp)
+      const result = agentResultToTool(resp)
+      if (result.success) {
+        // Card issued and charged amount is fixed — record it in the shared
+        // ledger. A ledger-write failure fails closed: surface the error even
+        // though the request went through, so the miss is never silent.
+        try {
+          await recordSpend(
+            ctx.userId,
+            'paybox_payment',
+            p.amountCents / 100,
+            `paybox payment to ${p.merchant} (${p.merchantUrl})`
+          )
+        } catch (err) {
+          return {
+            success: false,
+            error:
+              `Payment request succeeded but failed to record spend in ledger: ` +
+              `${err instanceof Error ? err.message : String(err)}`,
+          }
+        }
+      }
+      return result
     } catch (err) {
       return toError(err)
     }
@@ -151,8 +174,8 @@ export const payboxRequestWalletSign: Tool = {
     'Sign with a Paybox wallet credential (message, typed data, or a transaction). ' +
     'Signing is non-custodial and runs in-process via the user\'s signing key — the ' +
     'private key never leaves MoonX MPC. Completes immediately on an autonomous grant; ' +
-    'otherwise returns pending_approval (user approves with a passkey) — then poll ' +
-    'paybox_get_request. On success, output holds the signature or serialized transaction.',
+    'if it needs passkey approval, PayBox can\'t finish it from Dinghy yet and the tool ' +
+    'says so. On success, output holds the signature or serialized transaction.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -173,11 +196,39 @@ export const payboxRequestWalletSign: Tool = {
         credentialId: p.credentialId,
         intent: p.intent as Parameters<typeof sdk.requestWalletSign>[0]['intent'],
       })
+      if (resp.status === 'pending_approval') return walletSignNeedsApproval(resp.request_id)
       return agentResultToTool(resp)
     } catch (err) {
       return toError(err)
     }
   },
+}
+
+// PayBox SDK 1.0.0 signs a wallet_sign request in-process only when it comes
+// back cleared (pending_signature). After a passkey approval nothing on our side
+// can finish it, so say that plainly instead of a poll that never lands.
+export function walletSignNeedsApproval(requestId: string): ToolResult {
+  return {
+    success: false,
+    error:
+      `This signature needs the user's approval in PayBox (request ${requestId}), and ` +
+      `PayBox can't yet finish a plain send or signature after approval from Dinghy. ` +
+      `Nothing was signed or sent. Tell the user plainly; do NOT retry or poll. ` +
+      `Swaps and paid services do work with approval.`,
+  }
+}
+
+export const SWAP_APPROVAL_WAIT_MS = 60_000
+
+export function swapApprovalTimedOut(requestId: string): ToolResult {
+  return {
+    success: false,
+    error:
+      `The swap waited a minute for approval in the PayBox app (request ${requestId}) and ` +
+      `didn't get it, so nothing was swapped. PayBox can only complete a swap while ` +
+      `this call is waiting. Tell the user to have the PayBox app open and ask again ` +
+      `when ready; do NOT poll this request_id.`,
+  }
 }
 
 // --- paybox_request_swap ---
@@ -198,7 +249,8 @@ export const payboxRequestSwap: Tool = {
   description:
     'Swap one token for another from a Paybox wallet credential. Paybox quotes the route, ' +
     'builds the transactions, signs in-process, and broadcasts. Completes on an autonomous ' +
-    'grant; otherwise pending_approval (poll paybox_get_request). Call paybox_get_portfolio ' +
+    'grant; otherwise waits up to a minute for the user to approve in the PayBox app ' +
+    '(tell them to watch for it before calling). Call paybox_get_portfolio ' +
     'first to size the amount. On success, output holds the swap transaction hash.',
   inputSchema: {
     type: 'object',
@@ -218,6 +270,7 @@ export const payboxRequestSwap: Tool = {
     if (!isPayboxConnected(ctx)) return payboxRequired('swapping tokens')
     try {
       const p = SwapInput.parse(input)
+      await assertWithinCap(ctx.userId, (p.valueCents ?? 0) / 100)
       const result = await (await sdkFor(ctx)).requestSwap({
         credentialId: p.credentialId,
         srcChain: p.srcChain,
@@ -227,8 +280,34 @@ export const payboxRequestSwap: Tool = {
         amount: p.amount,
         slippageBps: p.slippageBps,
         valueCents: p.valueCents,
+      }, {
+        // The SDK can only sign a swap in the same call that saw the approval
+        // (the signing plan isn't recoverable later), so wait here for the
+        // user to approve in the PayBox app. Bounded well under the 120s turn.
+        waitForApproval: { timeoutMs: SWAP_APPROVAL_WAIT_MS, intervalMs: 2000 },
       })
-      return agentResultToTool(result.response)
+      if (result.response.status === 'pending_approval') return swapApprovalTimedOut(result.response.request_id)
+      const toolResult = agentResultToTool(result.response)
+      if (toolResult.success && result.response.status === 'success') {
+        // Swap settled (broadcast). Record the sell-side USD estimate — a
+        // ledger-write failure fails closed and is surfaced, never swallowed.
+        try {
+          await recordSpend(
+            ctx.userId,
+            'paybox_swap',
+            (p.valueCents ?? 0) / 100,
+            `paybox swap ${p.srcToken} -> ${p.dstToken} on ${p.srcChain}, amount ${p.amount}`
+          )
+        } catch (err) {
+          return {
+            success: false,
+            error:
+              `Swap succeeded but failed to record spend in ledger: ` +
+              `${err instanceof Error ? err.message : String(err)}`,
+          }
+        }
+      }
+      return toolResult
     } catch (err) {
       return toError(err)
     }
@@ -264,6 +343,61 @@ export const payboxGetPortfolio: Tool = {
         networkIds: p.networkIds,
       })
       return { success: true, data }
+    } catch (err) {
+      return toError(err)
+    }
+  },
+}
+
+// --- paybox_onramp ---
+
+const OnrampInput = z.object({
+  credentialId: z.string().describe('A Paybox credential id from paybox_list_credentials'),
+  amountUsd: z.number().positive().describe('How much USD of crypto to buy (e.g. 25)'),
+  destinationChain: z
+    .enum(['solana:mainnet', 'eip155:8453', 'eip155:1', 'eip155:4663'])
+    .default('solana:mainnet')
+    .describe('Chain to fund — Solana mainnet by default (x402 settlement + inference rail)'),
+  currencyCode: z.string().default('USDC').describe('Token to buy (USDC default)'),
+})
+
+export const payboxOnramp: Tool = {
+  name: 'paybox_onramp',
+  description:
+    'Get a hosted buy link (Paybox on-ramp, MoonPay-powered) so the user can top up their ' +
+    'wallet with card — for x402 usage and inference spend. Sends a link the user completes ' +
+    'in Paybox with their passkey; nothing is charged by this tool.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      credentialId: { type: 'string', description: 'Paybox credential id (paybox_list_credentials)' },
+      amountUsd: { type: 'number', description: 'USD amount to buy (e.g. 25)' },
+      destinationChain: { type: 'string', enum: ['solana:mainnet', 'eip155:8453', 'eip155:1', 'eip155:4663'], description: 'Chain to fund (default solana:mainnet)' },
+      currencyCode: { type: 'string', description: 'Token to buy (default USDC)' },
+    },
+    required: ['credentialId', 'amountUsd'],
+  },
+  async execute(input: unknown, ctx: UserContext): Promise<ToolResult> {
+    if (!isPayboxConnected(ctx)) return payboxRequired('topping up a wallet')
+    try {
+      const p = OnrampInput.parse(input)
+      const sdk = await sdkFor(ctx)
+      const buy = await sdk.getBuyLink({
+        credentialId: p.credentialId,
+        destinationChain: p.destinationChain,
+        currencyCode: p.currencyCode,
+        amountUsd: p.amountUsd,
+      })
+      return {
+        success: true,
+        data: {
+          buyUrl: buy.url,
+          currency: buy.currency_code,
+          walletAddress: buy.wallet_address,
+          network: buy.network,
+          note: 'user completes the purchase in Paybox with their passkey — funds land directly in their wallet',
+        },
+      }
     } catch (err) {
       return toError(err)
     }

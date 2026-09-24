@@ -11,12 +11,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.redirect(`${appUrl}/onboarding?error=missing_token`)
   }
 
-  const payload = verifyMagicToken(token)
+  const supabase = createServerClient()
+  const payload = await verifyMagicToken(token, supabase)
   if (!payload) {
     return NextResponse.redirect(`${appUrl}/onboarding?error=invalid_or_expired_token`)
   }
-
-  const supabase = createServerClient()
 
   // Upsert user
   const { data: user, error } = await supabase

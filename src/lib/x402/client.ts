@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 import { isPayboxConnected, payboxRequired, getPayboxSdk, agentResultToTool } from '@/lib/integrations/paybox'
+import { recordSpend } from '@/lib/payments/spend-caps'
 import { logger } from '@/lib/logger'
 
 // x402 client tools — let Dinghy's agent consume external x402-gated APIs
@@ -117,7 +118,7 @@ function createOWSSigner(
 // Paybox can't serve it (no wallet credential, no signing key, denied, or error).
 async function tryPayboxX402(
   ctx: UserContext,
-  parsed: { url: string; method: string; body?: string }
+  parsed: { url: string; method: string; body?: string; maxPayment?: number }
 ): Promise<ToolResult | null> {
   try {
     const sdk = await getPayboxSdk(ctx.tokens.paybox, ctx.userId)
@@ -144,6 +145,24 @@ async function tryPayboxX402(
 
     if (resp.status === 'success') {
       const value = (resp.output?.value ?? {}) as Record<string, unknown>
+      // Paid call settled through Paybox — record it in the shared spend
+      // ledger. The exact paid amount isn't returned, so record maxPayment
+      // (the approved upper bound) to stay conservative for the daily cap.
+      try {
+        await recordSpend(
+          ctx.userId,
+          'x402',
+          parsed.maxPayment ?? 1,
+          `x402 paid call ${parsed.method ?? 'GET'} ${parsed.url} (max $${parsed.maxPayment ?? 1})`
+        )
+      } catch (err) {
+        return {
+          success: false,
+          error:
+            `Paid call succeeded but failed to record spend in ledger: ` +
+            `${err instanceof Error ? err.message : String(err)}`,
+        }
+      }
       return {
         success: true,
         data: { via: 'paybox', paid: true, body: value.response ?? value },
@@ -227,6 +246,27 @@ export const x402Fetch: Tool = {
 
         // Check for payment receipt in response headers
         const paymentResponse = response.headers.get('payment-response')
+
+        if (paymentResponse) {
+          // Paid call settled via the wallet rail — record it in the shared
+          // spend ledger. Exact amount isn't returned, so record maxPayment
+          // (the approved upper bound) to stay conservative for the daily cap.
+          try {
+            await recordSpend(
+              ctx.userId,
+              'x402',
+              parsed.maxPayment ?? 1,
+              `x402 paid call ${parsed.method} ${parsed.url} (max $${parsed.maxPayment ?? 1})`
+            )
+          } catch (err) {
+            return {
+              success: false,
+              error:
+                `Paid call succeeded but failed to record spend in ledger: ` +
+                `${err instanceof Error ? err.message : String(err)}`,
+            }
+          }
+        }
 
         return {
           success: true,

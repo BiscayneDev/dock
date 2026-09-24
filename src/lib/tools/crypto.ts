@@ -27,6 +27,36 @@ function resolveTokenId(input: string): string {
   return SYMBOL_MAP[lower] ?? lower
 }
 
+/** Map a CAIP-2 chainId to its native currency symbol (best effort). */
+export function nativeSymbolForChain(chainId: string): string {
+  const chain = chainId.split(':')[0]?.toLowerCase() ?? ''
+  if (chain === 'solana') return 'sol'
+  if (chain === 'eip155') return 'eth'
+  if (chain === 'btc' || chain === 'bip122') return 'btc'
+  return chainId.split(':').pop() ?? ''
+}
+
+/**
+ * USD price for a token symbol via CoinGecko /simple/price (free tier, one
+ * cheap request). Returns null on any failure — callers must degrade to
+ * amount_usd = 0 rather than blocking the send on a price outage.
+ */
+export async function getTokenUsdPrice(token: string): Promise<number | null> {
+  try {
+    const id = resolveTokenId(token)
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(id)}&vs_currencies=usd`,
+      { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(5_000) },
+    )
+    if (!res.ok) return null
+    const data = (await res.json()) as Record<string, { usd?: number }>
+    const usd = data[id]?.usd
+    return typeof usd === 'number' && usd >= 0 ? usd : null
+  } catch {
+    return null
+  }
+}
+
 export const tokenPrice: Tool = {
   name: 'token_price',
   description: 'Get the current price, 24h change, and market cap for a cryptocurrency. Works for any token — BTC, ETH, SOL, etc.',

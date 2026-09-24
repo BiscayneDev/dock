@@ -12,7 +12,7 @@ type Tab = 'mine' | 'marketplace' | 'templates'
 type Pricing = 'all' | 'free' | 'paid'
 
 const TRIGGER_ICONS: Record<string, string> = {
-  schedule: '🕐', email_event: '📧', github_event: '🐙', notion_event: '📝', keyword: '💬', manual: '▶️',
+  schedule: '🕐', email_event: '📧', github_event: '🐙', keyword: '💬', manual: '▶️',
 }
 
 export default function GalleryPage() {

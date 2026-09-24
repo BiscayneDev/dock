@@ -84,12 +84,12 @@ describe('live info wiring', () => {
   it('every chat gets weather; web_search only with a key', async () => {
     const { liveInfoTools, guestCapabilities, toolsFor } = await import('@/lib/spectrum/imessage-tools')
     vi.stubEnv('TAVILY_API_KEY', '')
-    expect(liveInfoTools().map((t) => t.name)).toEqual(['weather'])
+    expect(liveInfoTools().map((t) => t.name)).toEqual(['weather', 'x_read_post', 'x_profile', 'x_recent_posts'])
     expect(guestCapabilities()).toMatchObject({ google: false, wallet: false, files: false, live: true, search: false })
     vi.stubEnv('TAVILY_API_KEY', 'k')
-    expect(liveInfoTools().map((t) => t.name)).toEqual(['weather', 'web_search'])
+    expect(liveInfoTools().map((t) => t.name)).toEqual(['weather', 'web_search', 'x_read_post', 'x_profile', 'x_recent_posts'])
     // A bound user with nothing connected still gets live info, and no account tools.
-    expect(toolsFor(ctx).map((t) => t.name)).toEqual(['weather', 'web_search'])
+    expect(toolsFor(ctx).map((t) => t.name)).toEqual(['weather', 'web_search', 'x_read_post', 'x_profile', 'x_recent_posts'])
   })
 
   it('prompt names the tools that are actually offered', () => {
@@ -97,8 +97,25 @@ describe('live info wiring', () => {
     expect(withSearch).toContain('call the weather tool')
     expect(withSearch).toContain('call web_search')
     const noSearch = buildSystemPrompt([], false, { google: false, wallet: false, live: true, search: false })
-    expect(noSearch).toContain("can't browse the web yet")
+    expect(noSearch).toContain("can't check that live right now")
     expect(noSearch).not.toContain('call web_search')
     expect(buildSystemPrompt([], false, false)).not.toContain('weather tool')
+  })
+})
+
+describe('voice', () => {
+  it('carries the confident voice line and no self-deprecating limits', async () => {
+    const mod = await import('@/lib/spectrum/dinghy')
+    expect(mod.VOICE_LINE).toMatch(/safely, securely and openly/)
+    expect(mod.VOICE_LINE).toMatch(/never answer with a list of things you cannot do/)
+  })
+})
+
+describe('agency', () => {
+  it('is in the base prompt and keeps the no-invention guard', async () => {
+    const mod = await import('@/lib/spectrum/dinghy')
+    const prompt = mod.buildSystemPrompt([], false)
+    expect(prompt).toContain('Default to agency')
+    expect(mod.AGENCY_LINE).toMatch(/Never invent a tool/)
   })
 })

@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
-    "@notionhq/client": "^5.14.0",
     "@octokit/rest": "^22.0.1",
     "@paybox-sh/sdk": "^1.0.0",
     "@solana/spl-token": "^0.4.14",
@@ -22,6 +21,7 @@
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.99.3",
     "@tavily/core": "^0.7.2",
+    "@the-convocation/twitter-scraper": "^0.22.3",
     "@types/pdfkit": "^0.17.6",
     "@x402/core": "^2.7.0",
     "@x402/evm": "^2.7.0",
@@ -29,6 +29,7 @@
     "@x402/next": "^2.7.0",
     "cron-parser": "^5.5.0",
     "docx": "^9.7.1",
+    "e2b": "^2.51.0",
     "ethers": "^6.16.0",
     "googleapis": "^171.4.0",
     "marked": "^18.0.14",

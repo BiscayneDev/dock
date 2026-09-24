@@ -21,14 +21,6 @@ import {
   gcalTodayBriefing,
 } from './gcal'
 import {
-  notionSearch,
-  notionReadPage,
-  notionCreatePage,
-  notionUpdatePage,
-  notionQueryDatabase,
-  notionCreateDatabaseItem,
-} from './notion'
-import {
   githubListRepos,
   githubGetRepo,
   githubListIssues,
@@ -70,11 +62,13 @@ import {
   payboxRequestWalletSign,
   payboxRequestSwap,
   payboxGetPortfolio,
+  payboxOnramp,
   payboxGetRequest,
 } from './paybox'
 import { switchLLMProvider } from './llm-control'
 import { getInferenceSpend } from './inference-spend'
 import { memorySearch, memoryForget } from './memory'
+import { COMPUTER_TOOLS } from './computer'
 
 // Recipe tools are imported lazily by the orchestrator since they're
 // not available to the execution agent. See lib/tools/recipes.ts.
@@ -98,13 +92,6 @@ export const integrationTools: Tool[] = [
   gcalDeleteEvent,
   gcalFindFreeTime,
   gcalTodayBriefing,
-  // Notion
-  notionSearch,
-  notionReadPage,
-  notionCreatePage,
-  notionUpdatePage,
-  notionQueryDatabase,
-  notionCreateDatabaseItem,
   // GitHub
   githubListRepos,
   githubGetRepo,
@@ -157,11 +144,14 @@ export const integrationTools: Tool[] = [
   payboxRequestWalletSign,
   payboxRequestSwap,
   payboxGetPortfolio,
+  payboxOnramp,
   payboxGetRequest,
   // LLM runtime control (self-aware provider swap)
   switchLLMProvider,
   // Self-aware AI spend + savings (billed to the user's Paybox wallet)
   getInferenceSpend,
+  // Dinghy's computer: per-user sandbox, metered into the spend ledger
+  ...COMPUTER_TOOLS,
 ]
 
 // All tools except recipe management — used by the Execution Agent
@@ -172,3 +162,9 @@ export const executionAgentTools: Tool[] = [...integrationTools]
 export function getOrchestratorTools(recipeTools: Tool[]): Tool[] {
   return [...integrationTools, ...recipeTools]
 }
+
+// Sandboxed read-only tool subset for x402 recipe execution — defined in
+// ./x402-sandbox.ts (kept separate so tests can import it without pulling
+// the full tool barrel's heavy deps). See that file for the allowlist and
+// the exclusion rationale.
+export { x402RecipeTools } from './x402-sandbox'

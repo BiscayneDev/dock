@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { HarborShell } from '@/components/HarborShell'
 
 interface Stats {
@@ -32,76 +31,45 @@ const STATUS_COLORS: Record<string, string> = {
 
 const TRIGGER_LABELS: Record<string, string> = {
   schedule: 'Schedule', email_event: 'Email', github_event: 'GitHub',
-  notion_event: 'Notion', keyword: 'Keyword', manual: 'Manual',
+  keyword: 'Keyword', manual: 'Manual',
 }
 
-const ADMIN_PASSWORD = 'harbor'
-
 export default function AdminDashboard() {
-  const router = useRouter()
   const [stats, setStats] = useState<Stats | null>(null)
   const [usersData, setUsersData] = useState<UsersData | null>(null)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'overview' | 'users'>('overview')
-  const [unlocked, setUnlocked] = useState(false)
-  const [password, setPassword] = useState('')
-  const [passwordError, setPasswordError] = useState(false)
-
-  // Check if already unlocked this session
-  useEffect(() => {
-    if (typeof window !== 'undefined' && sessionStorage.getItem('admin_unlocked') === '1') {
-      setUnlocked(true)
-    }
-  }, [])
-
-  const handleUnlock = () => {
-    if (password === ADMIN_PASSWORD) {
-      setUnlocked(true)
-      setPasswordError(false)
-      sessionStorage.setItem('admin_unlocked', '1')
-    } else {
-      setPasswordError(true)
-    }
-  }
+  const [unauthorized, setUnauthorized] = useState(false)
 
   const loadStats = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/stats', { credentials: 'include' })
-      if (res.status === 403) { router.replace('/harbor'); return }
+      // No admin session — show the not-authorized state (server is the gate).
+      if (res.status === 403) { setUnauthorized(true); return }
       if (res.ok) setStats(await res.json())
-    } catch { router.replace('/harbor') } finally { setLoading(false) }
-  }, [router])
+      else setUnauthorized(true)
+    } catch { setUnauthorized(true) } finally { setLoading(false) }
+  }, [])
 
   const loadUsers = useCallback(async (page = 0) => {
     const res = await fetch(`/api/admin/users?page=${page}`, { credentials: 'include' })
     if (res.ok) setUsersData(await res.json())
   }, [])
 
-  useEffect(() => { if (unlocked) loadStats() }, [loadStats, unlocked])
-  useEffect(() => { if (tab === 'users' && !usersData && unlocked) loadUsers() }, [tab, usersData, loadUsers, unlocked])
+  useEffect(() => { loadStats() }, [loadStats])
+  useEffect(() => { if (tab === 'users' && !usersData && !unauthorized) loadUsers() }, [tab, usersData, loadUsers, unauthorized])
 
-  // Password gate
-  if (!unlocked) {
+  // Not authorized — the server session check is the real gate; this just
+  // renders its outcome instead of asking for a client-side password.
+  if (unauthorized) {
     return (
       <HarborShell title="Admin" showBack>
         <div className="dock-card" style={{ padding: '2rem 1.5rem', alignItems: 'center', textAlign: 'center', marginTop: '3rem' }}>
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4, marginBottom: '1rem' }}>
             <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
-          <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '1rem' }}>Enter password</p>
-          <form onSubmit={(e) => { e.preventDefault(); handleUnlock() }} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%', maxWidth: '16rem' }}>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => { setPassword(e.target.value); setPasswordError(false) }}
-              placeholder="Password"
-              autoFocus
-              className="dock-input"
-              style={{ textAlign: 'center' }}
-            />
-            {passwordError && <p style={{ fontSize: '0.8rem', color: 'var(--mesh-peach)' }}>Incorrect password</p>}
-            <button type="submit" className="dock-btn-primary">Unlock</button>
-          </form>
+          <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Not authorized</p>
+          <p style={{ fontSize: '0.85rem', opacity: 0.5 }}>You need an admin account to view this page.</p>
         </div>
       </HarborShell>
     )

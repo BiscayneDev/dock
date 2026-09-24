@@ -40,7 +40,7 @@ USE TOOLS TO INFORM THE CONVERSATION:
 
 WHEN YOU'RE READY TO BUILD, output the recipe as a JSON block (this triggers the deploy card):
 \`\`\`recipe
-{"name": "short descriptive name", "trigger_type": "schedule|email_event|github_event|notion_event|keyword|manual", "trigger_config": {"time": "HH:MM", "days": [1,2,3,4,5]}, "instructions": "detailed, specific instructions for the execution agent", "category": "Email|Calendar|Developer|Productivity|Finance|Health|Crypto"}
+{"name": "short descriptive name", "trigger_type": "schedule|email_event|github_event|keyword|manual", "trigger_config": {"time": "HH:MM", "days": [1,2,3,4,5]}, "instructions": "detailed, specific instructions for the execution agent", "category": "Email|Calendar|Developer|Productivity|Finance|Health|Crypto"}
 \`\`\`
 
 WRITE GREAT INSTRUCTIONS — the execution agent needs specifics:

@@ -479,8 +479,8 @@ export function agentResultToTool(resp: AgentResponseLike): ToolResult {
           request_id: resp.request_id,
           instruction:
             `Cleared to sign but no in-process signing key is configured (or the signing ` +
-            `window must finish). Ask the user to add their Paybox signing key in The ` +
-            `Harbor, then poll paybox_get_request with this request_id.`,
+            `window must finish). Get setup links with paybox_signing_setup (in chat) or ` +
+            `send them to The Harbor, then poll paybox_get_request with this request_id.`,
         },
       }
     case 'pending_settlement':

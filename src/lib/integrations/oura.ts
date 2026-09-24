@@ -7,13 +7,13 @@ const OURA_AUTH_URL = 'https://cloud.ouraring.com/oauth/authorize'
 const OURA_TOKEN_URL = 'https://api.ouraring.com/oauth/token'
 const OURA_API_BASE = 'https://api.ouraring.com/v2'
 
-export function getOuraAuthUrl(): string {
+export function getOuraAuthUrl(state = 'oura'): string {
   const params = new URLSearchParams({
     client_id: process.env.OURA_CLIENT_ID ?? '',
     redirect_uri: process.env.OURA_REDIRECT_URI ?? '',
     response_type: 'code',
     scope: 'daily personal heartrate session tag workout',
-    state: 'oura',
+    state,
   })
 
   return `${OURA_AUTH_URL}?${params.toString()}`

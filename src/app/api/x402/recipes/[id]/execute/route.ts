@@ -62,7 +62,7 @@ async function executeRecipeHandler(
   try {
     const { getLLMProvider } = await import('@/lib/llm')
     const { buildSystemPrompt } = await import('@/lib/orchestrator/system-prompt')
-    const { executionAgentTools } = await import('@/lib/tools')
+    const { x402RecipeTools } = await import('@/lib/tools')
     const { runAgentLoop } = await import('@/lib/llm/agent-loop')
 
     // Get recipe creator's context for tool access
@@ -97,7 +97,9 @@ async function executeRecipeHandler(
     const result = await runAgentLoop(
       systemPrompt,
       [{ role: 'user', content: `Execute recipe: ${recipe.name as string}${userInput ? `\nInput: ${userInput}` : ''}` }],
-      executionAgentTools,
+      // Sandboxed read-only tool subset — untrusted userInput must never reach
+      // the creator's write/spend surfaces (see x402RecipeTools in lib/tools).
+      x402RecipeTools,
       userContext
     )
 

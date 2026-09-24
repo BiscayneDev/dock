@@ -1,0 +1,43 @@
+.title {
+  margin: 0;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-weight: 520; font-variation-settings: 'SOFT' 100, 'WONK' 0;
+  font-size: 34px; line-height: 1.05; letter-spacing: -0.02em; color: #0E1A33;
+}
+.title em { font-style: italic; font-weight: 400; font-variation-settings: 'SOFT' 100, 'WONK' 1; color: #C8583A; }
+.sub { margin: 10px 0 26px; font-size: 15px; line-height: 1.55; color: rgba(14, 26, 51, 0.68); }
+.label {
+  display: block; margin-bottom: 8px;
+  font-family: var(--font-dmmono), ui-monospace, monospace; font-weight: 500;
+  font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(14, 26, 51, 0.6);
+}
+.field {
+  display: flex; align-items: center; gap: 10px;
+  height: 52px; padding: 0 16px; border-radius: 14px;
+  background: #FFFFFF; box-shadow: inset 0 0 0 1px rgba(14, 26, 51, 0.16);
+  transition: box-shadow 0.15s ease;
+}
+.field:focus-within { box-shadow: inset 0 0 0 2px #0E1A33; }
+.prefix { font-size: 16px; color: rgba(14, 26, 51, 0.55); padding-right: 10px; border-right: 1px solid rgba(14, 26, 51, 0.14); }
+.input {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent;
+  font-family: inherit; font-size: 17px; color: #0E1A33;
+}
+.code { letter-spacing: 0.4em; font-family: var(--font-dmmono), ui-monospace, monospace; font-size: 22px; text-align: center; }
+.fine { margin: 14px 0 0; font-size: 12.5px; line-height: 1.55; color: rgba(14, 26, 51, 0.55); }
+.fine a { color: inherit; }
+.button {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; height: 52px; margin-top: 20px; border: 0; border-radius: 999px;
+  background: #0E1A33; color: #FBF6EE; cursor: pointer;
+  font-family: inherit; font-weight: 500; font-size: 15px;
+  transition: background 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
+}
+.button:hover:not(:disabled) { background: #1B2A4A; transform: translateY(-1px); }
+.button:disabled { opacity: 0.55; cursor: default; }
+.error { margin: 14px 0 0; padding: 11px 14px; border-radius: 12px; background: #F8E3DA; color: #9A3B22; font-size: 14px; line-height: 1.45; }
+.note { margin: 14px 0 0; padding: 11px 14px; border-radius: 12px; background: #F1E8DA; color: rgba(14, 26, 51, 0.78); font-size: 14px; line-height: 1.45; }
+.row { display: flex; justify-content: space-between; gap: 12px; margin-top: 16px; }
+.link { background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; font-size: 14px; color: #C8583A; text-decoration: underline; text-underline-offset: 3px; }
+.divider { margin: 28px 0 0; padding-top: 20px; border-top: 1px solid rgba(14, 26, 51, 0.12); font-size: 14px; line-height: 1.55; color: rgba(14, 26, 51, 0.68); }
+.divider a { color: #0E1A33; font-weight: 500; }
