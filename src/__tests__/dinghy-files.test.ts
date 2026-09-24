@@ -161,7 +161,7 @@ describe('hosted pages (here.now)', () => {
     const calls = fakeHereNow()
     const orig = globalThis.fetch
     globalThis.fetch = (async (url: string, init: RequestInit = {}) => {
-      if (url.startsWith('https://up.example/') && Buffer.isBuffer(init.body)) bodies[url] = (init.body as Buffer).toString('latin1')
+      if (url.startsWith('https://up.example/') && init.body instanceof Uint8Array) bodies[url] = Buffer.from(init.body).toString('latin1')
       return orig(url, init)
     }) as unknown as typeof fetch
     await fileToolsFor().tools[0].execute(doc, ctx)

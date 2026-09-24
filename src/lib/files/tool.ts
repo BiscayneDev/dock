@@ -19,7 +19,7 @@ import { randomUUID } from 'crypto'
 import { createServerClient } from '@/lib/supabase/server'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 import { renderFile, renderHtml, type DinghyDoc, type FileFormat, type RenderedFile } from './render'
-import { publishSite, setSharing, shareEnabled, type PublishedSite } from './share'
+import { publishSite, setSharing, shareEnabled, type PublishedSite, type SiteFile } from './share'
 
 export const FILES_BUCKET = 'dinghy-files'
 /** Fallback links stay valid for a week. */
@@ -96,7 +96,7 @@ async function host(doc: DinghyDoc, format: FileFormat, userId: string, shared: 
         ogImage: fileCardUrl(doc, format === 'pdf' ? 'pdf' : 'page'),
         ...(pdf ? { download: { href: pdf.filename, label: 'download pdf' } } : {}),
     })
-    const files = [{ path: 'index.html', bytes: Buffer.from(html, 'utf8'), contentType: 'text/html; charset=utf-8' }]
+    const files: SiteFile[] = [{ path: 'index.html', bytes: Buffer.from(html, 'utf8'), contentType: 'text/html; charset=utf-8' }]
     if (pdf) files.push({ path: pdf.filename, bytes: pdf.bytes, contentType: pdf.mimeType })
     const site = await publishSite(files, { title: doc.title, userId, shared })
     return { hosted: { ...site, shared }, pdf }

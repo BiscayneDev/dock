@@ -123,7 +123,7 @@ export async function publishSite(files: SiteFile[], opts: { title: string; user
         if (!f) continue
         const put = await fetch(u.url, {
             method: 'PUT',
-            body: f.bytes,
+            body: new Uint8Array(f.bytes),
             headers: { 'Content-Type': f.contentType, ...(u.headers ?? {}) },
             signal: AbortSignal.timeout(TIMEOUT_MS),
         })
