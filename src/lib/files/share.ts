@@ -3,7 +3,7 @@
  *
  * A file is published as a small here.now Site: the HTML render as
  * index.html plus the PDF next to it. The link opens with no code: privacy
- * is an unguessable slug, noindex, and a 30-day expiry. The link itself is
+ * is an unguessable slug, noindex, and a 7-day expiry. The link itself is
  * the share mechanism: forward it and the other person can open it too.
  * revokeSite deletes a file so its link stops working.
  * Off unless HERENOW_API_KEY is set.
@@ -15,8 +15,8 @@ const API = 'https://here.now/api/v1'
 const CLIENT = 'dinghy/files'
 const TIMEOUT_MS = 15_000
 const FOLDER = 'Dinghy'
-/** Hosted files expire after 30 days unless HERENOW_TTL_DAYS says otherwise. */
-const DEFAULT_TTL_DAYS = 30
+/** Hosted files expire after 7 days unless HERENOW_TTL_DAYS says otherwise. */
+const DEFAULT_TTL_DAYS = 7
 
 export function shareEnabled(): boolean {
     return Boolean(process.env.HERENOW_API_KEY)
