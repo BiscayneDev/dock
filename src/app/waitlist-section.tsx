@@ -1,18 +1,40 @@
 'use client'
 
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type CSSProperties } from 'react'
+import { normalizeEmail, normalizeName, normalizeTwitterHandle } from '@/lib/waitlist'
+
+const inputStyle: CSSProperties = {
+  flex: '1 1 220px', minWidth: 0, height: '48px',
+  border: 'none', boxShadow: 'inset 0 0 0 1px rgba(200,210,235,0.2)', borderRadius: '999px',
+  padding: '0 20px', fontFamily: 'var(--sans)', fontSize: '15px',
+  color: 'var(--shell)', background: 'var(--abyss)', outline: 'none',
+}
 
 export function WaitlistSection() {
   const [email, setEmail] = useState('')
+  const [name, setName] = useState('')
+  const [twitter, setTwitter] = useState('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [message, setMessage] = useState('')
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    const trimmed = email.trim().toLowerCase()
-    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    const cleanName = normalizeName(name)
+    if (!cleanName) {
+      setStatus('error')
+      setMessage('Please enter your name.')
+      return
+    }
+    const cleanEmail = normalizeEmail(email)
+    if (!cleanEmail) {
       setStatus('error')
       setMessage('Please enter a valid email address.')
+      return
+    }
+    const handle = normalizeTwitterHandle(twitter)
+    if (handle === null) {
+      setStatus('error')
+      setMessage("That X handle doesn't look right - letters, numbers and _ only, up to 15.")
       return
     }
 
@@ -21,7 +43,7 @@ export function WaitlistSection() {
       const res = await fetch('/api/waitlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: trimmed }),
+        body: JSON.stringify({ email: cleanEmail, name: cleanName, twitter: handle }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -31,6 +53,8 @@ export function WaitlistSection() {
       }
       setStatus('success')
       setEmail('')
+      setName('')
+      setTwitter('')
       setMessage("You're on the list. We'll text you when a seat opens.")
     } catch {
       setStatus('error')
@@ -57,6 +81,30 @@ export function WaitlistSection() {
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
       <input
+        type="text"
+        required
+        autoComplete="name"
+        aria-label="Name"
+        placeholder="your name"
+        maxLength={80}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        disabled={status === 'loading'}
+        style={inputStyle}
+      />
+      <input
+        type="text"
+        autoComplete="off"
+        autoCapitalize="none"
+        spellCheck={false}
+        aria-label="X / Twitter handle (optional)"
+        placeholder="@handle on x (optional)"
+        value={twitter}
+        onChange={(e) => setTwitter(e.target.value)}
+        disabled={status === 'loading'}
+        style={inputStyle}
+      />
+      <input
         type="email"
         required
         autoComplete="email"
@@ -65,12 +113,7 @@ export function WaitlistSection() {
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         disabled={status === 'loading'}
-        style={{
-          flex: '1 1 220px', minWidth: 0, height: '48px',
-          border: 'none', boxShadow: 'inset 0 0 0 1px rgba(200,210,235,0.2)', borderRadius: '999px',
-          padding: '0 20px', fontFamily: 'var(--sans)', fontSize: '15px',
-          color: 'var(--shell)', background: 'var(--abyss)', outline: 'none',
-        }}
+        style={inputStyle}
       />
       <button
         type="submit"

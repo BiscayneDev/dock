@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { isRateLimited } from '@/lib/rate-limit'
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+import { normalizeEmail, normalizeName, normalizeTwitterHandle } from '@/lib/waitlist'
 
 // 5 POSTs per IP per hour. In-memory sliding window — acceptable for now;
 // swap in Supabase/Upstash-backed limiting before multi-instance deploys.
@@ -32,20 +31,30 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const { email } = body as { email?: unknown }
-  const trimmed = typeof email === 'string' ? email.trim().toLowerCase() : ''
-
-  if (!trimmed || !EMAIL_RE.test(trimmed)) {
+  const { email, name, twitter } = (body ?? {}) as { email?: unknown; name?: unknown; twitter?: unknown }
+  const cleanEmail = normalizeEmail(email)
+  if (!cleanEmail) {
     return NextResponse.json({ error: 'Please enter a valid email address.' }, { status: 400 })
   }
+  const cleanName = normalizeName(name)
+  if (!cleanName) {
+    return NextResponse.json({ error: 'Please enter your name.' }, { status: 400 })
+  }
+  const handle = normalizeTwitterHandle(twitter)
+  if (handle === null) {
+    return NextResponse.json({ error: 'That X handle doesn\'t look right - letters, numbers and _ only, up to 15.' }, { status: 400 })
+  }
+
+  const row = { email: cleanEmail, name: cleanName, twitter_handle: handle || null }
 
   try {
     const supabase = createServerClient()
-    // upsert with onConflict — if email already exists, return success (idempotent)
-    // rather than leaking that the email is already registered.
+    // Existing email: keep the original row untouched (an unauthenticated form must not
+    // let anyone rewrite someone else's name/handle) and still return success, so we
+    // don't leak that the email is already registered.
     const { error } = await supabase
       .from('waitlist')
-      .upsert({ email: trimmed }, { onConflict: 'email' })
+      .upsert(row, { onConflict: 'email', ignoreDuplicates: true })
 
     if (error) {
       console.error('Waitlist insert failed:', error.message)
