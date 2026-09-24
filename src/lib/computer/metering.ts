@@ -76,7 +76,9 @@ export async function getTodaySandboxSeconds(
   let seconds = 0
   for (const row of (data ?? []) as { amount_usd: number | string; memo: string | null }[]) {
     if (row.memo?.startsWith('overage:')) continue
-    const match = /:(\d+)s$/.exec(row.memo ?? '')
+    // Metering memos are `<sessionId>:<seconds>s`, optionally tagged
+    // (`...s browser` for browser tasks) — the tag never hides seconds.
+    const match = /:(\d+)s(?:\s|$)/.exec(row.memo ?? '')
     if (match) {
       seconds += Number(match[1])
     } else {

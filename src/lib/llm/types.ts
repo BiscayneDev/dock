@@ -58,6 +58,8 @@ export interface UserContext {
   userId: string
   telegramId: number
   telegramChatId: number
+  /** iMessage chat this context came from — needed by confirm-gated tools. */
+  chatGuid?: string
   name: string
   timezone: string
   tokens: Record<string, DecryptedTokens>

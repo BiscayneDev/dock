@@ -198,7 +198,8 @@ export async function runInSandbox(
   userId: string,
   command: string,
   supabase: Supabase = createServerClient(),
-  provider: ComputerProvider = getProvider()
+  provider: ComputerProvider = getProvider(),
+  memoTag = ''
 ): Promise<{ output: { stdout: string; stderr: string; exitCode: number }; sessionId: string; billedSeconds: number } | { error: string }> {
   const { session } = await getOrStart(userId, supabase)
   if (!session.sandbox_id) return { error: 'sandbox has no id' }
@@ -227,7 +228,7 @@ export async function runInSandbox(
       userId,
       'sandbox',
       Number((billedSeconds * USD_PER_SECOND).toFixed(6)),
-      `${session.id}:${billedSeconds}s`,
+      `${session.id}:${billedSeconds}s${memoTag ? ` ${memoTag}` : ''}`,
       supabase
     )
   }
