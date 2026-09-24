@@ -2,7 +2,7 @@
  * create_file: Dinghy makes a real document and hands it to the user.
  *
  * Default delivery is a hosted page on here.now that opens with no code: an
- * unguessable, unindexed link that expires in 30 days, with the PDF
+ * unguessable, unindexed link that expires in 7 days, with the PDF
  * downloadable from the page. The link is the share mechanism: the user can
  * forward it to anyone. revoke_file deletes a file so its link stops working.
  * Native attachments are for when the user wants the file itself
@@ -110,7 +110,7 @@ export function fileToolsFor(): FileToolset {
             'Write the body in Markdown (## headings, - lists, | tables |, > callouts). A list item starting with a time like "09:00" becomes a schedule row. ' +
             'By default it becomes a file link (a here.now page with a pdf download on it) that opens with one tap, no code; the link is sent right after your reply. ' +
             'Set attach=true only when they want the file itself in the chat (a pdf to print or forward as a file). docx (to edit in Word), csv and md always arrive as attachments. ' +
-            'The link is private unless they forward it: anyone they send it to can open it too. It expires after 30 days. ' +
+            'The link is private unless they forward it: anyone they send it to can open it too. It expires after 7 days; asking again later makes a fresh link. ' +
             'Say one short line about it; do not paste its contents or the link.',
         inputSchema: {
             type: 'object',

@@ -125,7 +125,7 @@ describe('file links (here.now)', () => {
     expect(set.files()[0].hosted).toBeUndefined()
   })
 
-  it('defaults to an open file link: no password anywhere, pdf alongside, 30-day ttl, owner tag', async () => {
+  it('defaults to an open file link: no password anywhere, pdf alongside, 7-day ttl, owner tag', async () => {
     process.env.HERENOW_API_KEY = 'test-key'
     const { calls } = fakeHereNow()
     const set = fileToolsFor()
@@ -141,7 +141,7 @@ describe('file links (here.now)', () => {
     ])
     expect(calls.some((c) => c.url.endsWith('/metadata') || c.body.includes('password'))).toBe(false)
     const create = JSON.parse(calls[0].body)
-    expect(create.ttlSeconds).toBe(30 * 86_400)
+    expect(create.ttlSeconds).toBe(7 * 86_400)
     expect(create.displayDescription).toMatch(/^dinghy file · owner [0-9a-f]{16}$/)
     expect(create.displayDescription).not.toContain('u1')
     expect(set.files()[0].hosted).toMatchObject({ url: 'https://calm-boat-1a2b.here.now/' })
