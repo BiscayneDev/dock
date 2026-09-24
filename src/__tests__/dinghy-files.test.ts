@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const upload = vi.fn()
 const createSignedUrl = vi.fn()
+const { rememberFile, findFile } = vi.hoisted(() => ({ rememberFile: vi.fn(async (...args: unknown[]) => void args), findFile: vi.fn() }))
+vi.mock('@/lib/spectrum/plans', () => ({ rememberFile, findFile }))
 vi.mock('@/lib/supabase/server', () => ({
   createServerClient: () => ({ storage: { from: () => ({ upload, createSignedUrl }) } }),
 }))
@@ -119,7 +121,7 @@ describe('file links (here.now)', () => {
 
   it('attaches as before when hosting is not set up', async () => {
     const set = fileToolsFor()
-    expect(set.tools.map((t) => t.name)).toEqual(['create_file'])
+    expect(set.tools.map((t) => t.name)).toEqual(['create_file', 'recall_file'])
     const r = await set.tools[0].execute(doc, ctx)
     expect((r.data as Record<string, unknown>).delivery).toBe('attachment')
     expect(set.files()[0].hosted).toBeUndefined()
@@ -129,7 +131,7 @@ describe('file links (here.now)', () => {
     process.env.HERENOW_API_KEY = 'test-key'
     const { calls } = fakeHereNow()
     const set = fileToolsFor()
-    expect(set.tools.map((t) => t.name)).toEqual(['create_file', 'revoke_file'])
+    expect(set.tools.map((t) => t.name)).toEqual(['create_file', 'recall_file', 'revoke_file'])
     const r = await set.tools[0].execute(doc, ctx)
     expect((r.data as Record<string, unknown>).delivery).toBe('file_link')
     expect(JSON.stringify(r.data)).not.toContain('here.now')
@@ -197,7 +199,7 @@ describe('revoke_file', () => {
     }) as unknown as typeof fetch
     return writes
   }
-  const revoke = () => fileToolsFor().tools[1]
+  const revoke = () => fileToolsFor().tools.find((t) => t.name === 'revoke_file')!
 
   it('deletes a file this user made', async () => {
     process.env.HERENOW_API_KEY = 'test-key'
@@ -222,5 +224,34 @@ describe('slugFrom', () => {
     expect(slugFrom('calm-boat-1a2b')).toBe('calm-boat-1a2b')
     expect(slugFrom('https://calm-boat-1a2b.here.now.evil.com/')).toBeNull()
     expect(slugFrom('https://x.example/')).toBeNull()
+  })
+})
+
+describe('file memory', () => {
+  it('create_file saves the file with its markdown for the bound user', async () => {
+    rememberFile.mockClear()
+    const set = fileToolsFor()
+    expect((await set.tools[0].execute({ ...doc, format: 'pdf', attach: true }, ctx)).success).toBe(true)
+    expect(rememberFile).toHaveBeenCalledOnce()
+    const [userId, , rec] = rememberFile.mock.calls[0] as unknown as [string, null, { title: string; markdown: string }]
+    expect(userId).toBe('u1')
+    expect(rec.title).toBe(doc.title)
+    expect(rec.markdown).toBe(doc.body)
+  })
+
+  it('skips memory for unbound chats', async () => {
+    rememberFile.mockClear()
+    await fileToolsFor().tools[0].execute({ ...doc, format: 'pdf', attach: true }, { tokens: {} } as unknown as UserContext)
+    expect(rememberFile).not.toHaveBeenCalled()
+  })
+
+  it('recall_file returns the saved markdown', async () => {
+    findFile.mockResolvedValueOnce({ title: 'Spain itinerary', format: 'page', url: 'https://x.here.now', markdown: '# Day 1', expires_at: null, created_at: '2026-09-24' })
+    const recall = fileToolsFor().tools.find((t) => t.name === 'recall_file')!
+    const r = await recall.execute({ query: 'spain' }, ctx)
+    expect(r).toMatchObject({ success: true, data: { title: 'Spain itinerary', body: '# Day 1' } })
+    findFile.mockResolvedValueOnce(null)
+    expect((await recall.execute({ query: 'tokyo' }, ctx)).success).toBe(false)
+    expect((await recall.execute({}, ctx)).success).toBe(false)
   })
 })

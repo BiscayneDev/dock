@@ -54,6 +54,7 @@ describe('file markers', () => {
     const r = stripFileMarkers('Updated itinerary is in your PDF.\n\n[sent file: spain-trip.pdf]')
     expect(r).toEqual({ text: 'Updated itinerary is in your PDF.', hadMarker: true })
     expect(stripFileMarkers('all good')).toEqual({ text: 'all good', hadMarker: false })
+    expect(stripFileMarkers('Here it is.\n[file: Spain itinerary]').text).toBe('Here it is.')
   })
 })
 

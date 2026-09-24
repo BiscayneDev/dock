@@ -21,6 +21,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 import { renderFile, renderHtml, type DinghyDoc, type FileFormat, type RenderedFile } from './render'
 import { publishSite, revokeSite, shareEnabled, type PublishedSite, type SiteFile } from './share'
+import { findFile, rememberFile } from '@/lib/spectrum/plans'
 
 export const FILES_BUCKET = 'dinghy-files'
 /** Fallback links stay valid for a week. */
@@ -40,6 +41,20 @@ export interface MadeFile extends RenderedFile {
     link: string | null
     /** Set when the file went out as a here.now page instead of an attachment. */
     hosted?: HostedFile
+    /** The document body, kept so Dinghy can reopen and update its own files. */
+    markdown?: string
+}
+
+/** Save the file to memory (dinghy_files). Best-effort: never blocks the reply. */
+async function remember(ctx: UserContext, f: MadeFile): Promise<void> {
+    if (!ctx.userId) return
+    await rememberFile(ctx.userId, null, {
+        title: f.title,
+        format: f.hosted ? 'page' : f.format,
+        url: f.hosted?.url ?? f.link,
+        markdown: f.markdown ?? '',
+        expires_at: f.hosted?.expiresAt ?? (f.link ? new Date(Date.now() + LINK_TTL_SECONDS * 1000).toISOString() : null),
+    }).catch((err) => console.error('[dinghy] file memory failed', err instanceof Error ? err.message : err))
 }
 
 export interface FileToolset {
@@ -133,7 +148,9 @@ export function fileToolsFor(): FileToolset {
                 try {
                     const { hosted, pdf } = await host(parsed.doc, parsed.format, ctx.userId)
                     const file = pdf ?? (await renderFile(parsed.doc, 'html'))
-                    made.push({ ...file, format: parsed.format, title: parsed.doc.title, subtitle: parsed.doc.subtitle, link: null, hosted })
+                    const entry: MadeFile = { ...file, format: parsed.format, title: parsed.doc.title, subtitle: parsed.doc.subtitle, link: null, hosted, markdown: parsed.doc.body }
+                    made.push(entry)
+                    await remember(ctx, entry)
                     return {
                         success: true,
                         data: {
@@ -161,7 +178,9 @@ export function fileToolsFor(): FileToolset {
             } catch (err) {
                 console.error('[dinghy] file upload failed', err instanceof Error ? err.message : err)
             }
-            made.push({ ...file, format, title: parsed.doc.title, subtitle: parsed.doc.subtitle, link })
+            const entry: MadeFile = { ...file, format, title: parsed.doc.title, subtitle: parsed.doc.subtitle, link, markdown: parsed.doc.body }
+            made.push(entry)
+            await remember(ctx, entry)
             return {
                 success: true,
                 data: {
@@ -174,6 +193,30 @@ export function fileToolsFor(): FileToolset {
                         ? 'The file link did not work this time; the file goes out as an attachment instead. Say so in one short line.'
                         : 'The file goes out as an attachment right after your reply. Keep the reply to one short line; no link, no contents.',
                 },
+            }
+        },
+    }
+
+    const recallFile: Tool = {
+        name: 'recall_file',
+        description:
+            'Open a file you made for this person earlier (in any chat): returns its title, link and full Markdown body. ' +
+            'Use it before updating an earlier file (then call create_file with the complete updated body) or when they ask what was in it.',
+        inputSchema: {
+            type: 'object',
+            properties: { query: { type: 'string', description: 'Words from the file title, e.g. "spain itinerary", or its link' } },
+            required: ['query'],
+        },
+        async execute(input: unknown, ctx: UserContext): Promise<ToolResult> {
+            const query = str(((input ?? {}) as Record<string, unknown>).query)
+            if (!query) return { success: false, error: 'query is required' }
+            if (!ctx.userId) return { success: false, error: 'no saved files for this chat' }
+            try {
+                const f = await findFile(ctx.userId, query)
+                if (!f) return { success: false, error: 'no saved file matches that' }
+                return { success: true, data: { title: f.title, format: f.format, url: f.url, made: f.created_at, body: f.markdown } }
+            } catch {
+                return { success: false, error: 'could not open saved files just now' }
             }
         },
     }
@@ -201,12 +244,12 @@ export function fileToolsFor(): FileToolset {
         },
     }
 
-    return { tools: shareEnabled() ? [createFile, revokeFile] : [createFile], files: () => [...made] }
+    return { tools: shareEnabled() ? [createFile, recallFile, revokeFile] : [createFile, recallFile], files: () => [...made] }
 }
 
 /** Remove "[sent file: x]" markers the model may copy into its reply text. */
 export function stripFileMarkers(text: string): { text: string; hadMarker: boolean } {
-    const re = /\[\s*sent file:[^\]]*\]/gi
+    const re = /\[\s*(?:sent )?file:[^\]]*\]/gi
     const hadMarker = re.test(text)
     return { text: text.replace(re, '').replace(/\n{3,}/g, '\n\n').trim(), hadMarker }
 }

@@ -18,6 +18,7 @@
 
 import { createServerClient } from '@/lib/supabase/server'
 import { forgetMemories, resolveUserId } from './memory'
+import { forgetAllPlansAndFiles, forgetPlans, loadUpcomingPlans, recentFiles, renderFileLine, renderPlan } from './plans'
 
 const RECENT_LIMIT = 10
 
@@ -68,6 +69,14 @@ export async function renderMemoryReport(chatGuid: string): Promise<string> {
     if (profile.trim()) lines.push(...profile.trim().split('\n').map((l) => l.replace(/^-\s*/, '').trim()).filter(Boolean))
     const profileKeys = new Set(lines.map((l) => l.toLowerCase()))
     for (const f of facts) if (!profileKeys.has(f.toLowerCase().trim()) && lines.length < 15) lines.push(f)
+    const [plans, files] = userId
+        ? await Promise.all([
+              loadUpcomingPlans(userId).catch(() => []),
+              recentFiles(userId, 5).catch(() => []),
+          ])
+        : [[], []]
+    if (plans.length) lines.push(...plans.map((p) => `plan: ${renderPlan(p).replace(/ \[source: [a-z]+\]$/, '')}`))
+    if (files.length) lines.push(...files.map((f) => `file: ${renderFileLine(f)}`))
     if (!lines.length) return "nothing saved about you yet. tell me things and i'll remember - say 'forget x' anytime and i'll drop it."
     return "here's what i remember about you:\n" + lines.map((l) => `- ${l}`).join('\n') + "\n\nsay 'forget x' to drop one, 'forget everything' to wipe it all."
 }
@@ -107,8 +116,9 @@ export async function forgetAllMemories(chatGuid: string): Promise<number> {
         : ['forget_all_chat_memories', { p_chat_guid: chatGuid }]
     const { data, error } = await createServerClient().rpc(rpc as string, args)
     if (error) throw new Error(`${rpc} failed: ${error.message}`)
+    const extra = userId ? await forgetAllPlansAndFiles(userId).catch(() => 0) : 0
     await clearMemoryWipe(chatGuid).catch(() => undefined)
-    return (data as number) ?? 0
+    return ((data as number) ?? 0) + extra
 }
 
 const WIPE_CONFIRM = /^\s*(?:yes|y)\s*[.!]*\s*$/i
@@ -138,5 +148,10 @@ export async function handlePendingMemoryWipe(chatGuid: string, text: string): P
 // ── Single-fact forget ("forgot that" runs directly; it's reversible) ────────
 
 export async function forgetMatch(chatGuid: string, match: string): Promise<number> {
-    return forgetMemories(chatGuid, match)
+    const userId = await resolveUserId(chatGuid).catch(() => null)
+    const [facts, plans] = await Promise.all([
+        forgetMemories(chatGuid, match),
+        userId ? forgetPlans(userId, match).catch(() => 0) : Promise.resolve(0),
+    ])
+    return facts + plans
 }

@@ -25,6 +25,7 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { embedText, currentEmbeddingModel } from '@/lib/memory/embeddings'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
+import { cleanPlans, isAbsence, loadUpcomingPlans, recentFiles, renderFileLine, renderPlan, savePlans } from './plans'
 
 /**
  * Extraction cadence (F3 audit + fix): UPDATE_EVERY used to be 10, so a
@@ -50,9 +51,13 @@ export interface MemoryContext {
     profile: string
     summaries: string[]
     facts: string[]
+    /** Upcoming trips/events (migration 046), rendered one per line. */
+    plans?: string[]
+    /** Files Dinghy made for this person, newest first, rendered one per line. */
+    files?: string[]
 }
 
-export const EMPTY_MEMORY: MemoryContext = { profile: '', summaries: [], facts: [] }
+export const EMPTY_MEMORY: MemoryContext = { profile: '', summaries: [], facts: [], plans: [], files: [] }
 
 // ── Secret guard: nothing that looks like a credential is ever stored. ──────
 
@@ -78,6 +83,8 @@ export function renderMemoryBlock(m: MemoryContext): string {
     if (m.summaries.length) {
         parts.push(`Earlier conversation (summaries, oldest first):\n${m.summaries.map((s) => `- ${s.slice(0, SUMMARY_CAP)}`).join('\n')}`)
     }
+    if (m.plans?.length) parts.push(`Upcoming plans (keep these in mind; update them when they change):\n${m.plans.map((p) => `- ${p}`).join('\n')}`)
+    if (m.files?.length) parts.push(`Files you made for them (newest first; recall_file opens one):\n${m.files.map((f) => `- ${f}`).join('\n')}`)
     if (m.facts.length) parts.push(`Possibly relevant memories:\n${m.facts.map((f) => `- ${f}`).join('\n')}`)
     if (!parts.length) return ''
     return (
@@ -112,15 +119,17 @@ export async function loadMemoryContext(chatGuid: string, query: string): Promis
     const embedding = query.trim().length >= 3 ? await withTimeout(embedText(query), EMBED_READ_TIMEOUT_MS).catch(() => null) : null
     const ctxRpc = userId ? 'dinghy_user_memory_context' : 'dinghy_memory_context'
     const ctxArgs = userId ? { p_user_id: userId } : { p_chat_guid: chatGuid }
-    const [ctxRes, facts, older] = await Promise.all([
+    const [ctxRes, facts, older, plans, files] = await Promise.all([
         supabase.rpc(ctxRpc, ctxArgs),
         relevantFacts(chatGuid, userId, embedding).catch(() => [] as string[]),
         relevantSummaries(chatGuid, userId, embedding).catch(() => [] as string[]),
+        userId ? loadUpcomingPlans(userId).then((r) => r.map(renderPlan)).catch(() => [] as string[]) : Promise.resolve([] as string[]),
+        userId ? recentFiles(userId, 5).then((r) => r.map((f) => renderFileLine(f))).catch(() => [] as string[]) : Promise.resolve([] as string[]),
     ])
     if (ctxRes.error) throw new Error(`${ctxRpc} failed: ${ctxRes.error.message}`)
     const d = (ctxRes.data ?? {}) as { profile?: string; summaries?: string[] }
     const latest = Array.isArray(d.summaries) ? d.summaries : []
-    return { profile: d.profile ?? '', summaries: [...older, ...latest], facts }
+    return { profile: d.profile ?? '', summaries: [...older, ...latest], facts, plans, files }
 }
 
 export const EMBED_READ_TIMEOUT_MS = 1500
@@ -235,7 +244,7 @@ export function cleanFacts(raw: unknown, existing: string[]): { content: string;
     for (const f of raw) {
         const content = typeof f?.content === 'string' ? f.content.trim() : ''
         const type = typeof f?.type === 'string' && VALID_TYPES.has(f.type) ? f.type : 'fact'
-        if (content.length < 4 || content.length > 300 || looksSecret(content)) continue
+        if (content.length < 4 || content.length > 300 || looksSecret(content) || isAbsence(content)) continue
         const key = content.toLowerCase()
         if (seen.has(key)) continue
         seen.add(key)
@@ -251,16 +260,18 @@ export function cleanProfile(raw: unknown): string | null {
     const lines = raw
         .split('\n')
         .map((l) => l.trimEnd())
-        .filter((l) => l.trim() && !looksSecret(l))
+        .filter((l) => l.trim() && !looksSecret(l) && !isAbsence(l))
     const text = lines.join('\n').slice(0, PROFILE_CAP).trim()
     return text || null
 }
 
 const PROFILE_SYSTEM = `You maintain memory for Dinghy, a personal assistant that texts with one person.
-Given the current profile, known facts, and recent messages, return ONLY JSON:
-{"profile": "...", "facts": [{"content": "...", "type": "fact|person|preference|org|event"}]}
-profile: the full updated profile of this person in short "- " lines (name, work, people in their life, preferences, ongoing plans). Rewrite it: keep what is still true, fix what changed, drop what is stale. Max ~15 lines.
+Given the current profile, known facts, known plans, and recent messages, return ONLY JSON:
+{"profile": "...", "facts": [{"content": "...", "type": "fact|person|preference|org|event"}], "plans": [{"title": "...", "kind": "trip|event|other", "starts_on": "YYYY-MM-DD or null", "ends_on": "YYYY-MM-DD or null", "places": ["..."], "people": ["..."], "details": "...", "source": "user|file|email|calendar"}]}
+profile: the full updated profile of this person in short "- " lines (name, work, people in their life, preferences). Rewrite it: keep what is still true, fix what changed, drop what is stale. Max ~15 lines. Trips and events go in plans, not the profile.
 facts: up to 5 NEW concrete, reusable facts from the recent messages not already known. Include dates for time-bound facts.
+plans: trips and events mentioned in the recent messages, new or changed (repeat the known title to update one). Keep dates, places, flights, hotels, reservations, and who is going word for word in details. Use absolute dates; today is {TODAY}.
+Only save what the person said, or what a source Dinghy read (their email, calendar, a file) actually showed; set source to match. Never save an absence or a failed lookup as memory: no "has not booked", "not on the calendar", "no emails found", "nothing scheduled". If a search came up empty, save nothing about it.
 Never include passwords, codes, keys, card or account numbers, or anything secret. Only facts about the person, never about Dinghy itself.`
 
 const SUMMARY_SYSTEM = `Summarize this stretch of a text conversation between a person and their assistant Dinghy in 2-4 plain sentences: what they talked about, decisions, and anything left open. Include dates when mentioned. Never include secrets, codes, or account numbers. Return ONLY JSON: {"summary": "..."}`
@@ -326,10 +337,11 @@ export async function updateMemory(chatGuid: string, sourceChannel = 'imessage')
     ])
     const profile = ((ctx ?? {}) as { profile?: string }).profile ?? ''
     const known = ((recent ?? []) as { content: string }[]).map((r) => r.content)
+    const knownPlans = userId ? await loadUpcomingPlans(userId).catch(() => []) : []
     const out = await gatewayJson(
-        PROFILE_SYSTEM,
-        `current profile:\n${profile || '(empty)'}\n\nknown facts:\n${known.map((k) => `- ${k}`).join('\n') || '(none)'}\n\nrecent messages:\n${transcript(fresh, 6000)}`,
-        700
+        PROFILE_SYSTEM.replace('{TODAY}', new Date().toISOString().slice(0, 10)),
+        `current profile:\n${profile || '(empty)'}\n\nknown facts:\n${known.map((k) => `- ${k}`).join('\n') || '(none)'}\n\nknown plans:\n${knownPlans.map((p) => `- ${renderPlan(p)}`).join('\n') || '(none)'}\n\nrecent messages:\n${transcript(fresh, 6000)}`,
+        1100
     )
     if (out) {
         const nextProfile = cleanProfile(out.profile)
@@ -340,6 +352,7 @@ export async function updateMemory(chatGuid: string, sourceChannel = 'imessage')
             await supabase.rpc(saveRpc as string, saveArgs)
         }
         await storeFacts(chatGuid, userId, sourceChannel, cleanFacts(out.facts, known))
+        if (userId) await savePlans(userId, chatGuid, cleanPlans(out.plans)).catch((err) => console.error('[dinghy] plans save failed', err instanceof Error ? err.message : err))
     }
 
     // 2. Episodic summary of what scrolled out of the history window.

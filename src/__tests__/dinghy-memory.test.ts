@@ -121,7 +121,7 @@ describe('loadMemoryContext', () => {
       if (fn === 'recent_chat_memories') return Promise.resolve({ data: [{ content: 'f1' }], error: null })
       return Promise.resolve({ data: null, error: null })
     })
-    expect(await loadMemoryContext('chat-1', 'hello there')).toEqual({ profile: 'p', summaries: ['s'], facts: ['f1'] })
+    expect(await loadMemoryContext('chat-1', 'hello there')).toEqual({ profile: 'p', summaries: ['s'], facts: ['f1'], plans: [], files: [] })
   })
 })
 
