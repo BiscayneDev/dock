@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { WaitlistSection } from './waitlist-section'
-import { Anchor } from '@/components/brand/Scene'
 
 // 24x12 preview of public/hero-coast.jpg, shown while the full image loads.
 const HERO_BLUR = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCAAMABgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwClo0R85YbuGRDJwsoj4Hsa05vD1jE2HuJFJ7Bc1Q0cu10AZHO1gRlqv3aMt2H86UkuDgtx1rNufNo7FR5eXVXMrWbWC12wWbmQsMuSnQdqKt+IXC3ZHlqfqT/Q0U4ttXZM172h/9k='
@@ -31,7 +30,8 @@ export default function LandingPage() {
         .label { display: flex; align-items: center; gap: 12px; font-family: var(--mono); font-weight: 500; font-size: 11px; line-height: 1; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ember); white-space: nowrap; margin-bottom: 24px; }
         .label::before { content: ""; width: 28px; height: 1px; background: currentColor; opacity: .6; flex: none; }
         nav.top { position: absolute; top: 0; left: 0; right: 0; z-index: 30; display: flex; justify-content: space-between; align-items: center; padding: 24px 32px; }
-        .mark { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-weight: 500; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--shell); }
+        .mark { display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-variation-settings: 'SOFT' 100; font-weight: 520; font-size: 22px; letter-spacing: -0.01em; line-height: 1; color: var(--shell); }
+        .mark img { border-radius: 8px; }
         .signin { font-family: var(--sans); font-size: 15px; color: var(--mist); transition: color .2s ease; }
         .signin:hover { color: var(--shell); }
         h1 { font-size: clamp(44px, 8vw, 72px); line-height: 1; letter-spacing: -0.025em; max-width: 14ch; }
@@ -89,7 +89,7 @@ export default function LandingPage() {
             />
           </div>
           <nav className="top">
-            <span className="mark"><Anchor color="#F2A380" size={20} />dinghy</span>
+            <Link href="/" className="mark"><Image src="/icon-192.png" alt="" width={30} height={30} />dinghy</Link>
             <Link href="/login" className="signin">sign in</Link>
           </nav>
 
