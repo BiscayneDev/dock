@@ -46,7 +46,10 @@ export async function GET(
 
   // --- In-thread connect flow: no web session; the one-use connect token
   // consumed at the start is bound to the `state` Google echoes back. ---
-  if (provider === 'google' && state && !request.cookies.get('g_oauth_state')) {
+  // Decide by the state value, not the cookie's presence: a leftover web
+  // g_oauth_state cookie (10 min) must not hijack a chat connect into the
+  // session flow (login -> profile, token dropped).
+  if (provider === 'google' && state && request.cookies.get('g_oauth_state')?.value !== state) {
     return handleGoogleConnectCallback(code, state, appUrl)
   }
   // PayBox in-thread flow: random state bound to the token row (the web
