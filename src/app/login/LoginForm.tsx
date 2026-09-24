@@ -50,6 +50,10 @@ export function LoginForm({ notice }: { notice?: string | null }): React.JSX.Ele
       <form onSubmit={verify}>
         <h1 className={styles.title}>check your <em>texts</em></h1>
         <p className={styles.sub}>If {formatUs(e164)} uses Dinghy, a 6-digit code is on its way in your Dinghy thread.</p>
+        <div className={styles.newHere}>
+          <p><strong>New to Dinghy?</strong> No code will come until you&rsquo;re in the beta.</p>
+          <Link href="/#waitlist" className={styles.newHereCta}>get on the waitlist <span aria-hidden="true">{"\u2192"}</span></Link>
+        </div>
         <label className={styles.label} htmlFor="code">sign-in code</label>
         <div className={styles.field}>
           <input id="code" className={`${styles.input} ${styles.code}`} inputMode="numeric" autoComplete="one-time-code" autoFocus
@@ -62,7 +66,7 @@ export function LoginForm({ notice }: { notice?: string | null }): React.JSX.Ele
           <button type="button" className={styles.link} onClick={() => { setStep('phone'); setError(null); setResent(false) }}>use a different number</button>
           <button type="button" className={styles.link} disabled={busy} onClick={() => sendCode()}>send a new code</button>
         </div>
-        <p className={styles.divider}>No code? Your number needs a Dinghy thread first. <a href={DINGHY_SMS}>Text Dinghy</a> with your invite code, then try again.</p>
+        <p className={styles.divider}>Have an invite code? <a href={DINGHY_SMS}>Text it to Dinghy</a> first, then sign in.</p>
       </form>
     )
   }

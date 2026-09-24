@@ -41,3 +41,8 @@
 .link { background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; font-size: 14px; color: #C8583A; text-decoration: underline; text-underline-offset: 3px; }
 .divider { margin: 28px 0 0; padding-top: 20px; border-top: 1px solid rgba(14, 26, 51, 0.12); font-size: 14px; line-height: 1.55; color: rgba(14, 26, 51, 0.68); }
 .divider a { color: #0E1A33; font-weight: 500; }
+.newHere { margin: 0 0 22px; padding: 14px 16px; border-radius: 14px; background: #F1E8DA; font-size: 14px; line-height: 1.45; color: rgba(14, 26, 51, 0.78); }
+.newHere p { margin: 0 0 10px; }
+.newHere strong { color: #0E1A33; font-weight: 600; }
+.newHereCta { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px; border-radius: 999px; background: #0E1A33; color: #FBF6EE; text-decoration: none; font-weight: 500; font-size: 14px; }
+.newHereCta:hover { background: #1a2a4d; }

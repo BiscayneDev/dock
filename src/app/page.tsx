@@ -100,8 +100,8 @@ export default function LandingPage() {
               dinghy is a first mate that lives in imessage. you text it like a person. <b>it does the work.</b>
             </p>
             <div className="cta">
-              <Link href="/login" className="btn primary">join the beta</Link>
-              <a href="#waitlist" className="btn quiet">get on the list</a>
+              <a href="#waitlist" className="btn primary">join the beta</a>
+              <a href="sms:+16282647754" className="btn quiet">have an invite? text dinghy</a>
             </div>
           </section>
           <div className="hero-spacer" />
