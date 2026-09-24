@@ -12,4 +12,10 @@ describe('dinghyContactCard', () => {
         expect(vcf).toMatch(/PHOTO/)
         expect(vcf).not.toMatch(/Spectrum/i)
     })
+    it("carries the person's own line when given", async () => {
+        const [content] = await resolveContents([dinghyContactCard('+16286293507')])
+        const vcf = await toVCard(content as Parameters<typeof toVCard>[0])
+        expect(vcf.replace(/\D/g, '')).toContain('16286293507')
+        expect(vcf.replace(/\D/g, '')).not.toContain('16282647754')
+    })
 })

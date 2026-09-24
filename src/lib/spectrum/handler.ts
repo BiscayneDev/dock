@@ -34,6 +34,7 @@ import { hostedHistoryLine, sendFileWithPreview, sendHostedFile } from '@/lib/fi
 import { actionToolsFor, cancelPendingActions, executePendingActionDetailed, hasPendingAction, lastLooseProposal, parseConfirmation, renderProposal, sendConfirmedReaction } from './actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { dinghyContactCard } from './contact-card'
+import { dinghyLineFor } from './line-for-chat'
 import { hitRateLimit, RATE_NOTICE } from './rate-limit'
 import {
     claimGateNotice,
@@ -226,7 +227,7 @@ async function handleGatedMessage(space: InboundSpace, chatGuid: string, text: s
             if (result === 'ok' || result === 'already') {
                 await sendText(space, chatGuid, 'reply', GATE_WELCOME)
                 await (space as InboundSpace & { send(b: unknown): Promise<unknown> })
-                    .send(dinghyContactCard())
+                    .send(dinghyContactCard(await dinghyLineFor(chatGuid)))
                     .catch((err) => logErr('welcome contact card failed', err))
             } else if (result === 'invalid') {
                 await sendText(space, chatGuid, 'reply', GATE_INVALID)
@@ -446,7 +447,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     // On-demand contact card.
     if (textIntents && isContactCardRequest(text)) {
         await (space as InboundSpace & { send(b: unknown): Promise<unknown> })
-            .send(dinghyContactCard())
+            .send(dinghyContactCard(await dinghyLineFor(chatGuid)))
             .catch((err) => logErr('contact card failed', err))
         return
     }
@@ -497,7 +498,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     // pool's "Spectrum" identity.
     if (history.length === 0) {
         await (space as InboundSpace & { send(b: unknown): Promise<unknown> })
-            .send(dinghyContactCard())
+            .send(dinghyContactCard(await dinghyLineFor(chatGuid)))
             .catch((err) => logErr('onboarding contact card failed', err))
     }
 

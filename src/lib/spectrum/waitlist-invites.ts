@@ -3,19 +3,21 @@
  *   "invite next 5"          -> the 5 oldest 'joined' rows
  *   "invite someone@x.com"   -> that signup (joined or invited; re-sends)
  *
- * For each person:
+ * For each person with a phone:
  *   1. register them as a Photon user -> their own assigned Dinghy line
- *   2. mint a fresh single-use beta code
+ *   2. put their number on the beta allowlist (the registered number IS the
+ *      proof - no invite code to redeem)
  *   3. Dinghy tries an intro text from their line
  *   4. the invite email goes out as backup, carrying their personal number
  *
  * Photon's shared pool currently rejects a first text to someone who hasn't
  * messaged their line yet ("Target not allowed for this project"), so step 3
- * can fail; the email's tap-to-text link covers it. The row moves to 'invited'
- * when the text or the email landed.
+ * can fail; the email's tap-to-text link covers it.
+ *
+ * No phone on file means no Photon user and no line that can reach them, so
+ * those rows are skipped and named in the reply.
  */
 import { createServerClient } from '@/lib/supabase/server'
-import { mintInvite } from './beta-gate'
 import { sendWaitlistInvite } from '@/lib/email/waitlist-invite'
 import { firstName } from '@/lib/email/waitlist-confirmation'
 import { normalizeEmail } from '@/lib/waitlist'
@@ -40,9 +42,13 @@ export function parseWaitlistInviteCommand(text: string): WaitlistInviteCommand 
 
 interface Row { id: string; email: string; name: string | null; status: string; phone: string | null }
 
-export function introText(name: string, code: string): string {
+export function introText(name: string): string {
   const first = firstName(name).toLowerCase()
-  return `ahoy${first ? ` ${first}` : ''} - it's dinghy. your seat's open. reply with your code ${code} and i'll bring you aboard.`
+  return `ahoy${first ? ` ${first}` : ''} - it's dinghy. you're aboard. save this number and text me whatever you need.`
+}
+
+export function chatGuidForPhone(phone: string): string {
+  return `any;-;${phone}`
 }
 
 /** Dinghy's first text, from the person's own line. False when Photon refuses or anything fails. */
@@ -60,7 +66,7 @@ export async function sendIntroText(phone: string, text: string): Promise<boolea
 }
 
 /** Returns a short lowercase summary for the owner. */
-export async function runWaitlistInvites(ownerChat: string, cmd: WaitlistInviteCommand): Promise<string> {
+export async function runWaitlistInvites(_ownerChat: string, cmd: WaitlistInviteCommand): Promise<string> {
   if (!process.env.RESEND_API_KEY) return "can't send invites yet - RESEND_API_KEY isn't set."
   const supabase = createServerClient()
   const query = supabase.from('waitlist').select('id, email, name, status, phone')
@@ -85,11 +91,15 @@ export async function runWaitlistInvites(ownerChat: string, cmd: WaitlistInviteC
     if (!user) { failed.push(`${row.email} (couldn't assign a line)`); continue }
     await supabase.from('waitlist').update({ photon_user_id: user.id, dinghy_line: user.assignedPhoneNumber }).eq('id', row.id)
 
-    const code = await mintInvite(ownerChat, 1, `waitlist:${row.email}`)
-    if (!code) { failed.push(row.email); continue }
+    // Registered number = credential: allowlist it (no code).
+    const { error: allowErr } = await supabase.from('beta_allowlist').upsert(
+      { chat_guid: chatGuidForPhone(row.phone), role: 'member', note: `waitlist approve: ${row.email}` },
+      { onConflict: 'chat_guid', ignoreDuplicates: true },
+    )
+    if (allowErr) { failed.push(`${row.email} (couldn't allowlist)`); continue }
 
-    const didText = await sendIntroText(row.phone, introText(row.name ?? '', code))
-    const didEmail = await sendWaitlistInvite(row.email, row.name ?? '', code, user.assignedPhoneNumber)
+    const didText = await sendIntroText(row.phone, introText(row.name ?? ''))
+    const didEmail = await sendWaitlistInvite(row.email, row.name ?? '', user.assignedPhoneNumber)
     if (!didText && !didEmail) { failed.push(row.email); continue }
 
     const now = new Date().toISOString()
@@ -101,7 +111,7 @@ export async function runWaitlistInvites(ownerChat: string, cmd: WaitlistInviteC
 
   const lines: string[] = []
   if (texted.length) lines.push(`texted ${texted.length}: ${texted.join(', ')}`)
-  if (emailed.length) lines.push(`emailed ${emailed.length} (text didn't go through - they need to text their line first): ${emailed.join(', ')}`)
+  if (emailed.length) lines.push(`emailed ${emailed.length} (text didn't go through - they're allowlisted, they just need to text their line): ${emailed.join(', ')}`)
   if (noPhone.length) lines.push(`no phone on file, skipped: ${noPhone.join(', ')}`)
   if (failed.length) lines.push(`couldn't invite: ${failed.join(', ')}`)
   return lines.join('\n')
