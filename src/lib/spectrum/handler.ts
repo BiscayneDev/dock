@@ -58,6 +58,7 @@ import {
     WIPE_PROMPT,
 } from './memory-commands'
 import { buildIcs } from './ics'
+import { parseWaitlistInviteCommand, runWaitlistInvites } from './waitlist-invites'
 import { interviewDirective, markOpenerAsked } from './interview'
 import { attachment } from 'spectrum-ts'
 
@@ -290,6 +291,20 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     if (!role) {
         await handleGatedMessage(space, chatGuid, text)
         return
+    }
+
+    // Owner: email waitlist invites ("invite next 5", "invite someone@x.com").
+    if (role === 'owner') {
+        const wl = parseWaitlistInviteCommand(text)
+        if (wl) {
+            try {
+                await sendText(space, chatGuid, 'reply', await runWaitlistInvites(chatGuid, wl))
+            } catch (err) {
+                logErr('waitlist invites failed', err)
+                await sendText(space, chatGuid, 'error_notice', "couldn't send those invites - try again in a moment.")
+            }
+            return
+        }
     }
 
     // Owner: mint an invite code ("invite", "invite 5").
