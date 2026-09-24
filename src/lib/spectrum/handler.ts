@@ -68,6 +68,7 @@ import { interviewDirective, markOpenerAsked } from './interview'
 import { attachment } from 'spectrum-ts'
 import { ackTapback, normalizeInbound, reactionDecision, shouldThread, tapback, withReplyContext, type Inbound, type MessageLike } from './tapbacks'
 import { toPlainText } from '@/lib/spectrum/plain-text'
+import { routingFor } from './routing'
 
 export interface InboundSpace {
     /** Webhook SDK space objects carry the chat identifier as `id`. */
@@ -779,6 +780,9 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             logErr('tool context load failed', err)
             return null
         })
+        // Right model for the task, via Shipyard (routing.ts). One call per turn,
+        // so research stays on the strong model through the whole tool loop.
+        const routing = routingFor(text)
         let reply: string
         let toolCalls = 0
         let iterations = 0
@@ -801,6 +805,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 gatewayUrl: GATEWAY_URL,
                 apiKey: SHIPYARD_API_KEY,
                 model: SHIPYARD_MODEL,
+                routing,
                 facts,
                 includeOpener,
                 capabilities: { ...(toolCtx ? capabilitiesFor(toolCtx) : guestCapabilities()), spend: true, reminders: true },
@@ -834,6 +839,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 gatewayUrl: GATEWAY_URL,
                 apiKey: SHIPYARD_API_KEY,
                 model: SHIPYARD_MODEL,
+                routing,
                 facts,
                 includeOpener,
                 memory: memoryBlock,

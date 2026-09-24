@@ -27,6 +27,10 @@ export interface GatewayUsage {
 const LIST_PRICES: { match: RegExp; input: number; output: number }[] = [
     { match: /haiku-4-5/i, input: 1, output: 5 },
     { match: /sonnet-4-5/i, input: 3, output: 15 },
+    // Hopscotch catalog (routed via Shipyard auto; the gateway's cost header wins when present).
+    { match: /sonnet-5/i, input: 2, output: 10 },
+    { match: /gpt-5/i, input: 1.25, output: 10 },
+    { match: /gpt-4o-mini/i, input: 0.15, output: 0.6 },
 ]
 
 export function estimateCostUsd(model: string, inputTokens: number, outputTokens: number): number | null {
