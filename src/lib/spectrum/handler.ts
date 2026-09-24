@@ -61,6 +61,7 @@ import { buildIcs } from './ics'
 import { parseWaitlistInviteCommand, runWaitlistInvites } from './waitlist-invites'
 import { interviewDirective, markOpenerAsked } from './interview'
 import { attachment } from 'spectrum-ts'
+import { ackTapback, normalizeInbound, reactionDecision, shouldThread, tapback, withReplyContext, type Inbound, type MessageLike } from './tapbacks'
 
 export interface InboundSpace {
     /** Webhook SDK space objects carry the chat identifier as `id`. */
@@ -72,8 +73,11 @@ export interface InboundSpace {
 
 export interface InboundMessage {
     id?: string
-    content: { type: string; text?: string }
+    direction?: string
+    content: MessageLike['content']
     sender?: { handle?: string; id?: string }
+    react?: MessageLike['react']
+    reply?: MessageLike['reply']
 }
 
 /**
@@ -122,6 +126,27 @@ function startTypingReTap(space: InboundSpace): ReturnType<typeof setInterval> {
 function stopTypingReTap(space: InboundSpace, handle: ReturnType<typeof setInterval> | null): void {
     if (handle) clearInterval(handle)
     stopTyping(space)
+}
+
+/** A native threaded reply to `message`, tracked in the outbox like sendText.
+ *  Falls back to a plain send when threading isn't available or fails. */
+async function sendThreaded(space: InboundSpace, chatGuid: string, message: InboundMessage, text: string): Promise<void> {
+    if (typeof message.reply !== 'function') return sendText(space, chatGuid, 'reply', text)
+    const outboxId = await enqueueOutbox(chatGuid, 'reply', text)
+    try {
+        await message.reply.call(message, text)
+        if (outboxId) await markOutboxSent(outboxId)
+        return
+    } catch (err) {
+        logErr('threaded reply failed (plain send instead)', err)
+    }
+    try {
+        await space.send(text)
+        if (outboxId) await markOutboxSent(outboxId)
+    } catch (err) {
+        if (outboxId) await markOutboxFailed({ id: outboxId, chat_guid: chatGuid, kind: 'reply', text, attempts: 0 }, err)
+        else logErr('send failed and outbox enqueue failed (untracked)', err)
+    }
 }
 
 /** Native .ics attachment for a just-confirmed calendar invite. Best-effort:
@@ -243,14 +268,70 @@ async function maybeHandleLocationShare(space: InboundSpace, message: InboundMes
     return true
 }
 
+async function runPendingYes(space: InboundSpace, chatGuid: string, message: InboundMessage, userLine: string, viaTapback = false): Promise<void> {
+    await saveMessage(chatGuid, 'user', userLine).catch((err) => logErr('message save failed', err))
+    let out: string
+    let executed: Awaited<ReturnType<typeof executePendingActionDetailed>> | null = null
+    try {
+        const ctx = await loadImessageToolContext(chatGuid).catch(() => null)
+        executed = await executePendingActionDetailed(chatGuid, ctx)
+        out = executed.text
+    } catch (err) {
+        logErr('pending action failed', err)
+        out = "that didn't go through - try again in a moment."
+    }
+    await sendText(space, chatGuid, 'reply', out)
+    await saveMessage(chatGuid, 'assistant', out).catch((err) => logErr('message save failed', err))
+    if (executed?.ok) {
+        // ✅ on their "y" once it actually ran (a tapback can't be tapbacked).
+        if (!viaTapback) {
+            await sendConfirmedReaction(message, () => sendText(space, chatGuid, 'reply', '✅')).catch((err) =>
+                logErr('confirmation reaction failed', err)
+            )
+        }
+        // .ics copy of the event the user just confirmed (C5).
+        if (executed.kind === 'gcal_create_invite' && executed.payload) {
+            await sendIcsAttachment(space, executed.payload).catch((err) => logErr('ics attachment failed', err))
+        }
+    }
+}
+
+/**
+ * Their tapback on one of our messages. On the open draft's preview, 👍/❤️
+ * runs it and 👎 scraps it, same as "y"/"n". Every other tapback is a
+ * reaction, not a request: no reply.
+ */
+async function handleInboundTapback(space: InboundSpace, message: InboundMessage, inbound: Extract<Inbound, { kind: 'reaction' }>): Promise<void> {
+    const decision = reactionDecision(inbound.emoji, inbound.targetText)
+    if (!decision) return
+    const chatGuid = resolveChatGuid(space)
+    if (!chatGuid) return
+    if (message.id && !(await claimInboundDelivery(message.id, chatGuid))) return
+    if (!(await getBetaRole(chatGuid).catch(() => null))) return
+    if (!(await hasPendingAction(chatGuid).catch(() => false))) return
+    if (decision === 'yes') {
+        await runPendingYes(space, chatGuid, message, `[${inbound.emoji} on the draft]`, true)
+        return
+    }
+    await cancelPendingActions(chatGuid).catch((err) => logErr('pending action cancel failed', err))
+    await saveMessage(chatGuid, 'user', `[${inbound.emoji} on the draft]`).catch((err) => logErr('message save failed', err))
+    await sendText(space, chatGuid, 'reply', 'ok, scrapped it.')
+    await saveMessage(chatGuid, 'assistant', 'ok, scrapped it.').catch((err) => logErr('message save failed', err))
+}
+
 export async function handleSpectrumMessage(space: InboundSpace, message: InboundMessage): Promise<void> {
     try {
         if (await maybeHandleLocationShare(space, message)) return
     } catch (err) {
         logErr('location share failed', err)
     }
-    if (message.content.type !== 'text' || !message.content.text) return
-    const text = message.content.text.trim()
+    const inbound = normalizeInbound(message)
+    if (!inbound) return
+    if (inbound.kind === 'reaction') {
+        await handleInboundTapback(space, message, inbound).catch((err) => logErr('inbound tapback failed', err))
+        return
+    }
+    const text = inbound.text.trim()
     if (!text) return
 
     const chatGuid = resolveChatGuid(space)
@@ -566,29 +647,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     if (await hasPendingAction(chatGuid).catch((err) => { logErr('pending action peek failed', err); return false })) {
         const answer = parseConfirmation(text)
         if (answer === 'yes') {
-            await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
-            let out: string
-            let executed: Awaited<ReturnType<typeof executePendingActionDetailed>> | null = null
-            try {
-                const ctx = await loadImessageToolContext(chatGuid).catch(() => null)
-                executed = await executePendingActionDetailed(chatGuid, ctx)
-                out = executed.text
-            } catch (err) {
-                logErr('pending action failed', err)
-                out = "that didn't go through - try again in a moment."
-            }
-            await sendText(space, chatGuid, 'reply', out)
-            await saveMessage(chatGuid, 'assistant', out).catch((err) => logErr('message save failed', err))
-            // 👍 on the confirmation itself when the action actually ran.
-            if (executed?.ok) {
-                await sendConfirmedReaction(message, () => sendText(space, chatGuid, 'reply', '👍')).catch((err) =>
-                    logErr('confirmation reaction failed', err)
-                )
-                // .ics copy of the event the user just confirmed (C5).
-                if (executed.kind === 'gcal_create_invite' && executed.payload) {
-                    await sendIcsAttachment(space, executed.payload).catch((err) => logErr('ics attachment failed', err))
-                }
-            }
+            await runPendingYes(space, chatGuid, message, text)
             return
         }
         await cancelPendingActions(chatGuid).catch((err) => logErr('pending action cancel failed', err))
@@ -596,6 +655,17 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
             await sendText(space, chatGuid, 'reply', 'ok, scrapped it.')
             await saveMessage(chatGuid, 'assistant', 'ok, scrapped it.').catch((err) => logErr('message save failed', err))
+            return
+        }
+    }
+
+    // "thanks" / "ok" / "got it": a tapback, not another message.
+    {
+        const recent = await loadHistory(chatGuid, 2).catch(() => [] as HistoryMessage[])
+        const lastAssistant = [...recent].reverse().find((m) => m.role === 'assistant')?.content ?? null
+        const emoji = ackTapback(text, lastAssistant)
+        if (emoji && (await tapback(message, emoji))) {
+            await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
             return
         }
     }
@@ -622,11 +692,18 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         return
     }
 
-    const full: Message[] = [...history, { role: 'user', content: text }]
+    const full: Message[] = [...history, { role: 'user', content: withReplyContext(text, inbound.replyTo) }]
     await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
 
     const tChatStart = Date.now()
     const typingHandle = startTypingReTap(space)
+    // 👀 on their message when a turn runs long (tools, files); lifted once
+    // the answer lands.
+    let eyes: Promise<{ unsend?: () => Promise<unknown> } | null> | null = null
+    const eyesTimer = setTimeout(() => {
+        eyes = tapback(message, '👀')
+    }, 6_000)
+    eyesTimer.unref?.()
     try {
         // Read tools only for chats bound to a user with Google/PayBox connected;
         // everyone else gets the plain conversational path.
@@ -697,7 +774,14 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             })
         }
         const tChatEnd = Date.now()
-        await sendText(space, chatGuid, 'reply', reply)
+        clearTimeout(eyesTimer)
+        const recentAfter = await loadHistory(chatGuid, 6).catch(() => [] as HistoryMessage[])
+        if (shouldThread(inbound, recentAfter, text)) await sendThreaded(space, chatGuid, message, reply)
+        else await sendText(space, chatGuid, 'reply', reply)
+        if (eyes) {
+            const handle = await (eyes as Promise<{ unsend?: () => Promise<unknown> } | null>)
+            if (handle?.unsend) await handle.unsend().catch((err) => logErr('eyes unsend failed', err))
+        }
         await saveMessage(chatGuid, 'assistant', reply).catch((err) => logErr('message save failed', err))
         // The exact draft, rendered by the server, as its own bubble.
         const proposal = actions?.proposal() ?? lastLooseProposal()
@@ -730,6 +814,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         logErr('gateway call failed', err)
         await sendText(space, chatGuid, 'error_notice', 'Something went wrong on my end. Try again in a moment.')
     } finally {
+        clearTimeout(eyesTimer)
         stopTypingReTap(space, typingHandle)
     }
 }

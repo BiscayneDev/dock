@@ -388,12 +388,13 @@ export async function executePendingAction(chatGuid: string, ctx: UserContext | 
  */
 export async function sendConfirmedReaction(
     message: unknown,
-    fallback: () => Promise<void>
+    fallback: () => Promise<void>,
+    emoji = '✅'
 ): Promise<void> {
     try {
         const react = (message as { react?: (emoji: string) => Promise<unknown> } | null)?.react
         if (typeof react === 'function') {
-            await react.call(message, '👍')
+            await react.call(message, emoji)
             return
         }
     } catch {
