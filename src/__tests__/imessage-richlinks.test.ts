@@ -3,9 +3,9 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('spectrum-ts', () => ({
     richlink: (url: string) => ({ type: 'richlink', url }),
 }))
-const enqueueOutbox = vi.fn(async () => 'ob1')
-const markOutboxSent = vi.fn(async () => {})
-const markOutboxFailed = vi.fn(async () => {})
+const enqueueOutbox = vi.fn(async (_c: string, _k: string, _t: string) => 'ob1')
+const markOutboxSent = vi.fn(async (_id: string) => {})
+const markOutboxFailed = vi.fn(async (_row: unknown, _err: unknown) => {})
 vi.mock('@/lib/spectrum/outbox', () => ({
     enqueueOutbox: (c: string, k: string, t: string) => enqueueOutbox(c, k, t),
     markOutboxSent: (id: string) => markOutboxSent(id),
