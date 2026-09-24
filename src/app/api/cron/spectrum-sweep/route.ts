@@ -32,6 +32,7 @@ import {
     type DinghyFact,
     type HistoryMessage,
 } from '@/spectrum/store'
+import { toPlainText } from '@/lib/spectrum/plain-text'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -71,7 +72,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 await sendBrief(space, payload)
                 await saveMessage(row.chat_guid, 'assistant', payload.text).catch(() => undefined)
             } else {
-                await space.send(row.text)
+                await space.send(toPlainText(row.text))
                 // Reminders are server-initiated; keep them in history so a
                 // follow-up ("snooze that") has context.
                 if (row.kind === 'reminder') await saveMessage(row.chat_guid, 'assistant', row.text).catch(() => undefined)
@@ -118,7 +119,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 if (connectOnly) {
                     const toolCtxC = await loadImessageToolContext(guid).catch(() => null)
                     const line = googleConnectedLine(toolCtxC, wantsAnotherGoogle(claimed.pendingRequest))
-                    await space.send(line)
+                    await space.send(toPlainText(line))
                     await ackResume(claimed.id)
                     await saveMessage(guid, 'assistant', line).catch((err) =>
                         console.error('resume message save failed:', err instanceof Error ? err.message : String(err))
@@ -163,9 +164,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                           : claimed.provider === 'oura' || claimed.provider === 'whoop'
                             ? `${claimed.provider === 'oura' ? 'oura' : 'whoop'} is connected — i can see your sleep, recovery and activity now ✓`
                           : googleConnectedLine(toolCtx, wantsAnotherGoogle(claimed.pendingRequest))
-                await space.send(`${connectedLine}\n\n${reply}`)
+                await space.send(toPlainText(`${connectedLine}\n\n${reply}`))
                 const proposal = actions?.proposal()
-                if (proposal) await space.send(renderProposal(proposal))
+                if (proposal) await space.send(toPlainText(renderProposal(proposal)))
                 void space.send(typing('stop')).catch(() => {})
                 await ackResume(claimed.id) // ack ONLY after a successful send
                 await saveMessage(guid, 'user', claimed.pendingRequest).catch((err) =>

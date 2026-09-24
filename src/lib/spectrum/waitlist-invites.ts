@@ -22,6 +22,7 @@ import { sendWaitlistInvite } from '@/lib/email/waitlist-invite'
 import { firstName } from '@/lib/email/waitlist-confirmation'
 import { normalizeEmail } from '@/lib/waitlist'
 import { registerPhotonUser } from './photon-users'
+import { toPlainText } from '@/lib/spectrum/plain-text'
 
 export type WaitlistInviteCommand = { kind: 'next'; count: number } | { kind: 'email'; email: string }
 
@@ -57,7 +58,7 @@ export async function sendIntroText(phone: string, text: string): Promise<boolea
     const { getSpectrumApp, getImessage } = await import('./app')
     const im = await getImessage(await getSpectrumApp())
     const space = await im.space.create(phone)
-    await space.send(text)
+    await space.send(toPlainText(text))
     return true
   } catch (err) {
     console.error('waitlist intro text failed:', err instanceof Error ? err.message : String(err))

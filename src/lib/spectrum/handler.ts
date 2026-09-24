@@ -67,6 +67,7 @@ import { parseWaitlistInviteCommand, runWaitlistInvites } from './waitlist-invit
 import { interviewDirective, markOpenerAsked } from './interview'
 import { attachment } from 'spectrum-ts'
 import { ackTapback, normalizeInbound, reactionDecision, shouldThread, tapback, withReplyContext, type Inbound, type MessageLike } from './tapbacks'
+import { toPlainText } from '@/lib/spectrum/plain-text'
 
 export interface InboundSpace {
     /** Webhook SDK space objects carry the chat identifier as `id`. */
@@ -135,7 +136,8 @@ function stopTypingReTap(space: InboundSpace, handle: ReturnType<typeof setInter
 
 /** A native threaded reply to `message`, tracked in the outbox like sendText.
  *  Falls back to a plain send when threading isn't available or fails. */
-async function sendThreaded(space: InboundSpace, chatGuid: string, message: InboundMessage, text: string): Promise<void> {
+async function sendThreaded(space: InboundSpace, chatGuid: string, message: InboundMessage, raw: string): Promise<void> {
+    const text = toPlainText(raw)
     if (typeof message.reply !== 'function') return sendText(space, chatGuid, 'reply', text)
     const outboxId = await enqueueOutbox(chatGuid, 'reply', text)
     try {
@@ -201,7 +203,8 @@ async function sendFile(space: InboundSpace, chatGuid: string, file: MadeFile): 
     }
 }
 
-async function sendText(space: InboundSpace, chatGuid: string, kind: OutboxKind, text: string): Promise<void> {
+async function sendText(space: InboundSpace, chatGuid: string, kind: OutboxKind, raw: string): Promise<void> {
+    const text = toPlainText(raw)
     const outboxId = await enqueueOutbox(chatGuid, kind, text)
     try {
         await space.send(text)
@@ -844,7 +847,9 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         const threaded = shouldThread({ replyTo }, recentAfter, text)
         // A bare URL on the reply's last line goes out as its own rich-link
         // bubble so the preview card unfurls (articles, bookings, pages).
-        const split = splitStandaloneUrl(reply)
+        // iMessage shows markdown as raw asterisks: send and store plain text.
+        const plainReply = toPlainText(reply)
+        const split = splitStandaloneUrl(plainReply)
         if (split.url) {
             if (split.text) {
                 if (threaded) await sendThreaded(space, chatGuid, message, split.text)
@@ -852,15 +857,15 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             }
             await sendLink(space as LinkSender, chatGuid, 'reply', split.url)
         } else if (threaded) {
-            await sendThreaded(space, chatGuid, message, reply)
+            await sendThreaded(space, chatGuid, message, plainReply)
         } else {
-            await sendText(space, chatGuid, 'reply', reply)
+            await sendText(space, chatGuid, 'reply', plainReply)
         }
         if (eyes) {
             const handle = await (eyes as Promise<{ unsend?: () => Promise<unknown> } | null>)
             if (handle?.unsend) await handle.unsend().catch((err) => logErr('eyes unsend failed', err))
         }
-        await saveMessage(chatGuid, 'assistant', reply).catch((err) => logErr('message save failed', err))
+        await saveMessage(chatGuid, 'assistant', plainReply).catch((err) => logErr('message save failed', err))
         // The exact draft, rendered by the server, as its own bubble.
         const proposal = actions?.proposal() ?? lastLooseProposal()
         if (proposal) {
