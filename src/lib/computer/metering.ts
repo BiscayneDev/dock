@@ -12,7 +12,7 @@
 
 import { createServerClient } from '@/lib/supabase/server'
 import { getDailySpend } from '@/lib/payments/spend-caps'
-import { USD_PER_SECOND, type ComputerProvider, type ComputerSessionRow } from './manager'
+import { USD_PER_SECOND, type ComputerSessionRow } from './manager'
 
 export type SupabaseClient = ReturnType<typeof createServerClient>
 
@@ -186,18 +186,4 @@ export async function killIfOverCap(
 
   await stop(session, `hard cap exceeded: $${totalToday.toFixed(2)} / $${settings.hardCapUsdPerDay.toFixed(2)}`)
   return true
-}
-
-export async function stopSessionWithProvider(
-  userId: string,
-  session: ComputerSessionRow,
-  supabase: SupabaseClient,
-  provider: ComputerProvider
-): Promise<void> {
-  if (session.sandbox_id) await provider.stop(session.sandbox_id)
-  const { error } = await supabase
-    .from('computer_sessions')
-    .update({ status: 'killed', killed_reason: 'hard_cap_exceeded' })
-    .eq('id', session.id)
-  if (error) throw new Error(`Failed to kill computer session: ${error.message}`)
 }

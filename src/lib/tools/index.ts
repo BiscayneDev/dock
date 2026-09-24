@@ -68,6 +68,7 @@ import {
 import { switchLLMProvider } from './llm-control'
 import { getInferenceSpend } from './inference-spend'
 import { memorySearch, memoryForget } from './memory'
+import { COMPUTER_TOOLS } from './computer'
 
 // Recipe tools are imported lazily by the orchestrator since they're
 // not available to the execution agent. See lib/tools/recipes.ts.
@@ -149,6 +150,8 @@ export const integrationTools: Tool[] = [
   switchLLMProvider,
   // Self-aware AI spend + savings (billed to the user's Paybox wallet)
   getInferenceSpend,
+  // Dinghy's computer: per-user sandbox, metered into the spend ledger
+  ...COMPUTER_TOOLS,
 ]
 
 // All tools except recipe management — used by the Execution Agent

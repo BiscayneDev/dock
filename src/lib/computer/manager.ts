@@ -151,12 +151,16 @@ export async function getOrStart(
     const session = existing as ComputerSessionRow
     const wasSleeping = session.status === 'sleeping'
     const now = new Date().toISOString()
-    const { error } = await supabase
-      .from('computer_sessions')
-      .update({ status: 'running', last_activity_at: now })
-      .eq('id', session.id)
-    if (error) throw new Error(`Failed to resume computer session: ${error.message}`)
-    return { session: { ...session, status: 'running', last_activity_at: now }, resumed: wasSleeping }
+    // Only the sleeping→running transition bumps activity: bumping a
+    // running session would zero the metering window and unbill time.
+    if (wasSleeping) {
+      const { error } = await supabase
+        .from('computer_sessions')
+        .update({ status: 'running', last_activity_at: now })
+        .eq('id', session.id)
+      if (error) throw new Error(`Failed to resume computer session: ${error.message}`)
+    }
+    return { session: { ...session, status: 'running', last_activity_at: wasSleeping ? now : session.last_activity_at }, resumed: wasSleeping }
   }
 
   const { sandboxId } = await provider.start()

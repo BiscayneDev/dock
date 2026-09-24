@@ -12,6 +12,7 @@ export const CONFIRM_TOOLS = new Set([
   'paybox_request_wallet_sign',
   'x402_fetch',
   'recipe_delete',
+  'computer_overage',
 ])
 
 const TOOL_DESCRIPTIONS: Record<string, string> = {
@@ -25,6 +26,7 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
   paybox_request_wallet_sign: '🔐 Sign with Paybox wallet',
   x402_fetch: '🌐 Call a paid API (costs USDC)',
   recipe_delete: '🤖 Delete recipe',
+  computer_overage: '🖥️ Buy more computer time ($1 → 6h sandbox)',
 }
 
 interface PendingConfirmation {
