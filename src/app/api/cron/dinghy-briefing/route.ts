@@ -38,6 +38,7 @@ import { isInQuietHours, getCurrentHour } from '@/lib/time-utils'
 import { BRIEF_JSON_SPEC, cardDate, cardTime, parseBriefReply, sendBrief } from '@/lib/spectrum/brief-card-send'
 import { briefLocation } from '@/lib/spectrum/location'
 import { cardWeather } from '@/lib/weather/brief-weather'
+import { toPlainText } from '@/lib/spectrum/plain-text'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -203,7 +204,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             try {
                 const space = await im.space.get(chatGuid)
                 if (brief) await sendBrief(space, { card: brief.card, text })
-                else await space.send(text)
+                else await space.send(toPlainText(text))
                 await markOutboxSent(outboxId)
             } catch (sendErr) {
                 console.error(

@@ -9,6 +9,7 @@
 import { attachment } from 'spectrum-ts'
 import { renderBriefCard, type BriefCardInput } from '@/lib/brand/brief-card'
 import type { CardWeather } from '@/lib/weather/brief-weather'
+import { toPlainText } from '@/lib/spectrum/plain-text'
 
 interface Sender {
     send(content: unknown): Promise<unknown>
@@ -127,6 +128,6 @@ export async function sendBrief(space: Sender, payload: BriefPayload): Promise<{
         await space.send(attachment(png, { name: 'morning-brief.png', mimeType: 'image/png' }))
         return { card: true }
     }
-    await space.send(payload.text)
+    await space.send(toPlainText(payload.text))
     return { card: false }
 }
