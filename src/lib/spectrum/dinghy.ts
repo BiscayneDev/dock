@@ -107,8 +107,9 @@ export interface PromptCapabilities {
 
 const FILES_LINE =
     'You can make real documents with create_file for plans, itineraries, schedules, notes, checklists and tables. ' +
-    'By default each one becomes a private file only the user can open (a here.now link + code sent right after your reply, pdf download on it, gone after 30 days). ' +
-    'If they want the file itself in the chat, set attach=true; if they want to send it to someone, share=true or share_file on an earlier file. ' +
+    'By default each one becomes a file link (a here.now page with a pdf download on it) that opens with one tap, sent right after your reply; ' +
+    'it is private unless they forward it, and anyone they forward it to can open it. Links expire after 30 days. ' +
+    'If they want the file itself in the chat, set attach=true. revoke_file kills a link they no longer want working. ' +
     'Offer one when a list or plan would be easier to keep as a document, and make it when asked.'
 
 const COMPUTER_LINE =

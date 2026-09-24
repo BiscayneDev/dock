@@ -89,7 +89,7 @@ describe('create_file tool', () => {
   })
 })
 
-describe('hosted pages (here.now)', () => {
+describe('file links (here.now)', () => {
   const realFetch = globalThis.fetch
   afterEach(() => {
     globalThis.fetch = realFetch
@@ -97,27 +97,23 @@ describe('hosted pages (here.now)', () => {
   })
 
   type Call = { url: string; method: string; body: string }
-  function fakeHereNow(opts: { earlyLock?: boolean; lateLock?: boolean } = {}) {
+  function fakeHereNow() {
     const calls: Call[] = []
-    let finalized = false
+    const bodies: Record<string, string> = {}
     globalThis.fetch = vi.fn(async (url: string, init: RequestInit = {}) => {
       const method = init.method ?? 'GET'
       const body = typeof init.body === 'string' ? init.body : ''
       calls.push({ url, method, body })
+      if (url.startsWith('https://up.example/') && init.body instanceof Uint8Array) bodies[url] = Buffer.from(init.body).toString('latin1')
       if (url.endsWith('/api/v1/publish') && method === 'POST') {
         const files = JSON.parse(body).files as Array<{ path: string }>
         return new Response(JSON.stringify({ slug: 'calm-boat-1a2b', siteUrl: 'https://calm-boat-1a2b.here.now/', upload: { versionId: 'v1', uploads: files.map((f) => ({ path: f.path, url: `https://up.example/${f.path}`, headers: {} })) } }))
       }
       if (url.startsWith('https://up.example/')) return new Response('')
-      if (url.endsWith('/metadata')) {
-        const ok = finalized ? opts.lateLock !== false : opts.earlyLock !== false
-        return ok ? new Response('{}') : new Response('no', { status: 409 })
-      }
-      if (url.endsWith('/finalize')) { finalized = true; return new Response('{"success":true}') }
-      if (method === 'DELETE') return new Response('')
+      if (url.endsWith('/finalize')) return new Response('{"success":true}')
       return new Response('nope', { status: 404 })
     }) as unknown as typeof fetch
-    return calls
+    return { calls, bodies }
   }
   const paths = (calls: Call[]) => calls.map((c) => `${c.method} ${c.url.replace('https://here.now/api/v1', '')}`)
 
@@ -129,83 +125,43 @@ describe('hosted pages (here.now)', () => {
     expect(set.files()[0].hosted).toBeUndefined()
   })
 
-  it('defaults to a private page: password set before it goes live, pdf alongside, ttl + owner tag', async () => {
+  it('defaults to an open file link: no password anywhere, pdf alongside, 30-day ttl, owner tag', async () => {
     process.env.HERENOW_API_KEY = 'test-key'
-    const calls = fakeHereNow()
+    const { calls } = fakeHereNow()
     const set = fileToolsFor()
-    expect(set.tools.map((t) => t.name)).toEqual(['create_file', 'share_file'])
+    expect(set.tools.map((t) => t.name)).toEqual(['create_file', 'revoke_file'])
     const r = await set.tools[0].execute(doc, ctx)
-    expect((r.data as Record<string, unknown>).delivery).toBe('private_file')
+    expect((r.data as Record<string, unknown>).delivery).toBe('file_link')
     expect(JSON.stringify(r.data)).not.toContain('here.now')
     expect(paths(calls)).toEqual([
       'POST /publish',
       'PUT https://up.example/index.html',
       'PUT https://up.example/weekend-in-key-biscayne.pdf',
-      'PATCH /publish/calm-boat-1a2b/metadata',
       'POST /publish/calm-boat-1a2b/finalize',
     ])
+    expect(calls.some((c) => c.url.endsWith('/metadata') || c.body.includes('password'))).toBe(false)
     const create = JSON.parse(calls[0].body)
     expect(create.ttlSeconds).toBe(30 * 86_400)
     expect(create.displayDescription).toMatch(/^dinghy file · owner [0-9a-f]{16}$/)
     expect(create.displayDescription).not.toContain('u1')
-    const pw = JSON.parse(calls[3].body).password
-    expect(pw).toMatch(/^[a-z2-9]{8}$/)
-    const f = set.files()[0]
-    expect(f.hosted).toMatchObject({ url: 'https://calm-boat-1a2b.here.now/', password: pw, shared: false })
+    expect(set.files()[0].hosted).toMatchObject({ url: 'https://calm-boat-1a2b.here.now/' })
     expect(upload).not.toHaveBeenCalled()
   })
 
-  it('page links the pdf download and uses the per-file card', async () => {
+  it('page is noindex, links the pdf download and uses the per-file card', async () => {
     process.env.HERENOW_API_KEY = 'test-key'
-    const bodies: Record<string, string> = {}
-    const calls = fakeHereNow()
-    const orig = globalThis.fetch
-    globalThis.fetch = (async (url: string, init: RequestInit = {}) => {
-      if (url.startsWith('https://up.example/') && init.body instanceof Uint8Array) bodies[url] = Buffer.from(init.body).toString('latin1')
-      return orig(url, init)
-    }) as unknown as typeof fetch
+    const { bodies } = fakeHereNow()
     await fileToolsFor().tools[0].execute(doc, ctx)
     const html = bodies['https://up.example/index.html']
+    expect(html).toContain('<meta name="robots" content="noindex">')
     expect(html).toContain('href="weekend-in-key-biscayne.pdf" download')
     expect(html).toContain('getdinghy.sh/api/og/file?title=Weekend+in+Key+Biscayne')
     expect(bodies['https://up.example/weekend-in-key-biscayne.pdf'].startsWith('%PDF-')).toBe(true)
-    expect(calls.length).toBeGreaterThan(0)
-  })
-
-  it('locks right after finalize if the early lock is refused', async () => {
-    process.env.HERENOW_API_KEY = 'test-key'
-    const calls = fakeHereNow({ earlyLock: false })
-    const set = fileToolsFor()
-    await set.tools[0].execute(doc, ctx)
-    expect(paths(calls).slice(-3)).toEqual(['PATCH /publish/calm-boat-1a2b/metadata', 'POST /publish/calm-boat-1a2b/finalize', 'PATCH /publish/calm-boat-1a2b/metadata'])
-    expect(set.files()[0].hosted?.password).toBeTruthy()
-  })
-
-  it('deletes the site and falls back to the attachment if it cannot be locked', async () => {
-    process.env.HERENOW_API_KEY = 'test-key'
-    const calls = fakeHereNow({ earlyLock: false, lateLock: false })
-    const set = fileToolsFor()
-    const r = await set.tools[0].execute(doc, ctx)
-    expect(paths(calls)).toContain('DELETE /publish/calm-boat-1a2b')
-    expect((r.data as Record<string, unknown>).delivery).toBe('attachment')
-    expect(set.files()[0].hosted).toBeUndefined()
-    expect(set.files()[0].format).toBe('pdf')
-  })
-
-  it('share=true publishes without a password', async () => {
-    process.env.HERENOW_API_KEY = 'test-key'
-    const calls = fakeHereNow()
-    const set = fileToolsFor()
-    const r = await set.tools[0].execute({ ...doc, share: true }, ctx)
-    expect((r.data as Record<string, unknown>).delivery).toBe('shared_file')
-    expect(paths(calls).some((p) => p.endsWith('/metadata'))).toBe(false)
-    expect(set.files()[0].hosted).toMatchObject({ shared: true })
-    expect(set.files()[0].hosted?.password).toBeUndefined()
   })
 
   it('attach=true and docx/csv skip hosting', async () => {
     process.env.HERENOW_API_KEY = 'test-key'
-    const calls = fakeHereNow()
+    const { calls } = fakeHereNow()
     const set = fileToolsFor()
     await set.tools[0].execute({ ...doc, attach: true }, ctx)
     await set.tools[0].execute({ ...doc, format: 'docx' }, ctx)
@@ -225,45 +181,38 @@ describe('hosted pages (here.now)', () => {
   })
 })
 
-describe('share_file', () => {
+describe('revoke_file', () => {
   const realFetch = globalThis.fetch
   afterEach(() => {
     globalThis.fetch = realFetch
     delete process.env.HERENOW_API_KEY
   })
   function site(owner: string) {
-    const patches: string[] = []
+    const writes: string[] = []
     globalThis.fetch = vi.fn(async (url: string, init: RequestInit = {}) => {
-      if ((init.method ?? 'GET') === 'GET') return new Response(JSON.stringify({ slug: 'calm-boat-1a2b', siteUrl: 'https://calm-boat-1a2b.here.now/', displayDescription: `dinghy file · owner ${owner}`, expiresAt: '2026-10-24T00:00:00Z' }))
-      patches.push(String(init.body))
-      return new Response('{}')
+      const method = init.method ?? 'GET'
+      if (method === 'GET') return new Response(JSON.stringify({ slug: 'calm-boat-1a2b', siteUrl: 'https://calm-boat-1a2b.here.now/', displayName: 'Heat', displayDescription: `dinghy file · owner ${owner}` }))
+      writes.push(`${method} ${url}`)
+      return new Response('')
     }) as unknown as typeof fetch
-    return patches
+    return writes
   }
-  const share = () => fileToolsFor().tools[1]
+  const revoke = () => fileToolsFor().tools[1]
 
-  it('shares a page this user made by dropping the password', async () => {
+  it('deletes a file this user made', async () => {
     process.env.HERENOW_API_KEY = 'test-key'
-    const patches = site(ownerTag('u1'))
-    const r = await share().execute({ link: 'https://calm-boat-1a2b.here.now/', share: true }, ctx)
+    const writes = site(ownerTag('u1'))
+    const r = await revoke().execute({ link: 'https://calm-boat-1a2b.here.now/' }, ctx)
     expect(r.success).toBe(true)
-    expect(patches).toEqual(['{"password":null}'])
+    expect(writes).toEqual(['DELETE https://here.now/api/v1/publish/calm-boat-1a2b'])
   })
 
-  it('makes it private again with a new code', async () => {
+  it("refuses someone else's file and non-here.now links", async () => {
     process.env.HERENOW_API_KEY = 'test-key'
-    const patches = site(ownerTag('u1'))
-    const r = await share().execute({ link: 'calm-boat-1a2b', share: false }, ctx)
-    expect((r.data as Record<string, unknown>).code).toMatch(/^[a-z2-9]{8}$/)
-    expect(JSON.parse(patches[0]).password).toBe((r.data as Record<string, unknown>).code)
-  })
-
-  it("refuses someone else's page and non-here.now links", async () => {
-    process.env.HERENOW_API_KEY = 'test-key'
-    const patches = site(ownerTag('someone-else'))
-    expect((await share().execute({ link: 'https://calm-boat-1a2b.here.now/', share: true }, ctx)).success).toBe(false)
-    expect((await share().execute({ link: 'https://evil.example/x', share: true }, ctx)).success).toBe(false)
-    expect(patches).toHaveLength(0)
+    const writes = site(ownerTag('someone-else'))
+    expect((await revoke().execute({ link: 'https://calm-boat-1a2b.here.now/' }, ctx)).success).toBe(false)
+    expect((await revoke().execute({ link: 'https://evil.example/x' }, ctx)).success).toBe(false)
+    expect(writes).toHaveLength(0)
   })
 })
 
