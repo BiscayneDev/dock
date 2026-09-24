@@ -62,3 +62,52 @@ export async function sendFileWithPreview(
     await space.send(attachment(file.bytes, { name: file.filename, mimeType: file.mimeType }))
     return { preview }
 }
+
+export interface HostedSendable {
+    title: string
+    subtitle?: string
+    format: FileFormat
+    hosted: { url: string; password?: string; expiresAt: string; shared: boolean }
+}
+
+/** "oct 24" in the user's zone. */
+function short(iso: string): string {
+    const d = new Date(iso)
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' }).toLowerCase()
+}
+
+/** History line for a hosted file: lets the model find the link later (share_file). */
+export function hostedHistoryLine(file: HostedSendable): string {
+    const until = short(file.hosted.expiresAt)
+    return file.hosted.shared
+        ? `[file: ${file.title}] ${file.hosted.url} (shared, anyone with the link${until ? `, expires ${until}` : ''})`
+        : `[file: ${file.title}] ${file.hosted.url} (private, code ${file.hosted.password}${until ? `, expires ${until}` : ''})`
+}
+
+/**
+ * A hosted file in the thread. Private: brand card (the password gate would
+ * otherwise be the link preview), then the link alone, then the code alone
+ * so it's one long-press to copy. Shared: the link alone, which unfurls into
+ * the page's own per-file card. Throws if the link bubble fails.
+ */
+export async function sendHostedFile(space: Sender, file: HostedSendable): Promise<void> {
+    const until = short(file.hosted.expiresAt)
+    if (!file.hosted.shared) {
+        try {
+            const res = renderOgCard({
+                label: `private file${until ? ` · until ${until}` : ''}`,
+                title: clip(file.title.toLowerCase(), 80),
+                sub: file.subtitle ? clip(file.subtitle, 110) : undefined,
+                foot: 'made by dinghy',
+            })
+            const png = Buffer.from(await res.arrayBuffer())
+            await space.send(attachment(png, { name: 'dinghy-file.png', mimeType: 'image/png' }))
+        } catch (err) {
+            console.error('[dinghy] file card failed', err instanceof Error ? err.message : err)
+        }
+    }
+    await space.send(file.hosted.url)
+    if (!file.hosted.shared && file.hosted.password) {
+        await space.send(`code: ${file.hosted.password}`)
+    }
+}

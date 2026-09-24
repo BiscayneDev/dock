@@ -56,3 +56,37 @@ describe('file markers', () => {
     expect(stripFileMarkers('all good')).toEqual({ text: 'all good', hadMarker: false })
   })
 })
+
+import { hostedHistoryLine, sendHostedFile } from '@/lib/files/send'
+
+describe('hosted page send', () => {
+  const base = { title: 'Heat Schedule', format: 'pdf' as const }
+  const priv = { ...base, hosted: { url: 'https://calm-boat-1a2b.here.now/', password: 'k7mq2x9p', expiresAt: '2026-10-24T16:00:00Z', shared: false } }
+  const pub = { ...base, hosted: { url: 'https://calm-boat-1a2b.here.now/', expiresAt: '2026-10-24T16:00:00Z', shared: true } }
+
+  it('private: card, then the link alone, then the code alone', async () => {
+    const sent: unknown[] = []
+    await sendHostedFile({ send: async (c) => void sent.push(c) }, priv)
+    expect((sent[0] as { mimeType: string }).mimeType).toBe('image/png')
+    expect(sent.slice(1)).toEqual(['https://calm-boat-1a2b.here.now/', 'code: k7mq2x9p'])
+    expect(renderOgCard).toHaveBeenLastCalledWith(expect.objectContaining({ label: 'private file · until oct 24', title: 'heat schedule' }))
+  })
+
+  it('shared: just the link, so it unfurls into the page card', async () => {
+    const sent: unknown[] = []
+    await sendHostedFile({ send: async (c) => void sent.push(c) }, pub)
+    expect(sent).toEqual(['https://calm-boat-1a2b.here.now/'])
+  })
+
+  it('still sends link + code when the card fails', async () => {
+    renderOgCard.mockImplementationOnce(() => { throw new Error('satori down') })
+    const sent: unknown[] = []
+    await sendHostedFile({ send: async (c) => void sent.push(c) }, priv)
+    expect(sent).toEqual(['https://calm-boat-1a2b.here.now/', 'code: k7mq2x9p'])
+  })
+
+  it('history line keeps the link and code for later share_file calls', () => {
+    expect(hostedHistoryLine(priv)).toBe('[file: Heat Schedule] https://calm-boat-1a2b.here.now/ (private, code k7mq2x9p, expires oct 24)')
+    expect(hostedHistoryLine(pub)).toContain('shared, anyone with the link')
+  })
+})

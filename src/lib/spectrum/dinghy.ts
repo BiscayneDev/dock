@@ -106,8 +106,9 @@ export interface PromptCapabilities {
 }
 
 const FILES_LINE =
-    'You can make real documents with create_file (PDF by default; Word, CSV, web page or Markdown on request) ' +
-    'for plans, itineraries, notes, checklists and tables; they arrive in this chat as a file right after your reply. ' +
+    'You can make real documents with create_file for plans, itineraries, schedules, notes, checklists and tables. ' +
+    'By default each one becomes a private file only the user can open (a here.now link + code sent right after your reply, pdf download on it, gone after 30 days). ' +
+    'If they want the file itself in the chat, set attach=true; if they want to send it to someone, share=true or share_file on an earlier file. ' +
     'Offer one when a list or plan would be easier to keep as a document, and make it when asked.'
 
 const COMPUTER_LINE =

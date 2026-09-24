@@ -29,7 +29,7 @@ import { reminderToolsFor } from './reminders'
 import { payboxSigningToolsFor } from '@/lib/tools/paybox-signing'
 import { EMPTY_MEMORY, loadMemoryContext, renderMemoryBlock, updateMemory } from './memory'
 import { FILE_NUDGE, fileToolsFor, stripFileMarkers, type MadeFile } from '@/lib/files/tool'
-import { sendFileWithPreview } from '@/lib/files/send'
+import { hostedHistoryLine, sendFileWithPreview, sendHostedFile } from '@/lib/files/send'
 import { actionToolsFor, cancelPendingActions, executePendingActionDetailed, hasPendingAction, lastLooseProposal, parseConfirmation, renderProposal, sendConfirmedReaction } from './actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { dinghyContactCard } from './contact-card'
@@ -146,6 +146,19 @@ async function sendIcsAttachment(space: InboundSpace, payload: Record<string, un
  *  send failure is always retried by the sweep. */
 /** Native attachment; on failure, fall back to the signed link as text. */
 async function sendFile(space: InboundSpace, chatGuid: string, file: MadeFile): Promise<void> {
+    if (file.hosted) {
+        const hosted = { ...file, hosted: file.hosted }
+        const line = hostedHistoryLine(hosted)
+        try {
+            await sendHostedFile(space as ContentSender, hosted)
+        } catch (err) {
+            logErr('page send failed', err)
+            const text = file.hosted.password ? `${file.title}: ${file.hosted.url} (code ${file.hosted.password})` : `${file.title}: ${file.hosted.url}`
+            await sendText(space, chatGuid, 'reply', text)
+        }
+        await saveMessage(chatGuid, 'assistant', line).catch((err) => logErr('message save failed', err))
+        return
+    }
     try {
         await sendFileWithPreview(space as ContentSender, file)
         await saveMessage(chatGuid, 'assistant', fileMarker(file.filename)).catch((err) => logErr('message save failed', err))
@@ -660,7 +673,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             await sendText(space, chatGuid, 'reply', preview)
             await saveMessage(chatGuid, 'assistant', preview).catch((err) => logErr('message save failed', err))
         }
-        // Files made this turn go out as native attachments after the text.
+        // Files made this turn go out after the text: private page link + code, or an attachment.
         for (const file of fileTools?.files() ?? []) await sendFile(space, chatGuid, file)
         // Warm-path latency ledger: read these from the function logs.
         console.log(
