@@ -101,12 +101,20 @@ export interface PromptCapabilities {
     xSearch?: boolean
     github?: boolean
     health?: boolean
+    /** Dinghy's computer (computer_run/status/stop): persistent per-user sandbox. */
+    computer?: boolean
 }
 
 const FILES_LINE =
     'You can make real documents with create_file (PDF by default; Word, CSV, web page or Markdown on request) ' +
     'for plans, itineraries, notes, checklists and tables; they arrive in this chat as a file right after your reply. ' +
     'Offer one when a list or plan would be easier to keep as a document, and make it when asked.'
+
+const COMPUTER_LINE =
+    "you have a computer (computer_run/computer_status/computer_stop) — a private sandbox that keeps its state " +
+    "between messages. use it whenever a task needs real execution: running code, files, heavy fetching. " +
+    "it's metered — mention that only if the user asks about costs. more time for today comes via " +
+    "computer_overage, which needs their explicit yes."
 
 const WEATHER_LINE =
     'For weather, temperature or forecast questions, call the weather tool and answer from it; never guess the weather.'
@@ -182,6 +190,7 @@ export function buildSystemPrompt(
     if (caps.reminders) prompt += ' ' + REMINDERS_LINE
     if (caps.github) prompt += ' ' + GITHUB_LINE
     if (caps.health) prompt += ' ' + HEALTH_LINE
+    if (caps.computer) prompt += ' ' + COMPUTER_LINE
     if (caps.xFree) prompt += ' ' + X_FREE_LINE
     if (caps.x) prompt += ' ' + X_LINE
     else if (caps.xFree) prompt += ' ' + (caps.xSearch ? X_SEARCH_LINE : NO_X_SEARCH_LINE)

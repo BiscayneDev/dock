@@ -22,6 +22,7 @@ import { twitterSearch, twitterTimeline, twitterUserTweets } from '@/lib/tools/t
 import { xFreeTools, xSearchEnabled } from '@/lib/tools/x-free'
 import { healthSleep, healthReadiness, healthActivity, healthHeartRate, healthSummary } from '@/lib/tools/health'
 import { githubListRepos, githubGetRepo, githubListIssues, githubGetIssue, githubListPrs, githubGetPr, githubListNotifications } from '@/lib/tools/github'
+import { COMPUTER_TOOLS } from '@/lib/tools/computer'
 
 /**
  * Read tools only (Halsey, 2026-09-22: email + calendar reads first;
@@ -52,6 +53,8 @@ export interface ImessageCapabilities {
     github?: boolean
     /** Oura or WHOOP health reads. */
     health?: boolean
+    /** Dinghy's computer: shell in a persistent per-user sandbox. Default on for bound users. */
+    computer?: boolean
 }
 
 /** GitHub reads only: no creating issues, commenting or merging from iMessage. */
@@ -85,7 +88,7 @@ export function guestToolContext(): UserContext {
 }
 
 export function capabilitiesFor(ctx: UserContext): ImessageCapabilities {
-    return { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox), files: true, live: true, search: searchEnabled(), x: Boolean(ctx.tokens.twitter), xFree: true, xSearch: xSearchEnabled(), github: Boolean(ctx.tokens.github), health: Boolean(ctx.tokens.oura || ctx.tokens.whoop) }
+    return { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox), files: true, live: true, search: searchEnabled(), x: Boolean(ctx.tokens.twitter), xFree: true, xSearch: xSearchEnabled(), github: Boolean(ctx.tokens.github), health: Boolean(ctx.tokens.oura || ctx.tokens.whoop), computer: true }
 }
 
 /**
@@ -103,6 +106,7 @@ export function toolsFor(ctx: UserContext): Tool[] {
         ...(caps.x ? IMESSAGE_X_TOOLS : []),
         ...(caps.github ? IMESSAGE_GITHUB_TOOLS : []),
         ...(caps.health ? IMESSAGE_HEALTH_TOOLS : []),
+        ...(caps.computer !== false ? COMPUTER_TOOLS : []),
     ]
 }
 
