@@ -23,17 +23,20 @@ import { xFreeTools, xSearchEnabled } from '@/lib/tools/x-free'
 import { healthSleep, healthReadiness, healthActivity, healthHeartRate, healthSummary } from '@/lib/tools/health'
 import { githubListRepos, githubGetRepo, githubListIssues, githubGetIssue, githubListPrs, githubGetPr, githubListNotifications } from '@/lib/tools/github'
 import { COMPUTER_TOOLS } from '@/lib/tools/computer'
+import { accountsLine, multiAccount } from '@/lib/integrations/google-accounts'
 
 /**
  * Read tools only (Halsey, 2026-09-22: email + calendar reads first;
  * writes/sends come later behind an explicit approval flow).
  */
 export const IMESSAGE_READ_TOOLS: Tool[] = [
-    gmailSearch,
-    gmailRead,
-    gmailSummarizeInbox,
-    gcalListEvents,
-    gcalTodayBriefing,
+    // Several Google accounts: searches/summaries/calendar reads cover all of
+    // them unless one is named; reading a message finds the account that has it.
+    multiAccount(gmailSearch, 'all'),
+    multiAccount(gmailRead, 'find'),
+    multiAccount(gmailSummarizeInbox, 'all'),
+    multiAccount(gcalListEvents, 'all'),
+    multiAccount(gcalTodayBriefing, 'all'),
 ]
 
 export interface ImessageCapabilities {
@@ -55,6 +58,8 @@ export interface ImessageCapabilities {
     health?: boolean
     /** Dinghy's computer: shell in a persistent per-user sandbox. Default on for bound users. */
     computer?: boolean
+    /** Prompt line naming the Google accounts, when several are connected. */
+    googleAccounts?: string
 }
 
 /** GitHub reads only: no creating issues, commenting or merging from iMessage. */
@@ -88,7 +93,7 @@ export function guestToolContext(): UserContext {
 }
 
 export function capabilitiesFor(ctx: UserContext): ImessageCapabilities {
-    return { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox), files: true, live: true, search: searchEnabled(), x: Boolean(ctx.tokens.twitter), xFree: true, xSearch: xSearchEnabled(), github: Boolean(ctx.tokens.github), health: Boolean(ctx.tokens.oura || ctx.tokens.whoop), computer: true }
+    return { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox), files: true, live: true, search: searchEnabled(), x: Boolean(ctx.tokens.twitter), xFree: true, xSearch: xSearchEnabled(), github: Boolean(ctx.tokens.github), health: Boolean(ctx.tokens.oura || ctx.tokens.whoop), computer: true, googleAccounts: accountsLine(ctx) || undefined }
 }
 
 /**
@@ -139,7 +144,7 @@ export async function loadImessageToolContext(chatGuid: string): Promise<UserCon
 
     const { data: tokenRows } = await supabase
         .from('oauth_tokens')
-        .select('provider, access_token, refresh_token, expires_at')
+        .select('provider, provider_account_email, access_token, refresh_token, expires_at')
         .eq('user_id', userId)
 
     const tokens: Record<string, DecryptedTokens> = {}
@@ -149,6 +154,8 @@ export async function loadImessageToolContext(chatGuid: string): Promise<UserCon
                 accessToken: decryptTokenFromDb(row.access_token as string),
                 refreshToken: row.refresh_token ? decryptTokenFromDb(row.refresh_token as string) : null,
                 expiresAt: (row.expires_at as string) ?? null,
+                provider: row.provider as string,
+                email: (row.provider_account_email as string | null) ?? undefined,
             }
         } catch {
             // Undecryptable token row — skip rather than kill the chat.

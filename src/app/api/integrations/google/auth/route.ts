@@ -21,8 +21,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       // to request a fresh link rather than starting an unbound OAuth flow.
       return NextResponse.redirect(`${appUrl()}/onboarding?error=connect_link_invalid`)
     }
-    // Connect flow only fires when unconnected → first connect → consent.
-    const url = getAuthUrl(GOOGLE_OAUTH_SCOPES, started.oauthState, { forceConsent: true })
+    // Consent (fresh refresh token) + account chooser: the same link adds a
+    // second Gmail, so Google must not silently reuse the signed-in account.
+    const url = getAuthUrl(GOOGLE_OAUTH_SCOPES, started.oauthState, { forceConsent: true, selectAccount: true })
     return NextResponse.redirect(url)
   }
 
