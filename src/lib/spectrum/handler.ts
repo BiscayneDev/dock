@@ -23,6 +23,7 @@ import {
 } from '@/spectrum/store'
 import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsGithub, wantsHealth, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { recordUsage, spendToolFor, type GatewayUsage } from './metering'
+import { allowanceUsedUpMessage, claimLimitNotice, isOverDailyAllowance } from '@/lib/allowance'
 import { capabilitiesFor, guestCapabilities, guestToolContext, liveInfoTools, loadImessageToolContext, toolsFor } from './imessage-tools'
 import { reminderToolsFor } from './reminders'
 import { payboxSigningToolsFor } from '@/lib/tools/paybox-signing'
@@ -556,6 +557,22 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     if (!SHIPYARD_API_KEY) {
         logErr('reply failed', new Error('SHIPYARD_API_KEY is not set'))
         await sendText(space, chatGuid, 'error_notice', 'Something went wrong on my end. Try again in a moment.')
+        return
+    }
+
+    // Daily usage allowance: invisible until it matters. Everything above
+    // (connect links, memory commands, mutes, confirmations) is free
+    // deterministic work; the model loop below is what costs. At the
+    // limit: one plain message, then quiet until midnight their time.
+    // Fails open — a broken meter never mutes the product.
+    const allowance = await isOverDailyAllowance({ chatGuid })
+    if (allowance.over) {
+        await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+        if (await claimLimitNotice(chatGuid)) {
+            const notice = allowanceUsedUpMessage()
+            await sendText(space, chatGuid, 'reply', notice)
+            await saveMessage(chatGuid, 'assistant', notice).catch((err) => logErr('message save failed', err))
+        }
         return
     }
 

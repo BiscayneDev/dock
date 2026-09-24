@@ -1,17 +1,20 @@
 /**
- * Computer allowance + kill switch (Workstream G3).
+ * Computer allowance + kill switch (Workstream G3, reworked by 045).
  *
- * Sandbox seconds land in the shared spend ledger (spend_events,
- * source='sandbox'), so the daily cap covers sandbox infra and money on
- * one total. Free allowance: computer_settings.free_seconds_per_day
- * (default 1800 = 30 min, ≈ $0.085/day of infra). Beyond free, more
- * sandbox time is bought as a confirm-gated overage block
- * (computer_overage, in CONFIRM_TOOLS). The hard cap ($5/day default)
- * blocks everything and kills the sandbox server-side.
+ * The free tier is the daily usage allowance (src/lib/allowance.ts): one
+ * USD-cost pool per account covering ALL work — LLM calls, sandbox time,
+ * briefings — resetting at midnight in the account's timezone. Invisible
+ * until it is hit. Sandbox seconds still land in the shared spend ledger
+ * (spend_events, source='sandbox'), so the hard cap covers sandbox infra
+ * and money on one total. Beyond the allowance, more computer time is
+ * bought as a confirm-gated overage block (computer_overage, in
+ * CONFIRM_TOOLS). The hard cap ($5/day default) blocks everything and
+ * kills the sandbox server-side.
  */
 
 import { createServerClient } from '@/lib/supabase/server'
 import { getDailySpend } from '@/lib/payments/spend-caps'
+import { isOverDailyAllowance, DEFAULT_DAILY_ALLOWANCE_USD, type DailyUsage } from '@/lib/allowance'
 import { USD_PER_SECOND, type ComputerSessionRow } from './manager'
 
 export type SupabaseClient = ReturnType<typeof createServerClient>
@@ -21,13 +24,15 @@ export const OVERAGE_BLOCK_USD = 1.0
 export const OVERAGE_BLOCK_SECONDS = 6 * 3600
 
 export interface ComputerSettings {
-  freeSecondsPerDay: number
+  dailyAllowanceUsd: number
+  allowanceTimezone: string | null
   hardCapUsdPerDay: number
   enabled: boolean
 }
 
 const DEFAULT_SETTINGS: ComputerSettings = {
-  freeSecondsPerDay: 1800,
+  dailyAllowanceUsd: DEFAULT_DAILY_ALLOWANCE_USD,
+  allowanceTimezone: null,
   hardCapUsdPerDay: 5.0,
   enabled: true,
 }
@@ -38,13 +43,14 @@ export async function getComputerSettings(
 ): Promise<ComputerSettings> {
   const { data } = await supabase
     .from('computer_settings')
-    .select('free_seconds_per_day, hard_cap_usd_per_day, enabled')
+    .select('daily_allowance_usd, allowance_timezone, hard_cap_usd_per_day, enabled')
     .eq('user_id', userId)
     .maybeSingle()
 
   if (!data) return DEFAULT_SETTINGS
   return {
-    freeSecondsPerDay: Number(data.free_seconds_per_day ?? DEFAULT_SETTINGS.freeSecondsPerDay),
+    dailyAllowanceUsd: Number(data.daily_allowance_usd ?? DEFAULT_SETTINGS.dailyAllowanceUsd),
+    allowanceTimezone: (data.allowance_timezone as string | null) ?? null,
     hardCapUsdPerDay: Number(data.hard_cap_usd_per_day ?? DEFAULT_SETTINGS.hardCapUsdPerDay),
     enabled: data.enabled !== false,
   }
@@ -104,25 +110,26 @@ async function overagePurchasedToday(userId: string, supabase: SupabaseClient): 
 }
 
 export type Allowance =
-  | { allowed: true; sandboxSecondsToday: number; freeSecondsPerDay: number; settings: ComputerSettings }
-  | { allowed: false; needsApproval: true; overageUsd: number; sandboxSecondsToday: number; reason: string }
+  | { allowed: true; usage: DailyUsage | null; settings: ComputerSettings }
+  | { allowed: false; needsApproval: true; overageUsd: number; reason: string }
   | { allowed: false; blocked: true; reason: string; settings: ComputerSettings }
 
 /**
- * Check before every run. Free seconds remaining → allowed. Free spent and
- * no overage today → needsApproval (confirm-gated $1 block). Free spent,
- * overage bought → allowed until the hard cap. Today's total spend (all
- * sources) plus the projected overage block above the hard cap → blocked.
+ * Check before every run. Under the daily allowance → allowed. Allowance
+ * spent and no overage today → needsApproval (confirm-gated $1 block, or
+ * wait for the midnight reset). Allowance spent, overage bought → allowed
+ * until the hard cap. Today's total spend (all sources) plus the
+ * projected overage block above the hard cap → blocked.
  */
 export async function assertComputerAllowed(
   userId: string,
   supabase: SupabaseClient = createServerClient()
 ): Promise<Allowance> {
   const settings = await getComputerSettings(userId, supabase)
-  const used = await getTodaySandboxSeconds(userId, supabase)
+  const { over, usage } = await isOverDailyAllowance({ userId, tz: settings.allowanceTimezone }, supabase)
 
-  if (used < settings.freeSecondsPerDay) {
-    return { allowed: true, sandboxSecondsToday: used, freeSecondsPerDay: settings.freeSecondsPerDay, settings }
+  if (!over) {
+    return { allowed: true, usage, settings }
   }
 
   const hasOverage = await overagePurchasedToday(userId, supabase)
@@ -140,16 +147,16 @@ export async function assertComputerAllowed(
   }
 
   if (!hasOverage) {
+    const usedSoFar = usage ? `$${usage.costUsd.toFixed(2)} of $${usage.allowanceUsd.toFixed(2)}` : 'the daily allowance'
     return {
       allowed: false,
       needsApproval: true,
       overageUsd: OVERAGE_BLOCK_USD,
-      sandboxSecondsToday: used,
-      reason: `Free computer time is used up (${Math.round(used)}s today). $${OVERAGE_BLOCK_USD.toFixed(2)} buys another ${OVERAGE_BLOCK_SECONDS / 3600}h.`,
+      reason: `Today's free allowance is used up (${usedSoFar}). It resets at midnight; $${OVERAGE_BLOCK_USD.toFixed(2)} buys another ${OVERAGE_BLOCK_SECONDS / 3600}h of computer time now.`,
     }
   }
 
-  return { allowed: true, sandboxSecondsToday: used, freeSecondsPerDay: settings.freeSecondsPerDay, settings }
+  return { allowed: true, usage, settings }
 }
 
 /**

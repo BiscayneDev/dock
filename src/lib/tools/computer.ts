@@ -1,8 +1,9 @@
 /**
  * Dinghy's computer tools (Workstream G4): shell access to the user's own
- * persistent sandbox. Metered per second into the spend ledger; the $5/day
- * hard cap and the server-side kill switch (metering.ts) apply to every
- * call. No secrets ever enter the sandbox.
+ * persistent sandbox. Metered per second into the spend ledger; the daily
+ * usage allowance (allowance.ts), the $5/day hard cap and the server-side
+ * kill switch (metering.ts) apply to every call. No secrets ever enter
+ * the sandbox.
  */
 
 import { createServerClient } from '@/lib/supabase/server'
@@ -15,6 +16,7 @@ import {
   killIfOverCap,
   recordOveragePurchase,
 } from '@/lib/computer/metering'
+import { getDailyUsage } from '@/lib/allowance'
 import {
   browserRunCommand,
   browserTaskTemplate,
@@ -27,8 +29,8 @@ const COMMAND_CHAR_CAP = 4000
 
 /**
  * Shared pre-flight for anything that runs in the sandbox: enabled check,
- * server-side kill switch, allowance (blocked → error, free time spent →
- * point the model at the confirm-gated computer_overage).
+ * server-side kill switch, daily allowance (blocked → error, allowance
+ * spent → point the model at the confirm-gated computer_overage).
  */
 async function guardComputerUse(
   userId: string,
@@ -91,13 +93,14 @@ export const computerRun: Tool = {
 
 export const computerStatus: Tool = {
   name: 'computer_status',
-  description: 'Check the state of the sandbox: running/sleeping, seconds used today, and the free allowance.',
+  description: 'Check the state of the sandbox: running/sleeping, seconds used today, and the daily allowance.',
   inputSchema: { type: 'object', properties: {} },
   async execute(_input, ctx): Promise<ToolResult> {
     if (!ctx.userId) return { success: false, error: 'computer is only available to bound users' }
     const supabase = createServerClient()
     const settings = await getComputerSettings(ctx.userId, supabase)
     const used = await getTodaySandboxSeconds(ctx.userId, supabase)
+    const usage = await getDailyUsage({ userId: ctx.userId, tz: settings.allowanceTimezone }, supabase).catch(() => null)
     const { session, resumed } = await getOrStart(ctx.userId, supabase)
     return {
       success: true,
@@ -106,7 +109,9 @@ export const computerStatus: Tool = {
         resumedFromSleep: resumed,
         sandboxId: session.sandbox_id,
         secondsUsedToday: used,
-        freeSecondsPerDay: settings.freeSecondsPerDay,
+        dailyAllowanceUsd: settings.dailyAllowanceUsd,
+        usageTodayUsd: usage?.costUsd ?? null,
+        allowanceRemainingUsd: usage?.remainingUsd ?? null,
         hardCapUsdPerDay: settings.hardCapUsdPerDay,
         enabled: settings.enabled,
       },

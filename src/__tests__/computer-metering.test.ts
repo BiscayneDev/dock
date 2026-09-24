@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock Supabase before importing the modules under test.
 const fromMock = vi.fn()
+const rpcMock = vi.fn()
 vi.mock('@/lib/supabase/server', () => ({
-  createServerClient: () => ({ from: fromMock }),
+  createServerClient: () => ({ from: fromMock, rpc: rpcMock }),
 }))
 
 import {
@@ -62,10 +63,27 @@ function spendRows(events: SpendEvent[]): Row[] {
 
 const settingsRow = (over: Row = {}) => ({
   user_id: USER_ID,
-  free_seconds_per_day: 1800,
+  daily_allowance_usd: 2.0,
+  allowance_timezone: null,
   hard_cap_usd_per_day: 5.0,
   enabled: true,
   ...over,
+})
+
+// The daily-usage RPC answer: over/not-over the allowance.
+const usageRpc = (over: boolean, costUsd = 0) => ({
+  data: {
+    tz: 'America/New_York',
+    day_start: new Date().toISOString(),
+    llm_cost_usd: costUsd,
+    sandbox_cost_usd: 0,
+    cost_usd: costUsd,
+    allowance_usd: 2.0,
+    remaining_usd: Math.max(2.0 - costUsd, 0),
+    over,
+    resets_at: new Date().toISOString(),
+  },
+  error: null,
 })
 
 const metered = (seconds: number): SpendEvent => ({
@@ -89,29 +107,32 @@ describe('getTodaySandboxSeconds', () => {
   })
 })
 
-describe('assertComputerAllowed — free → needsApproval → blocked', () => {
+describe('assertComputerAllowed — allowance → needsApproval → blocked', () => {
   beforeEach(() => {
     process.env.E2B_SANDBOX_MOCK = '1'
     delete process.env.E2B_API_KEY
+    rpcMock.mockReset()
   })
 
-  it('allows within the free allowance', async () => {
+  it('allows under the daily allowance', async () => {
     const db = makeDb({
       computer_settings: [settingsRow()],
       spend_events: spendRows([metered(600)]),
     })
     fromMock.mockImplementation(db.impl)
-    const res = await assertComputerAllowed(USER_ID, { from: db.impl } as never)
+    rpcMock.mockResolvedValue(usageRpc(false, 0.03))
+    const res = await assertComputerAllowed(USER_ID, { from: db.impl, rpc: rpcMock } as never)
     expect(res.allowed).toBe(true)
   })
 
-  it('asks for approval once free seconds are exhausted', async () => {
+  it('asks for approval once the daily allowance is used up', async () => {
     const db = makeDb({
       computer_settings: [settingsRow()],
       spend_events: spendRows([metered(1800)]),
     })
     fromMock.mockImplementation(db.impl)
-    const res = await assertComputerAllowed(USER_ID, { from: db.impl } as never)
+    rpcMock.mockResolvedValue(usageRpc(true, 2.1))
+    const res = await assertComputerAllowed(USER_ID, { from: db.impl, rpc: rpcMock } as never)
     expect(res.allowed).toBe(false)
     expect('needsApproval' in res && res.needsApproval).toBe(true)
     if ('needsApproval' in res) expect(res.overageUsd).toBe(1.0)
@@ -123,7 +144,8 @@ describe('assertComputerAllowed — free → needsApproval → blocked', () => {
       spend_events: spendRows([metered(1800), { amount_usd: 1.0, memo: 'overage:+21600s' }]),
     })
     fromMock.mockImplementation(db.impl)
-    const res = await assertComputerAllowed(USER_ID, { from: db.impl } as never)
+    rpcMock.mockResolvedValue(usageRpc(true, 2.1))
+    const res = await assertComputerAllowed(USER_ID, { from: db.impl, rpc: rpcMock } as never)
     expect(res.allowed).toBe(true)
   })
 
@@ -134,9 +156,21 @@ describe('assertComputerAllowed — free → needsApproval → blocked', () => {
       spend_events: spendRows([metered(1800), { amount_usd: 4.5, memo: 'wallet_send', currency: 'USD' }]),
     })
     fromMock.mockImplementation(db.impl)
-    const res = await assertComputerAllowed(USER_ID, { from: db.impl } as never)
+    rpcMock.mockResolvedValue(usageRpc(true, 2.1))
+    const res = await assertComputerAllowed(USER_ID, { from: db.impl, rpc: rpcMock } as never)
     expect(res.allowed).toBe(false)
     expect('blocked' in res && res.blocked).toBe(true)
+  })
+
+  it('fails open when the usage meter errors', async () => {
+    const db = makeDb({
+      computer_settings: [settingsRow()],
+      spend_events: spendRows([]),
+    })
+    fromMock.mockImplementation(db.impl)
+    rpcMock.mockResolvedValue({ data: null, error: { message: 'rpc down' } })
+    const res = await assertComputerAllowed(USER_ID, { from: db.impl, rpc: rpcMock } as never)
+    expect(res.allowed).toBe(true)
   })
 })
 
