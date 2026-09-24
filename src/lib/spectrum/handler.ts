@@ -153,8 +153,7 @@ async function sendFile(space: InboundSpace, chatGuid: string, file: MadeFile): 
             await sendHostedFile(space as ContentSender, hosted)
         } catch (err) {
             logErr('page send failed', err)
-            const text = file.hosted.password ? `${file.title}: ${file.hosted.url} (code ${file.hosted.password})` : `${file.title}: ${file.hosted.url}`
-            await sendText(space, chatGuid, 'reply', text)
+            await sendText(space, chatGuid, 'reply', `${file.title}: ${file.hosted.url}`)
         }
         await saveMessage(chatGuid, 'assistant', line).catch((err) => logErr('message save failed', err))
         return
@@ -673,7 +672,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             await sendText(space, chatGuid, 'reply', preview)
             await saveMessage(chatGuid, 'assistant', preview).catch((err) => logErr('message save failed', err))
         }
-        // Files made this turn go out after the text: private page link + code, or an attachment.
+        // Files made this turn go out after the text: a file link, or an attachment.
         for (const file of fileTools?.files() ?? []) await sendFile(space, chatGuid, file)
         // Warm-path latency ledger: read these from the function logs.
         console.log(
