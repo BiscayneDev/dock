@@ -13,7 +13,7 @@ import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 import { gmailSend, gmailReply } from '@/lib/tools/gmail'
 import { gcalCreateEvent, gcalUpdateEvent, gcalFindFreeTime, gcalGetEvent } from '@/lib/tools/gcal'
 
-export type PendingKind = 'gmail_send' | 'gmail_reply' | 'gcal_create_invite'
+export type PendingKind = 'gmail_send' | 'gmail_reply' | 'gcal_create_invite' | 'computer_browse'
 
 export interface Proposal {
     id: string
@@ -42,6 +42,10 @@ export function renderProposal(p: Proposal): string {
         return `send this reply${x.replyToFrom ? ` to ${str(x.replyToFrom)}` : ''}?\n\n${str(x.body)}\n\nreply y to send, n to cancel`
     }
     const attendees = Array.isArray(x.attendees) ? (x.attendees as string[]).join(', ') : ''
+    if (p.kind === 'computer_browse') {
+        const domains = (Array.isArray(x.urls) ? (x.urls as string[]) : []).join(', ')
+        return `browse${domains ? ` ${domains}` : ''} for you while logged in?\n\n${str(x.task)}\n\nreply y to run it, n to cancel`
+    }
     return `create this event and send invites?\n\n${str(x.summary)}\n${str(x.start)} to ${str(x.end)}${x.location ? `\n${str(x.location)}` : ''}\ninvites: ${attendees}\n\nreply y to send, n to cancel`
 }
 
@@ -54,6 +58,35 @@ async function storeProposal(chatGuid: string, ctx: UserContext, kind: PendingKi
     })
     if (error) throw new Error(`could not store the draft: ${error.message}`)
     return data as string
+}
+
+/**
+ * Proposal tracking for tools that live outside the actionToolsFor closure
+ * (e.g. computer_browse). The last proposal made anywhere this turn wins;
+ * the handler renders it as the confirmation bubble.
+ */
+let looseProposal: Proposal | null = null
+export function lastLooseProposal(): Proposal | null {
+    return looseProposal
+}
+
+/**
+ * Store a proposal and return the awaiting-confirmation tool result. Used
+ * by the action closure and by module-level tools like computer_browse.
+ */
+export async function proposeLoose(
+    chatGuid: string,
+    ctx: UserContext,
+    kind: PendingKind,
+    payload: Record<string, unknown>
+): Promise<ToolResult> {
+    try {
+        const id = await storeProposal(chatGuid, ctx, kind, payload)
+        looseProposal = { id, kind, payload }
+        return PROPOSED
+    } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
 }
 
 const PROPOSED: ToolResult = {
@@ -170,14 +203,38 @@ export async function executePendingActionDetailed(
     const finish = (status: 'done' | 'failed', result: unknown) =>
         supabase.rpc('finish_pending_action', { p_id: row.id, p_status: status, p_result: result as object })
 
-    if (!ctx || ctx.userId !== row.user_id || !ctx.tokens.google) {
-        await finish('failed', { error: 'google not connected for this chat' })
+    if (!ctx || ctx.userId !== row.user_id || (row.kind !== 'computer_browse' && !ctx.tokens.google)) {
+        await finish('failed', { error: 'account not connected for this chat' })
         return {
             ok: false,
             text: "couldn't send - your google account isn't connected anymore.",
             kind: row.kind,
             payload: row.payload,
         }
+    }
+
+    // Logged-in browsing runs through the sandbox browser, not a Google
+    // tool — dispatched lazily to avoid a circular import with the tools.
+    if (row.kind === 'computer_browse') {
+        const { runApprovedBrowse } = await import('@/lib/tools/computer')
+        let result: ToolResult
+        try {
+            result = await runApprovedBrowse(
+                {
+                    task: str(row.payload.task),
+                    urls: Array.isArray(row.payload.urls) ? (row.payload.urls as string[]) : [],
+                },
+                ctx
+            )
+        } catch (err) {
+            result = { success: false, error: err instanceof Error ? err.message : String(err) }
+        }
+        await finish(result.success ? 'done' : 'failed', result.success ? result.data ?? {} : { error: result.error })
+        if (!result.success) {
+            return { ok: false, text: `that didn't go through: ${result.error ?? 'unknown error'}`, kind: row.kind, payload: row.payload }
+        }
+        const answer = str((result.data as { output?: string } | undefined)?.output).trim()
+        return { ok: true, text: answer ? `browsing done:\n\n${answer}` : 'browsing done.', kind: row.kind, payload: row.payload }
     }
 
     const tool = row.kind === 'gmail_send' ? gmailSend : row.kind === 'gmail_reply' ? gmailReply : gcalCreateEvent

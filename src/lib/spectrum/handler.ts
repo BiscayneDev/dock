@@ -29,7 +29,7 @@ import { payboxSigningToolsFor } from '@/lib/tools/paybox-signing'
 import { EMPTY_MEMORY, loadMemoryContext, renderMemoryBlock, updateMemory } from './memory'
 import { FILE_NUDGE, fileToolsFor, stripFileMarkers, type MadeFile } from '@/lib/files/tool'
 import { sendFileWithPreview } from '@/lib/files/send'
-import { actionToolsFor, cancelPendingActions, executePendingActionDetailed, hasPendingAction, parseConfirmation, renderProposal, sendConfirmedReaction } from './actions'
+import { actionToolsFor, cancelPendingActions, executePendingActionDetailed, hasPendingAction, lastLooseProposal, parseConfirmation, renderProposal, sendConfirmedReaction } from './actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { dinghyContactCard } from './contact-card'
 import { hitRateLimit, RATE_NOTICE } from './rate-limit'
@@ -637,7 +637,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         await sendText(space, chatGuid, 'reply', reply)
         await saveMessage(chatGuid, 'assistant', reply).catch((err) => logErr('message save failed', err))
         // The exact draft, rendered by the server, as its own bubble.
-        const proposal = actions?.proposal()
+        const proposal = actions?.proposal() ?? lastLooseProposal()
         if (proposal) {
             const preview = renderProposal(proposal)
             await sendText(space, chatGuid, 'reply', preview)

@@ -118,10 +118,19 @@ export class E2BManager implements ComputerProvider {
   }
 }
 
-/** Mock unless explicitly configured for real E2B (key present, mock off). */
+/** Mock unless explicitly configured for real E2B (key present, mock off).
+ * The mock is a singleton so sandbox ids persist across calls within the
+ * process (mirroring E2B's persistent sandboxes); tests can reach it via
+ * getProvider().start() to pre-seed a sandbox id. */
+let mockSingleton: MockManager | null = null
+
 export function getProvider(): ComputerProvider {
   const mock = process.env.E2B_SANDBOX_MOCK === '1' || !process.env.E2B_API_KEY
-  return mock ? new MockManager() : new E2BManager()
+  if (mock) {
+    if (!mockSingleton) mockSingleton = new MockManager()
+    return mockSingleton
+  }
+  return new E2BManager()
 }
 
 export function usingMock(): boolean {
@@ -198,7 +207,8 @@ export async function runInSandbox(
   userId: string,
   command: string,
   supabase: Supabase = createServerClient(),
-  provider: ComputerProvider = getProvider()
+  provider: ComputerProvider = getProvider(),
+  memoTag = ''
 ): Promise<{ output: { stdout: string; stderr: string; exitCode: number }; sessionId: string; billedSeconds: number } | { error: string }> {
   const { session } = await getOrStart(userId, supabase)
   if (!session.sandbox_id) return { error: 'sandbox has no id' }
@@ -227,7 +237,7 @@ export async function runInSandbox(
       userId,
       'sandbox',
       Number((billedSeconds * USD_PER_SECOND).toFixed(6)),
-      `${session.id}:${billedSeconds}s`,
+      `${session.id}:${billedSeconds}s${memoTag ? ` ${memoTag}` : ''}`,
       supabase
     )
   }

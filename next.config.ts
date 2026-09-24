@@ -14,6 +14,11 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [{ source: '/onboarding', destination: '/login', permanent: false }]
   },
+  webpack: (config) => {
+    // Import the browser-use bootstrap script as a string asset (?raw).
+    config.module.rules.push({ test: /\.py$/, resourceQuery: /raw/, type: 'asset/source' })
+    return config
+  },
   outputFileTracingIncludes: {
     "/api/**/*": ["./node_modules/pdfkit/js/standard-fonts/**/*"],
   },

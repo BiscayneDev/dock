@@ -160,6 +160,7 @@ export async function loadImessageToolContext(chatGuid: string): Promise<UserCon
         userId,
         telegramId: 0, // iMessage-origin context: no Telegram identity
         telegramChatId: 0,
+        chatGuid,
         name: (user?.name as string | null) ?? '',
         // iMessage beta is US/East; users rows created via Spectrum binding
         // carry the schema default 'UTC', which would render "today" wrong.
