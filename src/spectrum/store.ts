@@ -130,6 +130,20 @@ export async function saveMessage(chatGuid: string, role: 'user' | 'assistant', 
   await supabase.from('spectrum_messages').insert({ chat_guid: chatGuid, role, content })
 }
 
+/** saveMessage, returning the row id so the content can be filled in later. */
+export async function saveMessageReturningId(chatGuid: string, role: 'user' | 'assistant', content: string): Promise<string | null> {
+  const supabase = db()
+  const { data } = await supabase.from('spectrum_messages').insert({ chat_guid: chatGuid, role, content }).select('id').single()
+  const id = (data as { id?: string | number } | null)?.id
+  return id == null ? null : String(id)
+}
+
+/** Replace a saved row's content (a photo's label → its description). */
+export async function updateMessageContent(id: string, content: string): Promise<void> {
+  const supabase = db()
+  await supabase.from('spectrum_messages').update({ content }).eq('id', id)
+}
+
 // ── Connect tokens (mirrors src/lib/connect-token.ts) ──────────────────────
 
 function getSecret(): string {

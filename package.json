@@ -32,6 +32,7 @@
     "e2b": "^2.51.0",
     "ethers": "^6.16.0",
     "googleapis": "^171.4.0",
+    "heic-convert": "^2.1.0",
     "marked": "^18.0.14",
     "next": "15.5.14",
     "openai": "^6.32.0",
@@ -46,6 +47,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@types/heic-convert": "^2.1.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

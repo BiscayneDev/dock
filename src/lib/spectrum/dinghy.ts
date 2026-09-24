@@ -7,6 +7,17 @@
 export interface Message {
     role: 'user' | 'assistant' | 'system'
     content: string
+    /** Image data URIs sent with this turn only (never persisted to history). */
+    images?: string[]
+}
+
+/** Gateway wire shape: a turn with images becomes OpenAI content parts. */
+export function toWireMessage(m: Message): { role: Message['role']; content: string | Record<string, unknown>[] } {
+    if (!m.images || m.images.length === 0) return { role: m.role, content: m.content }
+    const parts: Record<string, unknown>[] = []
+    if (m.content) parts.push({ type: 'text', text: m.content })
+    for (const url of m.images) parts.push({ type: 'image_url', image_url: { url } })
+    return { role: m.role, content: parts }
 }
 
 export interface DinghyFact {
@@ -291,7 +302,7 @@ export async function chat(
             role: 'system' as const,
             content: buildSystemPrompt(opts.facts ?? [], opts.includeOpener ?? false, opts.capabilities ?? false) + (opts.memory ?? '') + (opts.interviewLine ? ' ' + opts.interviewLine : ''),
         },
-        ...history,
+        ...history.map(toWireMessage),
     ]
 
     const t0 = Date.now()
@@ -395,7 +406,7 @@ export async function chatWithTools(
                 opts.capabilities ?? { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox) }
             ) + (opts.memory ?? '') + (opts.interviewLine ? ' ' + opts.interviewLine : ''),
         },
-        ...history,
+        ...history.map(toWireMessage),
     ]
 
     let toolCallCount = 0
