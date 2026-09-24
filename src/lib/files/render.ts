@@ -125,6 +125,8 @@ function tokens(md: string): Token[] {
 export interface HtmlOptions {
     ogImage?: string
     description?: string
+    /** Relative link to a downloadable copy (e.g. the PDF next to the page). */
+    download?: { href: string; label: string }
 }
 
 export function renderHtml(doc: DinghyDoc, opts: HtmlOptions = {}): string {
@@ -184,6 +186,7 @@ td{padding:10px 12px;border-bottom:1px solid var(--line)}
 blockquote{margin:20px 0;padding:14px 18px;border-radius:16px;background:var(--sand);color:var(--ink);font:italic 400 19px/1.45 Fraunces,Georgia,serif}blockquote p{margin:0}
 code{font:14px 'DM Mono',monospace;background:var(--sand);padding:1px 6px;border-radius:6px}
 hr{border:0;border-top:1px solid var(--line);margin:32px 0}
+.dl{margin:14px 0 0;font:500 11px/1 'DM Mono',monospace;letter-spacing:.14em;text-transform:uppercase}.dl a{text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:8px 14px;display:inline-block}
 .foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;max-width:720px;margin:0 auto;padding:36px 24px 44px;font:500 10px 'DM Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}.foot a{color:inherit;text-decoration:none}
 @media (max-width:600px){.band{height:220px}.card{margin-top:-52px;padding:28px 22px 26px}h1{font-size:36px}h2{font-size:24px}body{font-size:16px}.row{grid-template-columns:84px 1fr}}
 </style></head>
@@ -193,6 +196,7 @@ hr{border:0;border-top:1px solid var(--line);margin:32px 0}
 <div class="brand">${anchorSvg(BRAND.ink, 18)}<span>dinghy</span></div>
 <h1>${esc(doc.title)}</h1>
 ${doc.subtitle ? `<p class="sub">${esc(doc.subtitle)}</p>` : ''}
+${opts.download ? `<p class="dl"><a href="${esc(opts.download.href)}" download>${esc(opts.download.label)}</a></p>` : ''}
 ${body.join('\n')}
 </main>
 <div class="foot"><span>made by dinghy</span><a href="https://www.getdinghy.sh">getdinghy.sh</a></div>
