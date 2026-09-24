@@ -120,7 +120,7 @@ export default function LandingPage() {
           <div className="panel">
             <h2 className="serif">get a seat on the <em>boat</em></h2>
             <p style={{ marginBottom: '24px' }}>
-              dinghy is in private beta. leave your name and email and i&apos;ll text you when a seat opens.
+              dinghy is in private beta. leave your email and i&apos;ll send your invite when a seat opens.
             </p>
             <WaitlistSection />
           </div>

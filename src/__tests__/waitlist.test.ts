@@ -23,3 +23,37 @@ describe('waitlist validation', () => {
     expect(normalizeTwitterHandle('a'.repeat(16))).toBeNull()
   })
 })
+
+import { normalizePhone, maskPhone } from '@/lib/waitlist'
+import { buildWaitlistConfirmation, firstName } from '@/lib/email/waitlist-confirmation'
+
+describe('waitlist phone', () => {
+  it('normalizes US and international numbers to E.164', () => {
+    expect(normalizePhone('(415) 555-0123')).toBe('+14155550123')
+    expect(normalizePhone('1 415 555 0123')).toBe('+14155550123')
+    expect(normalizePhone('+44 20 7946 0958')).toBe('+442079460958')
+    expect(normalizePhone('555-0123')).toBeNull()
+    expect(normalizePhone('call me')).toBeNull()
+    expect(normalizePhone('')).toBeNull()
+  })
+  it('masks for display', () => {
+    expect(maskPhone('+14155550123')).toBe('(•••) •••-0123')
+    expect(maskPhone('+442079460958')).toBe('•••0958')
+  })
+})
+
+describe('waitlist confirmation email', () => {
+  it('uses first name and promises an email invite', () => {
+    const { subject, text, html } = buildWaitlistConfirmation({ email: 'a@b.co', name: 'Ada Lovelace', phone: '+14155550123' })
+    expect(subject).toContain('waitlist')
+    expect(text).toContain('hey ada')
+    expect(text).toContain('email you my number')
+    expect(text).not.toContain('4155550123')
+    expect(html).not.toContain('4155550123')
+    expect(firstName('  Grace Hopper ')).toBe('Grace')
+  })
+  it('escapes names in html', () => {
+    const { html } = buildWaitlistConfirmation({ email: 'a@b.co', name: '<b>x</b>', phone: null })
+    expect(html).not.toContain('<b>x')
+  })
+})

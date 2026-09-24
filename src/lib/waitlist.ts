@@ -31,3 +31,28 @@ export function normalizeTwitterHandle(input: unknown): string | null {
   v = v.replace(/^@/, '')
   return HANDLE_RE.test(v) ? v : null
 }
+
+/**
+ * Normalize a phone number to E.164. Bare 10-digit numbers are treated as US (+1).
+ * Accepts spaces, dashes, dots and parentheses. Returns null when invalid.
+ */
+export function normalizePhone(input: unknown): string | null {
+  if (typeof input !== 'string') return null
+  const raw = input.trim()
+  if (!raw) return null
+  const hasPlus = raw.startsWith('+')
+  if (/[^\d\s().+-]/.test(raw)) return null
+  const digits = raw.replace(/\D/g, '')
+  let e164: string
+  if (hasPlus) e164 = `+${digits}`
+  else if (digits.length === 10) e164 = `+1${digits}`
+  else if (digits.length === 11 && digits.startsWith('1')) e164 = `+${digits}`
+  else return null
+  return /^\+[1-9]\d{7,14}$/.test(e164) ? e164 : null
+}
+
+/** "+14155550123" -> "(•••) •••-0123" for US, "•••0123" otherwise. */
+export function maskPhone(e164: string): string {
+  const last4 = e164.slice(-4)
+  return e164.startsWith('+1') && e164.length === 12 ? `(•••) •••-${last4}` : `•••${last4}`
+}
