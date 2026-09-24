@@ -77,7 +77,7 @@ export default function PrivacyPolicy() {
 
         <section>
           <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Contact</h2>
-          <p>Questions or requests: <a href="mailto:halsey@biscayneventures.xyz" style={{ color: 'var(--ink)', fontWeight: 600 }}>halsey@biscayneventures.xyz</a>. See also our <Link href="/terms" style={ color: 'var(--ink)', fontWeight: 600 }>terms of service</Link>.</p>
+          <p>Questions or requests: <a href="mailto:halsey@biscayneventures.xyz" style={{ color: 'var(--ink)', fontWeight: 600 }}>halsey@biscayneventures.xyz</a>. See also our <Link href="/terms" style={{ color: 'var(--ink)', fontWeight: 600 }}>terms of service</Link>.</p>
         </section>
       </div>
     </HarborShell>
