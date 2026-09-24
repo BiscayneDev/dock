@@ -1,3 +1,4 @@
+import { extraGoogleProvider } from './google-accounts'
 import { google } from 'googleapis'
 import { createServerClient } from '@/lib/supabase/server'
 import { encryptTokenForDb, decryptTokenFromDb } from '@/lib/crypto'
@@ -33,12 +34,15 @@ export const GOOGLE_OAUTH_SCOPES = [
 export function getAuthUrl(
   scopes: string[],
   state?: string,
-  opts?: { forceConsent?: boolean }
+  opts?: { forceConsent?: boolean; selectAccount?: boolean }
 ): string {
   const client = getOAuth2Client()
   return client.generateAuthUrl({
     access_type: 'offline',
-    ...(opts?.forceConsent ? { prompt: 'consent' as const } : {}),
+    // select_account shows Google's account picker, so a second Gmail can be added.
+    ...(opts?.forceConsent || opts?.selectAccount
+      ? { prompt: [opts?.selectAccount ? 'select_account' : '', opts?.forceConsent ? 'consent' : ''].filter(Boolean).join(' ') }
+      : {}),
     scope: scopes,
     ...(state ? { state } : {}),
   })
@@ -141,13 +145,19 @@ export async function getAuthedClient(
         .from('oauth_tokens')
         .update(updates)
         .eq('user_id', userId)
-        .eq('provider', 'google')
+        .eq('provider', tokens.provider ?? 'google')
     }
   }
 
   return client
 }
 
+/**
+ * Store a Google connection. Accounts are keyed by Gmail address: the same
+ * address refreshes its row, a new address is ADDED (never replaces the
+ * existing one). The first account is the primary ('google'); later ones
+ * are 'google:<email>'.
+ */
 export async function storeGoogleTokens(
   userId: string,
   accessToken: string,
@@ -155,27 +165,83 @@ export async function storeGoogleTokens(
   expiresAt: Date | null,
   scopes: string[],
   email: string | null
-): Promise<void> {
+): Promise<{ provider: string; added: boolean }> {
   const supabase = createServerClient()
+  const addr = email?.trim().toLowerCase() || null
+
+  const { data: rows, error: readErr } = await supabase
+    .from('oauth_tokens')
+    .select('id, provider, provider_account_email, refresh_token')
+    .eq('user_id', userId)
+    .or('provider.eq.google,provider.like.google:*')
+  if (readErr) throw new Error(`Failed to read Google tokens: ${readErr.message}`)
+  const existing = (rows ?? []) as { id: string; provider: string; provider_account_email: string | null; refresh_token: string | null }[]
+
+  // Same account (or an old row with no recorded email while it's the only one): update in place.
+  const same =
+    existing.find((r) => addr && r.provider_account_email?.toLowerCase() === addr) ??
+    (existing.length === 1 && !existing[0].provider_account_email ? existing[0] : undefined) ??
+    (!addr && existing.length ? existing.find((r) => r.provider === 'google') : undefined)
 
   const tokenData = {
-    user_id: userId,
-    provider: 'google',
     access_token: encryptTokenForDb(accessToken),
-    refresh_token: refreshToken ? encryptTokenForDb(refreshToken) : null,
+    // Google omits refresh_token on re-consent sometimes; keep the stored one.
+    ...(refreshToken ? { refresh_token: encryptTokenForDb(refreshToken) } : {}),
     expires_at: expiresAt?.toISOString() ?? null,
     scopes,
-    provider_account_email: email,
+    provider_account_email: addr,
     updated_at: new Date().toISOString(),
   }
 
+  if (same) {
+    const { error } = await supabase.from('oauth_tokens').update(tokenData).eq('id', same.id)
+    if (error) throw new Error(`Failed to store Google tokens: ${error.message}`)
+    return { provider: same.provider, added: false }
+  }
+
+  const provider = existing.some((r) => r.provider === 'google') && addr ? extraGoogleProvider(addr) : 'google'
   const { error } = await supabase
     .from('oauth_tokens')
-    .upsert(tokenData, { onConflict: 'user_id,provider' })
+    .insert({ user_id: userId, provider, refresh_token: null, ...tokenData })
+  if (error) throw new Error(`Failed to store Google tokens: ${error.message}`)
+  return { provider, added: true }
+}
 
-  if (error) {
-    throw new Error(`Failed to store Google tokens: ${error.message}`)
+/** Make one connected Google account the primary (migration 047 swaps providers atomically). */
+export async function setPrimaryGoogleAccount(userId: string, email: string): Promise<boolean> {
+  const { data, error } = await createServerClient().rpc('set_primary_google', { p_user_id: userId, p_email: email.trim().toLowerCase() })
+  if (error) throw new Error(`Failed to set primary Google account: ${error.message}`)
+  return Boolean(data)
+}
+
+/**
+ * Remove one connected Google account. Disconnecting the primary promotes
+ * another account first so 'google' stays populated while any remain.
+ * Returns false when the email isn't connected.
+ */
+export async function disconnectGoogleAccount(userId: string, email: string): Promise<boolean> {
+  const supabase = createServerClient()
+  const target = email.trim().toLowerCase()
+  const { data: rows, error } = await supabase
+    .from('oauth_tokens')
+    .select('provider, provider_account_email')
+    .eq('user_id', userId)
+    .like('provider', 'google%')
+  if (error) throw new Error(`Failed to load Google accounts: ${error.message}`)
+  const accounts = (rows ?? []).filter((r) => r.provider === 'google' || String(r.provider).startsWith('google:'))
+  const hit = accounts.find((r) => String(r.provider_account_email ?? '').toLowerCase() === target)
+  if (!hit) return false
+  let provider = hit.provider as string
+  if (provider === 'google') {
+    const next = accounts.find((r) => r.provider !== 'google' && r.provider_account_email)
+    if (next) {
+      await setPrimaryGoogleAccount(userId, String(next.provider_account_email))
+      provider = extraGoogleProvider(target)
+    }
   }
+  const { error: delErr } = await supabase.from('oauth_tokens').delete().eq('user_id', userId).eq('provider', provider)
+  if (delErr) throw new Error(`Failed to disconnect ${target}: ${delErr.message}`)
+  return true
 }
 
 export async function getDecryptedGoogleTokens(userId: string): Promise<DecryptedTokens | null> {

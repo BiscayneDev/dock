@@ -84,6 +84,8 @@ const NO_WALLET_LINE =
 
 export interface PromptCapabilities {
     google: boolean
+    /** Names the connected Google accounts when there are several. */
+    googleAccounts?: string
     wallet: boolean
     /** create_file is offered (any chat bound to a user). */
     files?: boolean
@@ -191,6 +193,7 @@ export function buildSystemPrompt(
     let prompt = BASE_PROMPT
     prompt += ' ' + (caps.google ? TOOLS_EMAIL_LINE : NO_TOOLS_EMAIL_LINE)
     if (caps.google) prompt += ' ' + BRIEFING_LINE
+    if (caps.google && caps.googleAccounts) prompt += ' ' + caps.googleAccounts
     prompt += ' ' + (caps.wallet ? WALLET_LINE : NO_WALLET_LINE)
     if (caps.files) prompt += ' ' + FILES_LINE
     if (caps.spend) prompt += ' ' + SPEND_LINE
@@ -232,6 +235,14 @@ export function isContactCardRequest(text: string): boolean {
 
 export function wantsGoogle(text: string): boolean {
     return GOOGLE_INTENT.test(text)
+}
+
+/** "connect my other gmail", "add my work email", "link a second google account". */
+export const ADD_GOOGLE_INTENT =
+    /\b(add|connect|link|hook up|set up)\b.{0,30}\b(another|other|second|2nd|new|work|personal|business|more)\b.{0,30}\b(gmail|google|e-?mail|inbox|calendar)(\s+accounts?)?\b/i
+
+export function wantsAnotherGoogle(text: string): boolean {
+    return ADD_GOOGLE_INTENT.test(text)
 }
 
 export const WALLET_INTENT =

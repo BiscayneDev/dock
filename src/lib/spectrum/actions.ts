@@ -12,8 +12,9 @@ import { createServerClient } from '@/lib/supabase/server'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 import { gmailSend, gmailReply } from '@/lib/tools/gmail'
 import { gcalCreateEvent, gcalUpdateEvent, gcalFindFreeTime, gcalGetEvent } from '@/lib/tools/gcal'
+import { googleAccountsOf, multiAccount, resolveAccount, withAccount, type GoogleAccount } from '@/lib/integrations/google-accounts'
 
-export type PendingKind = 'gmail_send' | 'gmail_reply' | 'gcal_create_invite' | 'computer_browse'
+export type PendingKind = 'gmail_send' | 'gmail_reply' | 'gcal_create_invite' | 'computer_browse' | 'google_disconnect'
 
 export interface Proposal {
     id: string
@@ -32,21 +33,57 @@ export function parseConfirmation(text: string): 'yes' | 'no' | null {
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
+const ACCOUNT_INPUT = {
+    type: 'string',
+    description: 'Which Google account to act from (email address or part of it). Omit for the primary.',
+}
+
+/**
+ * The account a draft will act from. With one account there is nothing to
+ * pick (null, payload unchanged). With several: the named one, else the
+ * primary for new mail/events, else (replies) an error asking which.
+ */
+export function draftAccount(
+    ctx: UserContext,
+    named: unknown,
+    fallback: 'primary' | 'required'
+): { account: GoogleAccount | null; error?: string } {
+    const accounts = googleAccountsOf(ctx)
+    if (accounts.length <= 1) return { account: null }
+    const list = accounts.map((a) => a.email).join(', ')
+    const picked = resolveAccount(accounts, named)
+    if (picked === 'ambiguous') return { account: null, error: `"${str(named)}" matches more than one account: ${list}` }
+    if (picked) return { account: picked }
+    if (named) return { account: null, error: `no connected account matches "${str(named)}". connected: ${list}` }
+    if (fallback === 'primary') return { account: accounts[0] }
+    return { account: null, error: `several accounts are connected (${list}); pass account = the one the thread came from (search/read results name it)` }
+}
+
+function withAccountInput(schema: Tool['inputSchema']): Tool['inputSchema'] {
+    const props = ((schema as { properties?: Record<string, unknown> } | undefined)?.properties ?? {}) as Record<string, unknown>
+    return { ...schema, properties: { ...props, account: ACCOUNT_INPUT } }
+}
+
+const fromLine = (x: Record<string, unknown>): string => (x.account ? `from: ${str(x.account)}\n` : '')
+
 /** The exact draft the user confirms, rendered by the server (not the model). */
 export function renderProposal(p: Proposal): string {
     const x = p.payload
     if (p.kind === 'gmail_send') {
-        return `send this email?\n\nto: ${str(x.to)}\nsubject: ${str(x.subject)}\n\n${str(x.body)}\n\nreply y to send, n to cancel`
+        return `send this email?\n\n${fromLine(x)}to: ${str(x.to)}\nsubject: ${str(x.subject)}\n\n${str(x.body)}\n\nreply y to send, n to cancel`
     }
     if (p.kind === 'gmail_reply') {
-        return `send this reply${x.replyToFrom ? ` to ${str(x.replyToFrom)}` : ''}?\n\n${str(x.body)}\n\nreply y to send, n to cancel`
+        return `send this reply${x.replyToFrom ? ` to ${str(x.replyToFrom)}` : ''}?\n\n${x.account ? `from: ${str(x.account)}\n\n` : ''}${str(x.body)}\n\nreply y to send, n to cancel`
+    }
+    if (p.kind === 'google_disconnect') {
+        return `disconnect ${str(x.account)} from dinghy?\n\ni'll stop reading its email and calendar. you can connect it again any time.\n\nreply y to disconnect, n to cancel`
     }
     const attendees = Array.isArray(x.attendees) ? (x.attendees as string[]).join(', ') : ''
     if (p.kind === 'computer_browse') {
         const domains = (Array.isArray(x.urls) ? (x.urls as string[]) : []).join(', ')
         return `browse${domains ? ` ${domains}` : ''} for you while logged in?\n\n${str(x.task)}\n\nreply y to run it, n to cancel`
     }
-    return `create this event and send invites?\n\n${str(x.summary)}\n${str(x.start)} to ${str(x.end)}${x.location ? `\n${str(x.location)}` : ''}\ninvites: ${attendees}\n\nreply y to send, n to cancel`
+    return `create this event and send invites?\n\n${x.account ? `on: ${str(x.account)}\n` : ''}${str(x.summary)}\n${str(x.start)} to ${str(x.end)}${x.location ? `\n${str(x.location)}` : ''}\ninvites: ${attendees}\n\nreply y to send, n to cancel`
 }
 
 async function storeProposal(chatGuid: string, ctx: UserContext, kind: PendingKind, payload: Record<string, unknown>): Promise<string> {
@@ -120,11 +157,13 @@ export function actionToolsFor(chatGuid: string): ActionToolset {
         name: 'email_send',
         description:
             "Draft an email to send from the user's Gmail. Does not send by itself: the user sees the exact draft and must confirm with y.",
-        inputSchema: gmailSend.inputSchema,
+        inputSchema: withAccountInput(gmailSend.inputSchema),
         execute: (input, ctx) => {
             const i = (input ?? {}) as Record<string, unknown>
             if (!str(i.to) || !str(i.subject) || !str(i.body)) return Promise.resolve({ success: false, error: 'to, subject and body are required' })
-            return propose(ctx, 'gmail_send', { to: str(i.to), subject: str(i.subject), body: str(i.body) })
+            const { account, error } = draftAccount(ctx, i.account, 'primary')
+            if (error) return Promise.resolve({ success: false, error })
+            return propose(ctx, 'gmail_send', { to: str(i.to), subject: str(i.subject), body: str(i.body), ...(account ? { account: account.email } : {}) })
         },
     }
 
@@ -137,13 +176,22 @@ export function actionToolsFor(chatGuid: string): ActionToolset {
             properties: {
                 ...(gmailReply.inputSchema.properties as Record<string, unknown>),
                 replyToFrom: { type: 'string', description: 'Who the reply goes to, for the confirmation preview' },
+                account: ACCOUNT_INPUT,
             },
             required: ['threadId', 'messageId', 'body'],
         },
         execute: (input, ctx) => {
             const i = (input ?? {}) as Record<string, unknown>
             if (!str(i.threadId) || !str(i.messageId) || !str(i.body)) return Promise.resolve({ success: false, error: 'threadId, messageId and body are required' })
-            return propose(ctx, 'gmail_reply', { threadId: str(i.threadId), messageId: str(i.messageId), body: str(i.body), replyToFrom: str(i.replyToFrom) })
+            const { account, error } = draftAccount(ctx, i.account, 'required')
+            if (error) return Promise.resolve({ success: false, error })
+            return propose(ctx, 'gmail_reply', {
+                threadId: str(i.threadId),
+                messageId: str(i.messageId),
+                body: str(i.body),
+                replyToFrom: str(i.replyToFrom),
+                ...(account ? { account: account.email } : {}),
+            })
         },
     }
 
@@ -152,21 +200,60 @@ export function actionToolsFor(chatGuid: string): ActionToolset {
         name: 'gcal_create_event',
         description:
             "Create an event on the user's calendar. Runs immediately when there are no attendees. With attendees, invites go out as the user, so it becomes a draft the user confirms with y. Use the user's timezone for ISO times.",
-        inputSchema: gcalCreateEvent.inputSchema,
+        inputSchema: withAccountInput(gcalCreateEvent.inputSchema),
         execute: (input, ctx) => {
-            const i = (input ?? {}) as Record<string, unknown>
+            const { account: named, ...i } = (input ?? {}) as Record<string, unknown>
+            const { account, error } = draftAccount(ctx, named, 'primary')
+            if (error) return Promise.resolve({ success: false, error })
             const attendees = Array.isArray(i.attendees) ? (i.attendees as unknown[]).filter((a) => typeof a === 'string' && a) : []
             if (attendees.length === 0) {
                 const { attendees: _drop, ...own } = i
                 void _drop
-                return gcalCreateEvent.execute(own, ctx)
+                return gcalCreateEvent.execute(own, account ? withAccount(ctx, account) : ctx)
             }
-            return propose(ctx, 'gcal_create_invite', { ...i, attendees })
+            return propose(ctx, 'gcal_create_invite', { ...i, attendees, ...(account ? { account: account.email } : {}) })
+        },
+    }
+
+    // Account management: list, switch primary (instant, reversible),
+    // disconnect (a y-confirmed draft).
+    const accountsList: Tool = {
+        name: 'google_accounts',
+        description: 'List the Google (Gmail + Calendar) accounts the user has connected and which is primary.',
+        inputSchema: { type: 'object', properties: {} },
+        execute: async (_input, ctx) => ({
+            success: true,
+            data: { accounts: googleAccountsOf(ctx).map((a) => ({ email: a.email, primary: a.primary })) },
+        }),
+    }
+    const accountsPrimary: Tool = {
+        name: 'google_set_primary',
+        description: 'Make one connected Google account the primary (the default for new emails and events). Only when the user asks.',
+        inputSchema: { type: 'object', properties: { account: ACCOUNT_INPUT }, required: ['account'] },
+        execute: async (input, ctx) => {
+            const accounts = googleAccountsOf(ctx)
+            const picked = resolveAccount(accounts, (input as Record<string, unknown> | null)?.account)
+            if (!picked || picked === 'ambiguous') return { success: false, error: `pick one of: ${accounts.map((a) => a.email).join(', ')}` }
+            if (picked.primary) return { success: true, data: { primary: picked.email, changed: false } }
+            const { setPrimaryGoogleAccount } = await import('@/lib/integrations/google')
+            const ok = await setPrimaryGoogleAccount(ctx.userId, picked.email)
+            return ok ? { success: true, data: { primary: picked.email, changed: true } } : { success: false, error: `${picked.email} isn't connected` }
+        },
+    }
+    const accountsDisconnect: Tool = {
+        name: 'google_disconnect',
+        description: 'Disconnect one Google account. Does not run by itself: the user must confirm with y.',
+        inputSchema: { type: 'object', properties: { account: ACCOUNT_INPUT }, required: ['account'] },
+        execute: (input, ctx) => {
+            const accounts = googleAccountsOf(ctx)
+            const picked = resolveAccount(accounts, (input as Record<string, unknown> | null)?.account)
+            if (!picked || picked === 'ambiguous') return Promise.resolve({ success: false, error: `pick one of: ${accounts.map((a) => a.email).join(', ')}` })
+            return propose(ctx, 'google_disconnect', { account: picked.email })
         },
     }
 
     return {
-        tools: [emailSend, emailReply, calendarCreate, gcalUpdateEvent, gcalGetEvent, gcalFindFreeTime],
+        tools: [accountsList, accountsPrimary, accountsDisconnect, emailSend, emailReply, calendarCreate, multiAccount(gcalUpdateEvent, 'find'), multiAccount(gcalGetEvent, 'find'), multiAccount(gcalFindFreeTime, 'all')],
         proposal: () => last,
     }
 }
@@ -237,16 +324,45 @@ export async function executePendingActionDetailed(
         return { ok: true, text: answer ? `browsing done:\n\n${answer}` : 'browsing done.', kind: row.kind, payload: row.payload }
     }
 
+    if (row.kind === 'google_disconnect') {
+        const email = str(row.payload.account)
+        let ok = false
+        try {
+            const { disconnectGoogleAccount } = await import('@/lib/integrations/google')
+            ok = await disconnectGoogleAccount(ctx.userId, email)
+        } catch (err) {
+            await finish('failed', { error: err instanceof Error ? err.message : String(err) })
+            return { ok: false, text: `couldn't disconnect ${email} - try again in a moment.`, kind: row.kind, payload: row.payload }
+        }
+        await finish(ok ? 'done' : 'failed', ok ? { disconnected: email } : { error: 'not connected' })
+        return { ok, text: ok ? `disconnected ${email}.` : `${email} wasn't connected.`, kind: row.kind, payload: row.payload }
+    }
+
+    // Multi-account drafts carry the account they were shown with; run from
+    // exactly that one or not at all.
+    let runCtx: UserContext = ctx
+    const draftEmail = str(row.payload.account)
+    if (draftEmail) {
+        const acct = googleAccountsOf(ctx).find((a) => a.email === draftEmail.toLowerCase())
+        if (!acct) {
+            await finish('failed', { error: `account ${draftEmail} not connected` })
+            return { ok: false, text: `couldn't send - ${draftEmail} isn't connected anymore.`, kind: row.kind, payload: row.payload }
+        }
+        runCtx = withAccount(ctx, acct)
+    }
+    const { account: _acct, ...payload } = row.payload
+    void _acct
+
     const tool = row.kind === 'gmail_send' ? gmailSend : row.kind === 'gmail_reply' ? gmailReply : gcalCreateEvent
     const input =
         row.kind === 'gmail_reply'
-            ? { threadId: row.payload.threadId, messageId: row.payload.messageId, body: row.payload.body }
+            ? { threadId: payload.threadId, messageId: payload.messageId, body: payload.body }
             : row.kind === 'gcal_create_invite'
-              ? { ...row.payload, sendUpdates: 'all' }
-              : row.payload
+              ? { ...payload, sendUpdates: 'all' }
+              : payload
     let result: ToolResult
     try {
-        result = await tool.execute(input, ctx)
+        result = await tool.execute(input, runCtx)
     } catch (err) {
         result = { success: false, error: err instanceof Error ? err.message : String(err) }
     }

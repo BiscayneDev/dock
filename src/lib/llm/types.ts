@@ -69,4 +69,8 @@ export interface DecryptedTokens {
   accessToken: string
   refreshToken: string | null
   expiresAt: string | null
+  /** oauth_tokens.provider of the row ('google', 'google:<email>', ...), for refresh write-back. */
+  provider?: string
+  /** provider_account_email, when known. */
+  email?: string | null
 }

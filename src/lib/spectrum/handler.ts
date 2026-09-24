@@ -20,7 +20,7 @@ import {
     type DinghyFact,
     type HistoryMessage,
 } from '@/spectrum/store'
-import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsGithub, wantsHealth, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
+import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsAnotherGoogle, wantsGithub, wantsHealth, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { recordUsage, spendToolFor, type GatewayUsage } from './metering'
 import { allowanceUsedUpMessage, claimLimitNotice, isOverDailyAllowance } from '@/lib/allowance'
 import { capabilitiesFor, guestCapabilities, guestToolContext, liveInfoTools, loadImessageToolContext, toolsFor } from './imessage-tools'
@@ -386,6 +386,26 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 chatGuid,
                 'connect_link',
                 "email + calendar aren't connected yet - tap below to connect google and i'll take it from there:"
+            )
+            await sendText(space, chatGuid, 'connect_link', link)
+        } catch (err) {
+            logErr('connect link failed', err)
+            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
+        }
+        return
+    }
+
+    // Another Gmail while one is already connected: same one-use link; the
+    // auth route always shows Google's account chooser.
+    if (wantsAnotherGoogle(text) && (await isGoogleConnected(chatGuid).catch(() => false))) {
+        try {
+            const link = await createConnectLink(chatGuid, text)
+            await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+            await sendText(
+                space,
+                chatGuid,
+                'connect_link',
+                "tap below and pick the google account to add - your current one stays connected:"
             )
             await sendText(space, chatGuid, 'connect_link', link)
         } catch (err) {

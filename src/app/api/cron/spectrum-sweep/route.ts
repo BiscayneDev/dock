@@ -7,6 +7,7 @@
  * via claim_spectrum_outbox (migration 015), resumes via claimPendingResume.
  */
 
+import { googleAccountsOf } from '@/lib/integrations/google-accounts'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getSpectrumApp, getImessage } from '@/lib/spectrum/app'
@@ -145,7 +146,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                           ? "github is connected — i can read your repos, issues and PRs now ✓"
                           : claimed.provider === 'oura' || claimed.provider === 'whoop'
                             ? `${claimed.provider === 'oura' ? 'oura' : 'whoop'} is connected — i can see your sleep, recovery and activity now ✓`
-                          : "you're connected — gmail + calendar are in ✓"
+                          : googleConnectedLine(toolCtx)
                 await space.send(`${connectedLine}\n\n${reply}`)
                 const proposal = actions?.proposal()
                 if (proposal) await space.send(renderProposal(proposal))
@@ -166,4 +167,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     return NextResponse.json(results)
+}
+
+/** With several Google accounts, name them so an added account is visible. */
+function googleConnectedLine(ctx: Parameters<typeof googleAccountsOf>[0] | null): string {
+    const accounts = ctx ? googleAccountsOf(ctx) : []
+    if (accounts.length < 2) return "you're connected — gmail + calendar are in ✓"
+    return `connected ✓ i can see gmail + calendar for ${accounts.map((a) => a.email).join(' and ')} now (${accounts[0].email} is primary)`
 }

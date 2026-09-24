@@ -573,7 +573,7 @@ async function getDecryptedTokens(userId: string): Promise<Record<string, Decryp
 
   const { data, error } = await supabase
     .from('oauth_tokens')
-    .select('provider, access_token, refresh_token, expires_at')
+    .select('provider, provider_account_email, access_token, refresh_token, expires_at')
     .eq('user_id', userId)
 
   if (error || !data) {
@@ -588,6 +588,8 @@ async function getDecryptedTokens(userId: string): Promise<Record<string, Decryp
         accessToken: decryptTokenFromDb(row.access_token as string),
         refreshToken: row.refresh_token ? decryptTokenFromDb(row.refresh_token as string) : null,
         expiresAt: (row.expires_at as string) ?? null,
+        provider: row.provider as string,
+        email: (row.provider_account_email as string | null) ?? undefined,
       }
     } catch {
       // Skip tokens that can't be decrypted — likely corrupted
