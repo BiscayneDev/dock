@@ -60,7 +60,7 @@ export function draftAccount(
 }
 
 function withAccountInput(schema: Tool['inputSchema']): Tool['inputSchema'] {
-    const props = ((schema as { properties?: Record<string, unknown> }).properties ?? {}) as Record<string, unknown>
+    const props = ((schema as { properties?: Record<string, unknown> } | undefined)?.properties ?? {}) as Record<string, unknown>
     return { ...schema, properties: { ...props, account: ACCOUNT_INPUT } }
 }
 

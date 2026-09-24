@@ -60,6 +60,8 @@ const ACCOUNT_PROP = {
 }
 
 export function multiAccount(tool: Tool, mode: AccountMode): Tool {
+    // Unit tests mock tool modules partially; pass missing tools through.
+    if (!tool) return tool
     const props = ((tool.inputSchema as { properties?: Record<string, unknown> }).properties ?? {}) as Record<string, unknown>
     return {
         ...tool,
