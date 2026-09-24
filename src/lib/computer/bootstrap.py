@@ -30,6 +30,10 @@ def setup() -> int:
     if os.path.exists(BOOTSTRAP_MARKER):
         print("already installed")
         return 0
+    if sys.version_info < (3, 11):
+        raise SystemExit(
+            f"browser-use needs Python 3.11+, sandbox has {sys.version.split()[0]}"
+        )
     import subprocess
 
     subprocess.run([sys.executable, "-m", "venv", VENV_DIR], check=True)
@@ -59,7 +63,12 @@ def make_llm():
         raise SystemExit(
             "SHIPYARD_GATEWAY_URL / SHIPYARD_SANDBOX_KEY not set in the sandbox"
         )
-    return ChatOpenAI(base_url=gateway, api_key=key)
+    # browser-use 0.13.10 requires an explicit model on ChatOpenAI — Shipyard
+    # routes 'auto' to the cheapest capable model.
+    model = os.environ.get("SHIPYARD_MODEL", "auto")
+    # The OpenAI client appends /chat/completions itself; the bare gateway URL 404s.
+    base_url = gateway.rstrip("/") + "/v1"
+    return ChatOpenAI(base_url=base_url, api_key=key, model=model)
 
 
 def run_task(payload_json: str) -> int:

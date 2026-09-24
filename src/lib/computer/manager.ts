@@ -94,8 +94,10 @@ export class E2BManager implements ComputerProvider {
     const envs: Record<string, string> = {}
     const url = process.env.SHIPYARD_GATEWAY_URL
     const key = process.env.SHIPYARD_SANDBOX_KEY
+    const model = process.env.SHIPYARD_MODEL
     if (url) envs.SHIPYARD_GATEWAY_URL = url
     if (key) envs.SHIPYARD_SANDBOX_KEY = key
+    if (model) envs.SHIPYARD_MODEL = model
     return envs
   }
 
