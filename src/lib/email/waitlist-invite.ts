@@ -10,8 +10,8 @@ const RESEND_URL = 'https://api.resend.com/emails'
 const DEFAULT_FROM = 'Dinghy <hi@getdinghy.sh>'
 
 export function inviteTextBody(name: string): string {
-  const first = firstName(name).toLowerCase()
-  return first ? `hey dinghy, it's ${first}` : 'hey dinghy'
+  const first = firstName(name)
+  return first ? `Hey Dinghy, it's ${first}` : 'Hey Dinghy'
 }
 
 /** sms: link that works on iOS and Android ("?&body=" is the cross-platform form). */
@@ -20,29 +20,32 @@ export function smsLink(line: string, name: string): string {
 }
 
 export function buildWaitlistInvite(name: string, line: string) {
-  const first = firstName(name).toLowerCase()
+  const first = firstName(name)
+  const greeting = first ? `Hey ${first},` : 'Hey there,'
   const link = smsLink(line, name)
-  const DINGHY_LINE_PRETTY = prettyPhone(line)
-  const subject = "your dinghy seat is open"
+  const pretty = prettyPhone(line)
+  const subject = "You're in the Dinghy beta"
   const text = [
-    `hey ${first} - your seat's open.`,
+    greeting,
     '',
-    `i live in your texts. this is your own dinghy number: ${DINGHY_LINE_PRETTY} - save it. you're already aboard - tap the link on your phone and send the text that pops up.`,
+    `You're in. Your personal Dinghy line is ${pretty} - text it from the phone you signed up with and you're talking to me.`,
     '',
+    'Tap here from your phone to start:',
     link,
     '',
-    `or just text ${DINGHY_LINE_PRETTY} from the phone you signed up with. no code needed. see you in there.`,
+    'No code, no setup. See you on the water.',
     '',
-    '- dinghy',
+    '- Dinghy',
   ].join('\n')
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
   const html = `<!doctype html><html><body style="margin:0;padding:32px 20px;background:#F6EFE4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#0B1224;">
 <div style="max-width:480px;margin:0 auto;font-size:16px;line-height:1.55;">
-<p style="margin:0 0 16px;">hey ${esc(first)} - your seat's open.</p>
-<p style="margin:0 0 24px;">i live in your texts. this is your own dinghy number: <strong>${DINGHY_LINE_PRETTY}</strong> - save it. you're already aboard - tap the button on your phone and send the text that pops up.</p>
-<p style="margin:0 0 24px;"><a href="${esc(link)}" style="display:inline-block;background:#0B1224;color:#F6EFE4;text-decoration:none;padding:14px 26px;border-radius:999px;font-weight:600;">text dinghy</a></p>
-<p style="margin:0 0 24px;font-size:14px;color:#4A5268;">or just text <strong>${DINGHY_LINE_PRETTY}</strong> from the phone you signed up with. no code needed. see you in there.</p>
-<p style="margin:0;">- dinghy</p>
+<p style="margin:0 0 16px;">${esc(greeting)}</p>
+<p style="margin:0 0 24px;">You're in. Your personal Dinghy line is <strong>${pretty}</strong> - text it from the phone you signed up with and you're talking to me.</p>
+<p style="margin:0 0 12px;">Tap here from your phone to start:</p>
+<p style="margin:0 0 24px;"><a href="${esc(link)}" style="display:inline-block;background:#0B1224;color:#F6EFE4;text-decoration:none;padding:14px 26px;border-radius:999px;font-weight:600;">Text Dinghy</a></p>
+<p style="margin:0 0 24px;">No code, no setup. See you on the water.</p>
+<p style="margin:0;">- Dinghy</p>
 </div></body></html>`
   return { subject, text, html }
 }

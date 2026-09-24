@@ -23,10 +23,10 @@ const STAGE_DONE = 4
 
 const NAME_INSTRUCTION =
     'Then, in the same short lowercase texting voice, end your reply with exactly this one question and nothing else new: ' +
-    '"also - what should i call you? first name works."'
+    '"Also, what should I call you? First name works."'
 const MORNINGS_INSTRUCTION =
     'Then, in the same short lowercase texting voice, end your reply with exactly this one question and nothing else new: ' +
-    '"one more thing, then i\'m done with the questions - what should your mornings look like?"'
+    '"One more, then I\'m done with questions: what should your mornings look like?"'
 
 const NAME_TOLD = /(?:my name(?:'s| is)|call me|i'?m|this is|it'?s)\s+[a-z]/i
 const MORNINGS_TOLD = /\b(mornings?|wake|waking|rise|rising|start my day|early riser|alarm)\b/i

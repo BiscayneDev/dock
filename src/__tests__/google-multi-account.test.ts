@@ -82,9 +82,9 @@ describe('drafts pick an account', () => {
     })
     it('confirmation shows the sending account', () => {
         const t = renderProposal({ id: '1', kind: 'gmail_send', payload: { to: 'a@b.c', subject: 's', body: 'b', account: 'halsey@biscayneventures.xyz' } })
-        expect(t).toContain('from: halsey@biscayneventures.xyz\nto: a@b.c')
-        expect(renderProposal({ id: '1', kind: 'gmail_send', payload: { to: 'a@b.c', subject: 's', body: 'b' } })).not.toContain('from:')
-        expect(renderProposal({ id: '1', kind: 'google_disconnect', payload: { account: 'x@y.z' } })).toContain('disconnect x@y.z')
+        expect(t).toContain('From: halsey@biscayneventures.xyz\nTo: a@b.c')
+        expect(renderProposal({ id: '1', kind: 'gmail_send', payload: { to: 'a@b.c', subject: 's', body: 'b' } })).not.toContain('From:')
+        expect(renderProposal({ id: '1', kind: 'google_disconnect', payload: { account: 'x@y.z' } })).toContain('Disconnect x@y.z')
     })
 })
 

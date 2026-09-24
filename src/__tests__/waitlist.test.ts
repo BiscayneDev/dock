@@ -45,9 +45,9 @@ describe('waitlist phone', () => {
 describe('waitlist confirmation email', () => {
   it('uses first name and promises an email invite', () => {
     const { subject, text, html } = buildWaitlistConfirmation({ email: 'a@b.co', name: 'Ada Lovelace', phone: '+14155550123' })
-    expect(subject).toContain('waitlist')
-    expect(text).toContain('hey ada')
-    expect(text).toContain('email you my number')
+    expect(subject).toBe("You're on the Dinghy waitlist")
+    expect(text).toContain('Hey Ada,')
+    expect(text).toContain('personal Dinghy line')
     expect(text).not.toContain('4155550123')
     expect(html).not.toContain('4155550123')
     expect(firstName('  Grace Hopper ')).toBe('Grace')

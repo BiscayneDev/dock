@@ -122,7 +122,7 @@ describe('computer_browse loggedIn flow', () => {
     const preview = renderProposal({ id: 'prop-1', kind: 'computer_browse', payload: stored!.payload! })
     expect(preview).toContain('check my orders')
     expect(preview).toContain('amazon.com')
-    expect(preview).toContain('reply y to run it')
+    expect(preview).toContain('Reply Y to run it')
   })
 
   it('refuses loggedIn browsing without a chat to confirm in', async () => {

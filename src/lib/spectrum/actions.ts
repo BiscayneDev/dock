@@ -64,26 +64,26 @@ function withAccountInput(schema: Tool['inputSchema']): Tool['inputSchema'] {
     return { ...schema, properties: { ...props, account: ACCOUNT_INPUT } }
 }
 
-const fromLine = (x: Record<string, unknown>): string => (x.account ? `from: ${str(x.account)}\n` : '')
+const fromLine = (x: Record<string, unknown>): string => (x.account ? `From: ${str(x.account)}\n` : '')
 
 /** The exact draft the user confirms, rendered by the server (not the model). */
 export function renderProposal(p: Proposal): string {
     const x = p.payload
     if (p.kind === 'gmail_send') {
-        return `send this email?\n\n${fromLine(x)}to: ${str(x.to)}\nsubject: ${str(x.subject)}\n\n${str(x.body)}\n\nreply y to send, n to cancel`
+        return `Send this email?\n\n${fromLine(x)}To: ${str(x.to)}\nSubject: ${str(x.subject)}\n\n${str(x.body)}\n\nReply Y to send, N to cancel.`
     }
     if (p.kind === 'gmail_reply') {
-        return `send this reply${x.replyToFrom ? ` to ${str(x.replyToFrom)}` : ''}?\n\n${x.account ? `from: ${str(x.account)}\n\n` : ''}${str(x.body)}\n\nreply y to send, n to cancel`
+        return `Send this reply${x.replyToFrom ? ` to ${str(x.replyToFrom)}` : ''}?\n\n${x.account ? `From: ${str(x.account)}\n\n` : ''}${str(x.body)}\n\nReply Y to send, N to cancel.`
     }
     if (p.kind === 'google_disconnect') {
-        return `disconnect ${str(x.account)} from dinghy?\n\ni'll stop reading its email and calendar. you can connect it again any time.\n\nreply y to disconnect, n to cancel`
+        return `Disconnect ${str(x.account)} from Dinghy?\n\nI'll stop reading its email and calendar. You can connect it again any time.\n\nReply Y to disconnect, N to cancel.`
     }
     const attendees = Array.isArray(x.attendees) ? (x.attendees as string[]).join(', ') : ''
     if (p.kind === 'computer_browse') {
         const domains = (Array.isArray(x.urls) ? (x.urls as string[]) : []).join(', ')
-        return `browse${domains ? ` ${domains}` : ''} for you while logged in?\n\n${str(x.task)}\n\nreply y to run it, n to cancel`
+        return `Browse${domains ? ` ${domains}` : ''} for you while logged in?\n\n${str(x.task)}\n\nReply Y to run it, N to cancel.`
     }
-    return `create this event and send invites?\n\n${x.account ? `on: ${str(x.account)}\n` : ''}${str(x.summary)}\n${str(x.start)} to ${str(x.end)}${x.location ? `\n${str(x.location)}` : ''}\ninvites: ${attendees}\n\nreply y to send, n to cancel`
+    return `Create this event and send invites?\n\n${x.account ? `On: ${str(x.account)}\n` : ''}${str(x.summary)}\n${str(x.start)} to ${str(x.end)}${x.location ? `\n${str(x.location)}` : ''}\nInvites: ${attendees}\n\nReply Y to send, N to cancel.`
 }
 
 async function storeProposal(chatGuid: string, ctx: UserContext, kind: PendingKind, payload: Record<string, unknown>): Promise<string> {
@@ -285,7 +285,7 @@ export async function executePendingActionDetailed(
     const row = (Array.isArray(data) ? data[0] : null) as
         | { id: string; user_id: string; kind: PendingKind; payload: Record<string, unknown> }
         | null
-    if (!row) return { ok: false, text: 'that draft expired - ask me again and i\'ll redo it.', kind: null, payload: null }
+    if (!row) return { ok: false, text: 'That draft expired. Ask me again and I\'ll redo it.', kind: null, payload: null }
 
     const finish = (status: 'done' | 'failed', result: unknown) =>
         supabase.rpc('finish_pending_action', { p_id: row.id, p_status: status, p_result: result as object })
@@ -294,7 +294,7 @@ export async function executePendingActionDetailed(
         await finish('failed', { error: 'account not connected for this chat' })
         return {
             ok: false,
-            text: "couldn't send - your google account isn't connected anymore.",
+            text: "Couldn't send - your Google account isn't connected anymore.",
             kind: row.kind,
             payload: row.payload,
         }
@@ -318,10 +318,10 @@ export async function executePendingActionDetailed(
         }
         await finish(result.success ? 'done' : 'failed', result.success ? result.data ?? {} : { error: result.error })
         if (!result.success) {
-            return { ok: false, text: `that didn't go through: ${result.error ?? 'unknown error'}`, kind: row.kind, payload: row.payload }
+            return { ok: false, text: `That didn't go through: ${result.error ?? 'unknown error'}`, kind: row.kind, payload: row.payload }
         }
         const answer = str((result.data as { output?: string } | undefined)?.output).trim()
-        return { ok: true, text: answer ? `browsing done:\n\n${answer}` : 'browsing done.', kind: row.kind, payload: row.payload }
+        return { ok: true, text: answer ? `Browsing done:\n\n${answer}` : 'Browsing done.', kind: row.kind, payload: row.payload }
     }
 
     if (row.kind === 'google_disconnect') {
@@ -332,10 +332,10 @@ export async function executePendingActionDetailed(
             ok = await disconnectGoogleAccount(ctx.userId, email)
         } catch (err) {
             await finish('failed', { error: err instanceof Error ? err.message : String(err) })
-            return { ok: false, text: `couldn't disconnect ${email} - try again in a moment.`, kind: row.kind, payload: row.payload }
+            return { ok: false, text: `Couldn't disconnect ${email}. Try again in a moment.`, kind: row.kind, payload: row.payload }
         }
         await finish(ok ? 'done' : 'failed', ok ? { disconnected: email } : { error: 'not connected' })
-        return { ok, text: ok ? `disconnected ${email}.` : `${email} wasn't connected.`, kind: row.kind, payload: row.payload }
+        return { ok, text: ok ? `Disconnected ${email}.` : `${email} wasn't connected.`, kind: row.kind, payload: row.payload }
     }
 
     // Multi-account drafts carry the account they were shown with; run from
@@ -346,7 +346,7 @@ export async function executePendingActionDetailed(
         const acct = googleAccountsOf(ctx).find((a) => a.email === draftEmail.toLowerCase())
         if (!acct) {
             await finish('failed', { error: `account ${draftEmail} not connected` })
-            return { ok: false, text: `couldn't send - ${draftEmail} isn't connected anymore.`, kind: row.kind, payload: row.payload }
+            return { ok: false, text: `Couldn't send - ${draftEmail} isn't connected anymore.`, kind: row.kind, payload: row.payload }
         }
         runCtx = withAccount(ctx, acct)
     }
@@ -368,11 +368,11 @@ export async function executePendingActionDetailed(
     }
     await finish(result.success ? 'done' : 'failed', result.success ? result.data ?? {} : { error: result.error })
     if (!result.success) {
-        return { ok: false, text: `that didn't go through: ${result.error ?? 'unknown error'}`, kind: row.kind, payload: row.payload }
+        return { ok: false, text: `That didn't go through: ${result.error ?? 'unknown error'}`, kind: row.kind, payload: row.payload }
     }
-    if (row.kind === 'gmail_send') return { ok: true, text: `sent to ${str(row.payload.to)}.`, kind: row.kind, payload: row.payload }
-    if (row.kind === 'gmail_reply') return { ok: true, text: 'reply sent.', kind: row.kind, payload: row.payload }
-    return { ok: true, text: 'event created and invites sent.', kind: row.kind, payload: row.payload }
+    if (row.kind === 'gmail_send') return { ok: true, text: `Sent to ${str(row.payload.to)}.`, kind: row.kind, payload: row.payload }
+    if (row.kind === 'gmail_reply') return { ok: true, text: 'Reply sent.', kind: row.kind, payload: row.payload }
+    return { ok: true, text: 'Event created and invites sent.', kind: row.kind, payload: row.payload }
 }
 
 /** Run the chat's open proposal after a "yes". Returns the text to send back. */

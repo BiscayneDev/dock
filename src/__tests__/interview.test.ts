@@ -77,7 +77,7 @@ describe('interviewDirective — the 2-question cap', () => {
     it('turn 1: opener answered → asks the name question', async () => {
         tables.chat1 = 1
         const line = await interviewDirective('chat-1', 'deadline crunch all week', 'mostly client work honestly')
-        expect(line).toContain('what should i call you')
+        expect(line).toContain('what should I call you')
         expect(tables.chat1).toBe(2)
     })
     it('a one-word opener reply keeps waiting, does not burn a question', async () => {

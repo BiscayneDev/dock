@@ -15,25 +15,26 @@ export function firstName(name: string): string {
 }
 
 export function buildWaitlistConfirmation({ name }: ConfirmationInput) {
-  const first = firstName(name).toLowerCase()
-  const subject = "you're on the dinghy waitlist"
+  const first = firstName(name)
+  const greeting = first ? `Hey ${first},` : 'Hey there,'
+  const subject = "You're on the Dinghy waitlist"
   const text = [
-    `hey ${first} - you're on the list.`,
+    greeting,
     '',
-    "when a seat opens, i'll email you my number and a link that opens a text to me. one tap and we're talking.",
+    "You're on the list. When a spot opens, you'll get an email with your personal Dinghy line and a link to start texting.",
     '',
-    'nothing to do until then.',
+    'Nothing to do until then.',
     '',
-    '- dinghy',
+    '- Dinghy',
     'https://getdinghy.sh',
   ].join('\n')
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const html = `<!doctype html><html><body style="margin:0;padding:32px 20px;background:#F6EFE4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#0B1224;">
 <div style="max-width:480px;margin:0 auto;font-size:16px;line-height:1.55;">
-<p style="margin:0 0 16px;">hey ${esc(first)} - you're on the list.</p>
-<p style="margin:0 0 16px;">when a seat opens, i'll email you my number and a link that opens a text to me. one tap and we're talking.</p>
-<p style="margin:0 0 24px;">nothing to do until then.</p>
-<p style="margin:0;">- dinghy<br><a href="https://getdinghy.sh" style="color:#C8653F;">getdinghy.sh</a></p>
+<p style="margin:0 0 16px;">${esc(greeting)}</p>
+<p style="margin:0 0 16px;">You're on the list. When a spot opens, you'll get an email with your personal Dinghy line and a link to start texting.</p>
+<p style="margin:0 0 24px;">Nothing to do until then.</p>
+<p style="margin:0;">- Dinghy<br><a href="https://getdinghy.sh" style="color:#C8653F;">getdinghy.sh</a></p>
 </div></body></html>`
   return { subject, text, html }
 }

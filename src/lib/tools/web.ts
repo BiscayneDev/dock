@@ -6,10 +6,13 @@ import type { Tool, ToolResult } from '@/lib/llm/types'
 const SearchInput = z.object({
   query: z.string().describe('Search query'),
   maxResults: z.number().optional().default(5).describe('Max results (default 5)'),
+  recentDays: z.number().int().min(1).max(365).optional().describe('Only news from the last N days'),
 })
 
 // Direct Tavily API call — bypasses SDK to avoid header issues
-async function tavilySearch(query: string, maxResults: number): Promise<{ answer: string | null; results: Array<{ title: string; url: string; content: string }> }> {
+type SearchHit = { title: string; url: string; content: string; published_date: string | null }
+
+async function tavilySearch(query: string, maxResults: number, recentDays?: number): Promise<{ answer: string | null; results: SearchHit[] }> {
   const response = await fetch('https://api.tavily.com/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -19,6 +22,8 @@ async function tavilySearch(query: string, maxResults: number): Promise<{ answer
       max_results: maxResults,
       search_depth: 'basic',
       include_answer: true,
+      // News mode returns publication dates, which recency claims depend on.
+      ...(recentDays ? { topic: 'news', days: recentDays } : {}),
     }),
   })
 
@@ -26,25 +31,27 @@ async function tavilySearch(query: string, maxResults: number): Promise<{ answer
     throw new Error(`Tavily API error: ${response.status} ${response.statusText}`)
   }
 
-  const data = await response.json() as { answer?: string; results?: Array<{ title: string; url: string; content: string }> }
+  const data = await response.json() as { answer?: string; results?: Array<{ title: string; url: string; content: string; published_date?: string }> }
   return {
     answer: data.answer ?? null,
     results: (data.results ?? []).map((r) => ({
       title: r.title ?? '',
       url: r.url ?? '',
       content: (r.content ?? '').slice(0, 500),
+      published_date: r.published_date ?? null,
     })),
   }
 }
 
 export const webSearch: Tool = {
   name: 'web_search',
-  description: 'Search the web for real-time information — weather, news, sports scores, stock prices, facts, documentation, anything the user asks about.',
+  description: 'Search the web for real-time information: news, sports scores, stock prices, facts, documentation. Each result has published_date (null when the source gives none). For anything "this week", "recent" or "latest", set recentDays so results come with dates.',
   inputSchema: {
     type: 'object',
     properties: {
       query: { type: 'string', description: 'What to search for' },
       maxResults: { type: 'number', description: 'Max results (default 5)' },
+      recentDays: { type: 'number', description: 'Only news published in the last N days (1-365). Use for this week / recent / latest questions.' },
     },
     required: ['query'],
   },
@@ -55,7 +62,7 @@ export const webSearch: Tool = {
 
     try {
       const parsed = SearchInput.parse(input)
-      const { answer, results } = await tavilySearch(parsed.query, parsed.maxResults)
+      const { answer, results } = await tavilySearch(parsed.query, parsed.maxResults, parsed.recentDays)
 
       return {
         success: true,

@@ -22,7 +22,16 @@ describe('onboarding prompt', () => {
 
   it('first message gets the welcome + opener, even with product facts present', () => {
     const p = buildSystemPrompt(productFactsFor('member', facts), true)
-    expect(p).toContain("what's eating your time this week?")
+    expect(p).toContain("What's taking up most of your time this week?")
     expect(p).toContain('contact card just arrived')
+  })
+})
+
+describe('grounding rules', () => {
+  it('search-enabled prompt requires dated sources for recency claims', async () => {
+    const { GROUNDING_LINE } = await import('@/lib/spectrum/dinghy')
+    expect(GROUNDING_LINE).toContain('published_date')
+    expect(GROUNDING_LINE).toContain('never turn it into a recency claim')
+    expect(GROUNDING_LINE).toContain('search again')
   })
 })

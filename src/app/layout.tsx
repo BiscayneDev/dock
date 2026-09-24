@@ -4,8 +4,8 @@ import "./globals.css"
 
 // www is the live host (the apex redirects to it), so canonical URLs use it.
 const SITE_URL = "https://www.getdinghy.sh"
-const TITLE = "Dinghy · your first mate lives in your texts"
-const DESCRIPTION = "dinghy is a first mate that lives in imessage. you text it like a person. it does the work."
+const TITLE = "Dinghy · Your first mate, one text away"
+const DESCRIPTION = "Dinghy is a personal AI assistant you reach over iMessage. Text it the way you'd text a person. It does the work."
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -17,7 +17,7 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: {
     default: TITLE,
-    template: "%s — Dinghy",
+    template: "%s - Dinghy",
   },
   description: DESCRIPTION,
   applicationName: "Dinghy",
@@ -56,7 +56,7 @@ export const metadata: Metadata = {
         url: `${SITE_URL}/api/og`,
         width: 1200,
         height: 630,
-        alt: "Dinghy · your first mate lives in your texts",
+        alt: "Dinghy · Your first mate, one text away",
         type: "image/png",
       },
     ],

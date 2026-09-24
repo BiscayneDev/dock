@@ -10,11 +10,11 @@
 import { createServerClient } from '@/lib/supabase/server'
 
 /** The exact opt-out line that ends every digest. */
-export const MUTE_FOOTER = 'reply mute mornings to stop these'
+export const MUTE_FOOTER = 'Reply "mute mornings" to stop these.'
 
-export const MUTE_ACK = 'ok, mornings muted. say "unmute mornings" any time to bring them back.'
-export const UNMUTE_ACK = 'mornings are back on — expect the next briefing around 8.'
-export const NO_BOUND_ACCOUNT_ACK = "no account is connected to this chat, so there's no briefing to mute."
+export const MUTE_ACK = 'Morning briefings are off. Say "unmute mornings" any time to turn them back on.'
+export const UNMUTE_ACK = 'Morning briefings are back on. The next one comes around 8.'
+export const NO_BOUND_ACCOUNT_ACK = "No account is connected to this chat, so there's no briefing to mute."
 
 /**
  * Whether this chat should receive today's briefing. A settings row wins;
@@ -89,8 +89,8 @@ export async function handleMuteIntent(chatGuid: string, text: string): Promise<
     if (error) {
         console.error('briefing settings update failed:', error.message)
         return wantsUnmute
-            ? "couldn't save that - try again in a moment."
-            : "couldn't save that - try again in a moment."
+            ? "Couldn't save that. Try again in a moment."
+            : "Couldn't save that. Try again in a moment."
     }
     return wantsUnmute ? UNMUTE_ACK : MUTE_ACK
 }

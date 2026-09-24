@@ -79,14 +79,14 @@ describe('parseForgetIntent', () => {
 })
 
 describe('renderMemoryReport', () => {
-    it('renders a lowercase list of profile + recent facts (guest chat)', async () => {
+    it('renders a list of profile + recent facts (guest chat)', async () => {
         rpcMock.mockImplementation(async (fn: string) => {
             if (fn === 'dinghy_memory_context') return { data: { profile: '- name: Halsey\n- lives in Miami', summaries: [] }, error: null }
             if (fn === 'recent_chat_memories') return { data: [{ content: 'Halsey' }, { content: 'sister is Pia' }], error: null }
             return { data: null, error: null }
         })
         const out = await renderMemoryReport('chat-1')
-        expect(out).toContain("here's what i remember about you:")
+        expect(out).toContain("Here's what I remember about you:")
         expect(out).toContain('- name: Halsey')
         expect(out).toContain('- lives in Miami')
         expect(out).toContain('- sister is Pia')
@@ -95,7 +95,7 @@ describe('renderMemoryReport', () => {
     it('says when nothing is known', async () => {
         rpcMock.mockResolvedValue({ data: { profile: '', summaries: [] }, error: null })
         const out = await renderMemoryReport('chat-1')
-        expect(out).toContain('nothing saved about you yet')
+        expect(out).toContain('Nothing saved about you yet')
     })
     it('uses the user-keyed RPCs when the chat is bound', async () => {
         vi.mocked(resolveUserId).mockResolvedValue('u-1')
@@ -125,7 +125,7 @@ describe('wipe-all gate', () => {
         await expect(handlePendingMemoryWipe('chat-1', 'ok sure')).resolves.toContain('kept everything')
     })
     it('WIPE_PROMPT demands an explicit YES', () => {
-        expect(WIPE_PROMPT).toContain('reply YES')
+        expect(WIPE_PROMPT).toContain('Reply YES')
         expect(WIPE_PROMPT).toContain('everything')
     })
 })

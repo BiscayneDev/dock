@@ -5,9 +5,9 @@ export const runtime = 'nodejs'
 
 export async function GET(): Promise<ImageResponse> {
   return renderOgCard({
-    label: 'dinghy',
-    title: 'your first mate lives in',
-    accent: 'your texts',
+    label: 'Dinghy',
+    title: 'Your first mate,',
+    accent: 'one text away',
     foot: 'getdinghy.sh',
   })
 }

@@ -89,37 +89,37 @@ export default function LandingPage() {
             />
           </div>
           <nav className="top">
-            <Link href="/" className="mark"><Image src="/icon-192.png" alt="" width={30} height={30} />dinghy</Link>
-            <Link href="/login" className="signin">sign in</Link>
+            <Link href="/" className="mark"><Image src="/icon-192.png" alt="" width={30} height={30} />Dinghy</Link>
+            <Link href="/login" className="signin">Sign in</Link>
           </nav>
 
           <section className="wrap" style={{ paddingTop: '152px', paddingBottom: 0 }}>
-            <div className="label">private beta · imessage</div>
-            <h1 className="serif">your first mate lives in <em>your texts</em></h1>
+            <div className="label">Private beta · iMessage</div>
+            <h1 className="serif">Your first mate, <em>one text away</em></h1>
             <p className="hero-sub">
-              dinghy is a first mate that lives in imessage. you text it like a person. <b>it does the work.</b>
+              Dinghy is a personal AI assistant you reach over iMessage. Text it the way you&apos;d text a person. <b>It does the work.</b>
             </p>
             <div className="cta">
-              <a href="#waitlist" className="btn primary">join the beta</a>
+              <a href="#waitlist" className="btn primary">Join the beta</a>
             </div>
           </section>
           <div className="hero-spacer" />
         </header>
 
         <section className="wrap block">
-          <div className="label">how it&apos;s built</div>
+          <div className="label">How it&apos;s built</div>
           <div className="panel">
-            <h2 className="serif">shipyard picks the model, <em>dinghy</em> runs the agent, <em>paybox</em> holds the keys.</h2>
-            <p>you just text.</p>
+            <h2 className="serif">Shipyard picks the model, <em>Dinghy</em> runs the agent, <em>Paybox</em> holds the keys.</h2>
+            <p>You just text.</p>
           </div>
         </section>
 
         <section className="wrap block" id="waitlist" style={{ scrollMarginTop: '96px' }}>
-          <div className="label">private beta</div>
+          <div className="label">Private beta</div>
           <div className="panel">
-            <h2 className="serif">get a seat on the <em>boat</em></h2>
+            <h2 className="serif">Get a seat on the <em>boat</em></h2>
             <p style={{ marginBottom: '24px' }}>
-              dinghy is in private beta. leave your email and i&apos;ll send your invite when a seat opens.
+              Dinghy is in private beta. Leave your email and we&apos;ll send your invite when a spot opens.
             </p>
             <WaitlistSection />
           </div>
@@ -127,11 +127,11 @@ export default function LandingPage() {
 
         <footer className="wrap">
           <div className="foot">
-            <span>dinghy · a shipyard product</span>
+            <span>Dinghy · a Shipyard product</span>
             <div style={{ display: 'flex', gap: '20px' }}>
-              <Link href="/privacy">privacy</Link>
-              <Link href="/terms">terms</Link>
-              <a href="https://openshipyard.xyz">shipyard</a>
+              <Link href="/privacy">Privacy</Link>
+              <Link href="/terms">Terms</Link>
+              <a href="https://openshipyard.xyz">Shipyard</a>
             </div>
           </div>
         </footer>

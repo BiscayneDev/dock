@@ -83,7 +83,7 @@ export async function mintInvite(ownerChat: string, maxUses: number, note = 'min
 }
 
 export const GATE_NOTICE =
-    "hey - dinghy's in private beta right now. if you have an invite code, text it here. no code yet? join the waitlist at getdinghy.sh"
-export const GATE_INVALID = "that code didn't work - double-check it, or join the waitlist at getdinghy.sh"
+    "Hi, this is Dinghy. We're in private beta right now. If you have an invite code, text it here. No code yet? Join the waitlist at getdinghy.sh."
+export const GATE_INVALID = "That code didn't work. Double-check it, or join the waitlist at getdinghy.sh."
 export const GATE_WELCOME =
-    "you're in - welcome to dinghy. save the contact card below so i show up as Dinghy, then text me whatever you need."
+    "You're in - welcome to Dinghy. Save the contact card below so I show up as Dinghy, then text me whatever you need."
