@@ -8,7 +8,7 @@
  * inline), then the file itself.
  */
 
-import { attachment } from 'spectrum-ts'
+import { attachment, richlink } from 'spectrum-ts'
 import { clip, renderOgCard } from '@/lib/brand/og-card'
 import type { FileFormat, RenderedFile } from './render'
 
@@ -83,9 +83,10 @@ export function hostedHistoryLine(file: HostedSendable): string {
 }
 
 /**
- * A hosted file in the thread: the link alone in its own bubble, so iMessage
- * unfurls it into the page's per-file card. Throws if the send fails.
+ * A hosted file in the thread: the link alone in its own bubble as a rich
+ * link, so iMessage unfurls it into the page's per-file card. Throws if the
+ * send fails.
  */
 export async function sendHostedFile(space: Sender, file: HostedSendable): Promise<void> {
-    await space.send(file.hosted.url)
+    await space.send(richlink(file.hosted.url))
 }
