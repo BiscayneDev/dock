@@ -113,7 +113,14 @@ function tag(r: ToolResult, a: GoogleAccount): ToolResult {
 /** One prompt line naming the connected accounts (only when there are several). */
 export function accountsLine(ctx: Pick<UserContext, 'tokens'>): string {
     const accounts = googleAccountsOf(ctx)
-    if (accounts.length < 2) return ''
+    if (accounts.length === 0) return ''
+    if (accounts.length === 1) {
+        return (
+            `They have exactly 1 Google account connected: ${accounts[0].email}. ` +
+            'That is the only inbox and calendar you can see. Never say a second account is connected unless it appears in this list, even if they say they connected one - ' +
+            'if they think they added another, tell them you only see this one and offer the connect link again.'
+        )
+    }
     const list = accounts.map((a) => (a.primary ? `${a.email} (primary)` : a.email)).join(', ')
     return (
         `They have ${accounts.length} Google accounts connected: ${list}. ` +

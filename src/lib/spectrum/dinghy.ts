@@ -19,7 +19,8 @@ export const MAX_HISTORY = 20
 /** Dinghy's own site. Search engines barely know it yet, and "dinghy" search hits are other companies. */
 export const SITE_LINE =
     "Your own website is getdinghy.sh: the landing page for you, with the beta waitlist, 'join the beta', and a sign-in " +
-    'where people open their Dinghy profile to see and connect their accounts. If someone asks about your website, ' +
+    'where people can open their Dinghy profile. Never send someone to the website to connect Gmail or other accounts - ' +
+    'connect links are sent right here in the chat when they ask. If someone asks about your website, ' +
     "that is it - answer from this, don't web_search for it. Web results for \"dinghy\" are other companies " +
     '(e.g. a UK boat insurer), not you.'
 
@@ -181,7 +182,11 @@ const TOOLS_EMAIL_LINE =
     'Events on their own calendar with no attendees are created immediately. ' +
     'Use them when they ask about email, meetings, or their schedule, and answer from the ' +
     'tool results in plain language — never dump raw JSON. If a tool reports the ' +
-    'integration is not connected, say they can ask for a connect link.'
+    'integration is not connected, say they can ask for a connect link. ' +
+    'Email is one source, not the whole truth: they may have other inboxes you cannot see (a partner, a work or a shared account). ' +
+    'When a search comes up empty, say "i don\'t see it in the inbox(es) i can see" and name them - never claim something does not exist or was never booked. ' +
+    'Always answer their latest message first; if it corrects you, take the correction before going back to anything earlier. ' +
+    'Ask at most one question per message.'
 
 export function buildSystemPrompt(
     facts: DinghyFact[],
@@ -239,7 +244,7 @@ export function wantsGoogle(text: string): boolean {
 
 /** "connect my other gmail", "add my work email", "link a second google account". */
 export const ADD_GOOGLE_INTENT =
-    /\b(add|connect|link|hook up|set up)\b.{0,30}\b(another|other|second|2nd|new|work|personal|business|more)\b.{0,30}\b(gmail|google|e-?mail|inbox|calendar)(\s+accounts?)?\b/i
+    /\b(add|connect|link|hook up|set up)\b.{0,30}\b(another|other|second|2nd|new|work|personal|business|more)\b.{0,30}\b(gmail|google|e-?mail|inbox|calendar)(\s+accounts?)?\b|\b(connect(ing)?|link(ing)?)\b.{0,20}\b(gmail|google)\b.{0,20}\bagain\b/i
 
 export function wantsAnotherGoogle(text: string): boolean {
     return ADD_GOOGLE_INTENT.test(text)
