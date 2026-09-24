@@ -16,6 +16,8 @@ import {
     loadFacts,
     loadHistory,
     saveMessage,
+    saveMessageReturningId,
+    updateMessageContent,
     createConnectLink,
     type DinghyFact,
     type HistoryMessage,
@@ -48,7 +50,7 @@ import {
 import { claimInboundDelivery, enqueueOutbox, markOutboxFailed, markOutboxSent, type OutboxKind } from './outbox'
 import { briefableUserId, handleMuteIntent } from './briefing'
 import { isLocationAttachment, parseLocation, saveUserLocation } from './location'
-import { readInboundAttachment, type InboundAttachmentContent } from './attachments'
+import { describeImage, readInboundAttachment, type InboundAttachmentContent } from './attachments'
 import { sendLink, splitStandaloneUrl, type LinkSender } from './links'
 import {
     forgetMatch,
@@ -384,6 +386,9 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     // commands, draft confirmations) are skipped: a screenshot of the word
     // "gmail" is not a connect request, and a photo never confirms a draft.
     let textIntents = true
+    // A photo rides this turn only as an image part; history keeps its label,
+    // then the description once it's back (see the reply path below).
+    let inboundImage: { dataUrl: string; label: string } | null = null
     if (isAttachment) {
         textIntents = false
         startTyping(space)
@@ -398,6 +403,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             return
         }
         text = read.standin
+        if (read.image) inboundImage = { dataUrl: read.image.dataUrl, label: read.label }
     }
 
     // Owner: email waitlist invites ("invite next 5", "invite someone@x.com").
@@ -722,8 +728,36 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         return
     }
 
-    const full: Message[] = [...history, { role: 'user', content: withReplyContext(text, replyTo) }]
-    await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+    const full: Message[] = [
+        ...history,
+        { role: 'user', content: withReplyContext(text, replyTo), ...(inboundImage ? { images: [inboundImage.dataUrl] } : {}) },
+    ]
+    // Photo turns: save the label now (keeps history order), describe the
+    // image alongside the reply, and swap the description in afterwards so
+    // later turns carry text, not the image.
+    let photoHistory: Promise<void> | null = null
+    const photoUsage: GatewayUsage[] = []
+    if (inboundImage) {
+        const img = inboundImage
+        const rowId = saveMessageReturningId(chatGuid, 'user', text).catch((err) => {
+            logErr('message save failed', err)
+            return null
+        })
+        photoHistory = describeImage(img.dataUrl, {
+            gatewayUrl: GATEWAY_URL,
+            apiKey: SHIPYARD_API_KEY,
+            model: SHIPYARD_MODEL,
+            onUsage: (u) => photoUsage.push(u),
+        })
+            .then(async (desc) => {
+                const id = await rowId
+                if (id) await updateMessageContent(id, `${img.label} ${desc}`)
+            })
+            .catch((err) => logErr('photo describe failed', err))
+        await rowId
+    } else {
+        await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+    }
 
     const tChatStart = Date.now()
     const typingHandle = startTypingReTap(space)
@@ -850,10 +884,15 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         )
         // After the reply is out: meter this turn's gateway calls. Errors are
         // logged, never surfaced; awaited so serverless doesn't drop the write.
+        if (photoHistory) {
+            await photoHistory
+            usage.push(...photoUsage)
+        }
         await recordUsage(chatGuid, 'reply', usage).catch((err) => logErr('usage record failed', err))
         // After the reply is out: refresh memory (no-op unless due).
         await updateMemory(chatGuid).catch((err) => logErr('memory update failed', err))
     } catch (err) {
+        if (photoHistory) await photoHistory
         logErr('gateway call failed', err)
         await sendText(space, chatGuid, 'error_notice', 'Something went wrong on my end. Try again in a moment.')
     } finally {

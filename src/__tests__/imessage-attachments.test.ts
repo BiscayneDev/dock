@@ -20,8 +20,7 @@ async function makePdf(text: string): Promise<Buffer> {
     return Buffer.concat(chunks)
 }
 
-const geminiOk = (text: string) => async () =>
-    new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }), { status: 200 })
+const gw = { gatewayUrl: 'https://gw.test', apiKey: 'k', model: 'anthropic/claude-haiku-4-5-20251001' }
 
 describe('classifyAttachment', () => {
     it('sorts by mime type, then extension', () => {
@@ -38,44 +37,44 @@ describe('classifyAttachment', () => {
 })
 
 describe('readInboundAttachment', () => {
-    it('describes an image and builds the stand-in', async () => {
-        const read = await readInboundAttachment(
-            { name: 'IMG_1.png', mimeType: 'image/png', read: async () => Buffer.from('png-bytes') },
-            { geminiKey: 'k', fetchFn: geminiOk('a boarding pass for flight UA 123, seat 4A') as typeof fetch }
-        )
+    it('turns a photo into a data-URI image part for this turn, label as the stand-in', async () => {
+        const read = await readInboundAttachment({ name: 'IMG_1.png', mimeType: 'image/png', read: async () => Buffer.from('png-bytes') })
         expect(read).toEqual({
             ok: true,
             kind: 'image',
             label: '[sent a photo]',
-            standin: '[sent a photo] a boarding pass for flight UA 123, seat 4A',
+            standin: '[sent a photo]',
+            image: { dataUrl: `data:image/png;base64,${Buffer.from('png-bytes').toString('base64')}` },
         })
     })
 
-    it('passes the image to gemini as inline base64', async () => {
-        let body = ''
-        const fetchFn = async (_u: unknown, init?: RequestInit) => {
-            body = String(init?.body ?? '')
-            return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }), { status: 200 })
-        }
-        await describeImage(Buffer.from('hi'), 'image/webp', { geminiKey: 'k', fetchFn: fetchFn as typeof fetch })
-        expect(body).toContain('"mime_type":"image/webp"')
-        expect(body).toContain(`"data":"${Buffer.from('hi').toString('base64')}"`)
+    it('converts HEIC photos to JPEG before sending', async () => {
+        const heicToJpeg = vi.fn(async () => Buffer.from('jpeg-bytes'))
+        const read = await readInboundAttachment(
+            { name: 'IMG_2.HEIC', mimeType: 'image/heic', read: async () => Buffer.from('heic-bytes') },
+            { heicToJpeg }
+        )
+        expect(heicToJpeg).toHaveBeenCalledOnce()
+        expect(read.ok && read.image?.dataUrl).toBe(`data:image/jpeg;base64,${Buffer.from('jpeg-bytes').toString('base64')}`)
     })
 
-    it('says photos are not wired when the gemini key is missing', async () => {
+    it('gives a reply line when HEIC conversion fails', async () => {
         const read = await readInboundAttachment(
-            { name: 'x.png', mimeType: 'image/png', read: async () => Buffer.from('x') },
-            { geminiKey: '' }
+            { name: 'IMG_3.heic', mimeType: 'image/heic', read: async () => Buffer.from('bad') },
+            { heicToJpeg: async () => { throw new Error('bad heic') } }
         )
-        expect(read.ok).toBe(false)
-        if (!read.ok) expect(read.reply).toMatch(/can't look at photos yet/)
+        expect(read).toMatchObject({ ok: false, reply: expect.stringMatching(/couldn't open that photo/) })
+    })
+
+    it('refuses image formats the model cannot read', async () => {
+        const read = await readInboundAttachment({ name: 'x.tiff', mimeType: 'image/tiff', read: async () => Buffer.from('x') })
+        expect(read).toMatchObject({ ok: false, reply: expect.stringMatching(/image format/) })
     })
 
     it('extracts pdf text into the stand-in', async () => {
         const bytes = await makePdf('dinghy provisioning checklist: fuel, lines, fenders')
         const read = await readInboundAttachment(
-            { name: 'checklist.pdf', mimeType: 'application/pdf', read: async () => Buffer.from(bytes) },
-            { geminiKey: '' }
+            { name: 'checklist.pdf', mimeType: 'application/pdf', read: async () => Buffer.from(bytes) }
         )
         expect(read.ok).toBe(true)
         if (read.ok) {
@@ -87,8 +86,7 @@ describe('readInboundAttachment', () => {
     it('reads text files and clips long ones', async () => {
         const long = 'row,'.repeat(4000)
         const read = await readInboundAttachment(
-            { name: 'data.csv', mimeType: 'text/csv', read: async () => Buffer.from(long) },
-            { geminiKey: '' }
+            { name: 'data.csv', mimeType: 'text/csv', read: async () => Buffer.from(long) }
         )
         expect(read.ok).toBe(true)
         if (read.ok) {
@@ -100,20 +98,17 @@ describe('readInboundAttachment', () => {
 
     it('rejects oversized, unsupported and empty attachments with a reply line', async () => {
         const big = await readInboundAttachment(
-            { name: 'big.png', mimeType: 'image/png', size: MAX_ATTACHMENT_BYTES + 1, read: async () => Buffer.from('x') },
-            { geminiKey: 'k' }
+            { name: 'big.png', mimeType: 'image/png', size: MAX_ATTACHMENT_BYTES + 1, read: async () => Buffer.from('x') }
         )
         expect(big).toMatchObject({ ok: false, reply: expect.stringMatching(/too big/) })
 
         const zip = await readInboundAttachment(
-            { name: 'a.zip', mimeType: 'application/zip', read: async () => Buffer.from('PK') },
-            { geminiKey: 'k' }
+            { name: 'a.zip', mimeType: 'application/zip', read: async () => Buffer.from('PK') }
         )
         expect(zip).toMatchObject({ ok: false, reply: expect.stringMatching(/can't open that kind of file/) })
 
         const empty = await readInboundAttachment(
-            { name: 'n.txt', mimeType: 'text/plain', read: async () => Buffer.from('  ') },
-            { geminiKey: 'k' }
+            { name: 'n.txt', mimeType: 'text/plain', read: async () => Buffer.from('  ') }
         )
         expect(empty).toMatchObject({ ok: false, reply: expect.stringMatching(/looks empty/) })
     })
@@ -121,16 +116,48 @@ describe('readInboundAttachment', () => {
     it('flags scanned pdfs (no extractable text)', async () => {
         const bytes = await makePdf('')
         const read = await readInboundAttachment(
-            { name: 'scan.pdf', mimeType: 'application/pdf', read: async () => Buffer.from(bytes) },
-            { geminiKey: '' }
+            { name: 'scan.pdf', mimeType: 'application/pdf', read: async () => Buffer.from(bytes) }
         )
         expect(read).toMatchObject({ ok: false, reply: expect.stringMatching(/might be a scan/) })
     })
 })
 
-describe('describeImage failures', () => {
-    it('throws on a gemini error so the handler can send the generic line', async () => {
+describe('describeImage (gateway)', () => {
+    it('sends the image as an OpenAI image_url part through the gateway', async () => {
+        let url = ''
+        let body: any = null
+        const fetchFn = async (u: unknown, init?: RequestInit) => {
+            url = String(u)
+            body = JSON.parse(String(init?.body ?? '{}'))
+            return new Response(JSON.stringify({ choices: [{ message: { content: 'a boarding pass for UA 123, seat 4A' } }] }), { status: 200 })
+        }
+        const desc = await describeImage('data:image/png;base64,QUJD', { ...gw, fetchFn: fetchFn as typeof fetch })
+        expect(desc).toBe('a boarding pass for UA 123, seat 4A')
+        expect(url).toBe('https://gw.test/v1/chat/completions')
+        expect(body.model).toBe(gw.model)
+        expect(body.messages[0].content[1]).toEqual({ type: 'image_url', image_url: { url: 'data:image/png;base64,QUJD' } })
+    })
+
+    it('throws on a gateway error', async () => {
         const fetchFn = vi.fn(async () => new Response('nope', { status: 429 }))
-        await expect(describeImage(Buffer.from('x'), 'image/png', { geminiKey: 'k', fetchFn: fetchFn as unknown as typeof fetch })).rejects.toThrow(/Gemini 429/)
+        await expect(describeImage('data:image/png;base64,QUJD', { ...gw, fetchFn: fetchFn as unknown as typeof fetch })).rejects.toThrow(/Gateway 429/)
+    })
+})
+
+describe('toWireMessage', () => {
+    it('keeps text-only turns as plain strings', async () => {
+        const { toWireMessage } = await import('@/lib/spectrum/dinghy')
+        expect(toWireMessage({ role: 'user', content: 'hi' })).toEqual({ role: 'user', content: 'hi' })
+    })
+
+    it('sends a photo turn as text + image_url parts', async () => {
+        const { toWireMessage } = await import('@/lib/spectrum/dinghy')
+        expect(toWireMessage({ role: 'user', content: '[sent a photo]', images: ['data:image/jpeg;base64,QUJD'] })).toEqual({
+            role: 'user',
+            content: [
+                { type: 'text', text: '[sent a photo]' },
+                { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,QUJD' } },
+            ],
+        })
     })
 })

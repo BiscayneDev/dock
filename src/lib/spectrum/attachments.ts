@@ -1,27 +1,39 @@
 /**
  * Inbound attachment reading for the iMessage front door.
  *
- * Photos, screenshots, PDFs and plain-text files a user texts Dinghy become
- * a text stand-in that flows through the normal reply path, so the model can
- * discuss what was sent. The Shipyard gateway is text-only (its ChatMessage
- * content is a string), so images are described by Gemini; PDFs and text
- * files are read in-process.
+ * Photos and screenshots go to the model as real image parts (OpenAI
+ * `image_url` with a data URI) through the Shipyard gateway, for the turn
+ * they arrive only. History keeps a short text description instead, so the
+ * image isn't re-billed on every later turn. PDFs and plain-text files are
+ * read in-process and become a text stand-in.
  *
  * Voice notes are deliberately not handled here (the user asks Siri-style
  * dictation to cover that for now).
  */
 
 import { extractText } from 'unpdf'
-import { GEMINI_API_KEY, GEMINI_MODEL } from './config'
+import { readGatewayUsage, type GatewayUsage } from './metering'
 
 export type AttachmentKind = 'image' | 'pdf' | 'text' | 'other'
 
-/** Largest attachment we'll read. Gemini's inline ceiling is 20 MB; the cap
- *  keeps webhook memory and latency sane. */
+/** Largest attachment we'll read. Keeps webhook memory, request size and
+ *  latency sane. */
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 /** Extract caps: history rows and the model's latency budget. */
 export const MAX_EXTRACT_CHARS = 8000
 export const MAX_DESCRIBE_CHARS = 1200
+
+/** Image types the model providers accept. HEIC/HEIF (iPhone camera
+ *  default) is converted to JPEG first; anything else is refused. */
+const MODEL_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
+const HEIC = /^image\/hei[cf](-sequence)?$/
+
+/** HEIC → JPEG. Test hook overridable; lazy-loaded so non-photo turns skip the wasm. */
+export async function heicToJpeg(buf: Buffer): Promise<Buffer> {
+    const { default: convert } = await import('heic-convert')
+    const out = await convert({ buffer: buf, format: 'JPEG', quality: 0.85 })
+    return Buffer.from(out)
+}
 
 /** Extensions treated as readable text even when the MIME type is generic. */
 const TEXT_EXT = /\.(txt|md|markdown|csv|tsv|json|log|xml|ya?ml|html?|css|js|ts|tsx|py|rb|go|rs|java|c|h|cpp|sh|sql|ini|cfg)$/i
@@ -43,14 +55,14 @@ export interface InboundAttachmentContent {
 }
 
 export type AttachmentRead =
-    | { ok: true; kind: Exclude<AttachmentKind, 'other'>; label: string; standin: string }
+    | { ok: true; kind: Exclude<AttachmentKind, 'other'>; label: string; standin: string; image?: { dataUrl: string } }
     | { ok: false; label: string; reply: string }
 
-export interface AttachmentReadOpts {
-    /** Defaults to GEMINI_API_KEY. */
-    geminiKey?: string
-    /** Defaults to GEMINI_MODEL. */
-    geminiModel?: string
+export interface GatewayOpts {
+    gatewayUrl: string
+    apiKey: string
+    model: string
+    onUsage?: (u: GatewayUsage) => void
     /** Test hook; defaults to global fetch. */
     fetchFn?: typeof fetch
 }
@@ -60,31 +72,49 @@ const DESCRIBE_PROMPT =
     "If it's a screenshot or document photo, transcribe the important text exactly. " +
     'Under 100 words, plain prose, no preamble.'
 
-/** Describe an image with Gemini (flash-class, ~1-2k tokens per photo). */
-export async function describeImage(buf: Buffer, mimeType: string, opts: AttachmentReadOpts = {}): Promise<string> {
-    const key = opts.geminiKey ?? GEMINI_API_KEY
-    if (!key) throw new Error('GEMINI_API_KEY is not set')
-    const model = opts.geminiModel ?? GEMINI_MODEL
+/**
+ * Short description of an image, through the gateway, for the history row.
+ * Runs alongside the reply turn; the image itself is only sent this turn.
+ */
+export async function describeImage(dataUrl: string, opts: GatewayOpts): Promise<string> {
     const fetchFn = opts.fetchFn ?? fetch
-    const mime = (mimeType || 'image/jpeg').split(';')[0]!.trim().toLowerCase()
-    const res = await fetchFn(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+    const t0 = Date.now()
+    const res = await fetchFn(`${opts.gatewayUrl}/v1/chat/completions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.apiKey}` },
         body: JSON.stringify({
-            contents: [{ parts: [{ text: DESCRIBE_PROMPT }, { inline_data: { mime_type: mime, data: buf.toString('base64') } }] }],
-            generationConfig: { maxOutputTokens: 400 },
+            model: opts.model,
+            max_tokens: 300,
+            stream: false,
+            messages: [
+                {
+                    role: 'user',
+                    content: [
+                        { type: 'text', text: DESCRIBE_PROMPT },
+                        { type: 'image_url', image_url: { url: dataUrl } },
+                    ],
+                },
+            ],
         }),
     })
     if (!res.ok) {
         const body = await res.text().catch(() => '')
-        throw new Error(`Gemini ${res.status}: ${body.slice(0, 200) || res.statusText}`)
+        throw new Error(`Gateway ${res.status}: ${body.slice(0, 200) || res.statusText}`)
     }
-    const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] }
-    const text = (data.candidates?.[0]?.content?.parts ?? [])
-        .map((p) => p.text ?? '')
-        .join(' ')
-        .trim()
-    if (!text) throw new Error('Gemini returned no description')
+    const data = (await res.json()) as {
+        model?: string
+        usage?: { prompt_tokens?: number; completion_tokens?: number }
+        choices?: { message?: { content?: string | null } }[]
+    }
+    if (opts.onUsage) {
+        try {
+            opts.onUsage(readGatewayUsage(res, data, opts.model, Date.now() - t0))
+        } catch {
+            // metering never breaks a reply
+        }
+    }
+    const text = (data.choices?.[0]?.message?.content ?? '').trim()
+    if (!text) throw new Error('gateway returned no description')
     return text.length > MAX_DESCRIBE_CHARS ? text.slice(0, MAX_DESCRIBE_CHARS) + '…' : text
 }
 
@@ -93,7 +123,10 @@ export async function describeImage(buf: Buffer, mimeType: string, opts: Attachm
  * path. Never throws for an expected case: unsupported, oversized or
  * unreadable attachments come back as a user-facing reply line instead.
  */
-export async function readInboundAttachment(c: InboundAttachmentContent, opts: AttachmentReadOpts = {}): Promise<AttachmentRead> {
+export async function readInboundAttachment(
+    c: InboundAttachmentContent,
+    opts: { heicToJpeg?: (buf: Buffer) => Promise<Buffer> } = {}
+): Promise<AttachmentRead> {
     const name = (c.name ?? '').trim()
     const kind = classifyAttachment(name, c.mimeType ?? '')
     const label = kind === 'image' ? '[sent a photo]' : kind === 'pdf' ? `[sent a pdf${name ? `: ${name}` : ''}]` : `[sent a file${name ? `: ${name}` : ''}]`
@@ -118,11 +151,19 @@ export async function readInboundAttachment(c: InboundAttachmentContent, opts: A
     }
 
     if (kind === 'image') {
-        if (!(opts.geminiKey ?? GEMINI_API_KEY)) {
-            return { ok: false, label, reply: "i can't look at photos yet - that part's still being wired up on my end." }
+        let mime = (c.mimeType || 'image/jpeg').split(';')[0]!.trim().toLowerCase()
+        if (HEIC.test(mime) || /\.hei[cf]$/i.test(name)) {
+            try {
+                buf = await (opts.heicToJpeg ?? heicToJpeg)(buf)
+                mime = 'image/jpeg'
+            } catch {
+                return { ok: false, label, reply: "couldn't open that photo - try sending it again, or a screenshot of it." }
+            }
         }
-        const desc = await describeImage(buf, c.mimeType ?? '', opts)
-        return { ok: true, kind, label, standin: `${label} ${desc}` }
+        if (!MODEL_IMAGE_TYPES.has(mime)) {
+            return { ok: false, label, reply: "i can't open that image format - try a screenshot or a jpeg/png." }
+        }
+        return { ok: true, kind, label, standin: label, image: { dataUrl: `data:${mime};base64,${buf.toString('base64')}` } }
     }
 
     if (kind === 'pdf') {
