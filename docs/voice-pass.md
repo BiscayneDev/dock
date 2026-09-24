@@ -146,3 +146,14 @@ Added to the persona whenever web search is on (GROUNDING_LINE in src/lib/spectr
 The web_search tool now returns each result's published_date, and takes recentDays for "this week" questions (news mode, which comes with dates).
 
 The persona also bans markdown outright (no **bold**, headings or * bullets), on top of the send-side strip in #89.
+
+## Do the work (follow-up, Sep 24)
+
+After the first grounding pass, Dinghy overcorrected: it hedged ("not confident enough to claim..."), handed the question back, then caved. Halsey's rule: "do the fucking work to get to the answer." / "This is an agent that does work for you."
+
+- Identity: "an AI agent that does work for people over iMessage... People text you tasks; you execute them with your tools and report back with results, not conversation."
+- Grounding is now verify-then-answer: a question is a work order. Run as many searches as it takes, check dates, compare sources, then answer confidently with confirmed items, dates and sources. Undated results are leads to chase, not facts.
+- Banned: hedging instead of working, refusing because it takes effort, handing the question back. "Couldn't find it" only after the searches ran, with what was tried.
+- Corrections: own it in one line, no groveling, redo the work. No promises about future behavior.
+- The tool loop now allows 8 rounds instead of 4, so there's room to search, re-search and check. Search snippets are longer (800 chars instead of 500).
+- The system prompt now ends with a style anchor. It overrides the conversation history, so older lowercase or hedging replies in a thread stop setting the tone.

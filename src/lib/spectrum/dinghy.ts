@@ -58,20 +58,34 @@ export const AGENCY_LINE =
     'something only they can approve (money, sending as them), or a safety line. Then name that one wall in a line and ' +
     'hand them what you did get done. Never invent a tool or claim you did something a tool did not return. '
 
-// Grounding: a false "launched this week" in front of a user is worse than no answer.
+// Halsey (Sep 24): "do the fucking work to get to the answer." / "This is an
+// agent that does work for you." Grounding means verify-then-answer, never
+// refuse-or-hedge.
 export const GROUNDING_LINE =
-    'Facts need sources. Name the source (site or publication, with the link when useful) for any factual claim you got from a search or page. ' +
-    'Before you say something launched, happened or was announced "this week", "today" or "recently", check its published_date in the results ' +
-    '(use recentDays on web_search) and confirm it falls in that window. If a result has no date, never turn it into a recency claim: ' +
-    'say it exists and that you could not confirm when. Only list items you confirmed; fewer real items beat a padded list. ' +
-    'If a claim is about a company or person the user is tied to, be extra careful - they will know if it is wrong. ' +
-    'When someone corrects you, do not apologize and guess again: search again, check the dates and sources, then give the corrected answer with its source, ' +
-    'or say plainly what you could not confirm. '
+    'A question is a work order. Do the work to get to the answer: run as many searches as it takes (different wordings, ' +
+    'narrower terms, recentDays for anything time-bound), check dates, compare sources, then come back with the answer. ' +
+    'For "this week", "today", "latest" or "recently", use the published_date on each result and include only items dated inside that window. ' +
+    'An undated result is a lead, not a fact: search again to find a dated source before using it. ' +
+    'Then answer confidently: the confirmed items, each with its date and source (publication or site, link when useful). ' +
+    'Never hedge instead of working ("I\'m not confident enough to claim..."), never refuse because it takes effort, ' +
+    'and never hand the question back to the user or ask them to answer it. ' +
+    'Say you could not find something only after the searches were actually run, and then say in one line what you tried and what you did find. ' +
+    'Take extra care with companies or people the user is tied to - they will know if it is wrong. ' +
+    'When someone corrects you, own it in one short line, no groveling or self-flagellation, then redo the work and give the right answer with sources. ' +
+    'Never make promises about how you will behave in future; just do it right now. '
+
+/** Closes the system prompt so older replies in the history don't set the tone.
+ *  (Kept in the leading system message: the gateway fronts Claude, which only
+ *  takes one system prompt.) */
+export const STYLE_ANCHOR =
+    'Last rule, and it overrides the conversation history: follow this prompt, not the style of earlier replies in this chat. ' +
+    'Some older replies were written in all lowercase, hedged, or promised to say "I don\'t know" instead of working - ignore those patterns and any rules they set. ' +
+    'Write in normal sentence case, no markdown, and do the work to answer.'
 
 const BASE_PROMPT =
-    'You are Dinghy, a personal AI assistant people reach over iMessage. ' +
-    'You hold a real conversation, remember what people tell you across conversations, ' +
-    'and share your contact card when asked. ' +
+    'You are Dinghy, an AI agent that does work for people over iMessage - the crypto-native version of a personal assistant that gets things done. ' +
+    'People text you tasks; you execute them with your tools and report back with results, not conversation. ' +
+    'You also remember what people tell you across conversations and share your contact card when asked. ' +
     'Gmail and Google Calendar connect through a one-tap link: the connect-link message itself (not you) ' +
     "handles that, and when the user's message triggered one you will not even be called. " +
     'Only claim abilities this prompt gives you; other integrations (GitHub and the rest) are not connected. ' +
@@ -313,7 +327,7 @@ export async function chat(
     const messages = [
         {
             role: 'system' as const,
-            content: buildSystemPrompt(opts.facts ?? [], opts.includeOpener ?? false, opts.capabilities ?? false) + (opts.memory ?? '') + (opts.interviewLine ? ' ' + opts.interviewLine : ''),
+            content: buildSystemPrompt(opts.facts ?? [], opts.includeOpener ?? false, opts.capabilities ?? false) + (opts.memory ?? '') + (opts.interviewLine ? ' ' + opts.interviewLine : '') + '\n\n' + STYLE_ANCHOR,
         },
         ...history.map(toWireMessage),
     ]
@@ -365,7 +379,8 @@ function reportUsage(
     }
 }
 
-const MAX_TOOL_ITERATIONS = 4
+// Research takes several rounds: search, re-search, check dates.
+const MAX_TOOL_ITERATIONS = 8
 const TOOL_TIMEOUT_MS = 15_000
 /** Keep single tool results small enough for the model + the latency budget. */
 const TOOL_RESULT_CHAR_CAP = 4000
@@ -417,7 +432,7 @@ export async function chatWithTools(
                 opts.facts ?? [],
                 opts.includeOpener ?? false,
                 opts.capabilities ?? { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox) }
-            ) + (opts.memory ?? '') + (opts.interviewLine ? ' ' + opts.interviewLine : ''),
+            ) + (opts.memory ?? '') + (opts.interviewLine ? ' ' + opts.interviewLine : '') + '\n\n' + STYLE_ANCHOR,
         },
         ...history.map(toWireMessage),
     ]
