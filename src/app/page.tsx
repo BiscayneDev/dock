@@ -110,7 +110,7 @@ export default function LandingPage() {
         <section className="wrap block">
           <div className="label">how it&apos;s built</div>
           <div className="panel">
-            <h2 className="serif">shipyard picks the model, <em>dock</em> runs the agent, <em>paybox</em> holds the keys.</h2>
+            <h2 className="serif">shipyard picks the model, <em>dinghy</em> runs the agent, <em>paybox</em> holds the keys.</h2>
             <p>you just text.</p>
           </div>
         </section>

@@ -375,7 +375,7 @@ async function handleBotCommand(text: string, user: DbUser, chatId: number): Pro
       const firstName = (user.name ?? '').split(' ')[0].toLowerCase()
       await sendMessage({
         chatId,
-        text: `hey${firstName ? ` ${firstName}` : ''}! i'm dock ⚓\n\nconnect your stuff and i'll take it from there:\n${magicLink}`,
+        text: `hey${firstName ? ` ${firstName}` : ''}! i'm dinghy ⚓\n\nconnect your stuff and i'll take it from there:\n${magicLink}`,
         replyMarkup: {
           inline_keyboard: [
             [

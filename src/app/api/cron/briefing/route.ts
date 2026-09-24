@@ -77,7 +77,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       if (!tokens.google) continue
 
       const userName = ((user.name as string) ?? '').split(' ')[0].toLowerCase()
-      const briefingPrompt = `you're dock, sending ${userName || 'the user'} their morning snapshot.
+      const briefingPrompt = `you're dinghy, sending ${userName || 'the user'} their morning snapshot.
 current datetime: ${now.toISOString()}
 user timezone: ${timezone}
 

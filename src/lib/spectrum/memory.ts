@@ -10,7 +10,7 @@
  *              relevance to the current message (pgvector similarity,
  *              topped up newest-first; newest-first only without a key)
  *
- * Scope: when the chat is bound to a Dock user via `spectrum_identities`
+ * Scope: when the chat is bound to a Dinghy user via `spectrum_identities`
  * (migration 011), memory is USER-level — facts learned in one chat are
  * retrievable in every other chat of the same person (migration 035 RPCs).
  * Unbound/guest chats stay chat_guid-isolated on the 024 RPCs. Summaries
