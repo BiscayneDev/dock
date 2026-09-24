@@ -48,6 +48,8 @@ import {
 import { claimInboundDelivery, enqueueOutbox, markOutboxFailed, markOutboxSent, type OutboxKind } from './outbox'
 import { briefableUserId, handleMuteIntent } from './briefing'
 import { isLocationAttachment, parseLocation, saveUserLocation } from './location'
+import { readInboundAttachment, type InboundAttachmentContent } from './attachments'
+import { sendLink, splitStandaloneUrl, type LinkSender } from './links'
 import {
     forgetMatch,
     handlePendingMemoryWipe,
@@ -326,13 +328,16 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         logErr('location share failed', err)
     }
     const inbound = normalizeInbound(message)
-    if (!inbound) return
-    if (inbound.kind === 'reaction') {
+    const isAttachment = !inbound && message.content.type === 'attachment'
+    if (!inbound && !isAttachment) return
+    if (inbound?.kind === 'reaction') {
         await handleInboundTapback(space, message, inbound).catch((err) => logErr('inbound tapback failed', err))
         return
     }
-    const text = inbound.text.trim()
-    if (!text) return
+    // Attachments resolve to their text stand-in after the beta gate below.
+    let text = inbound?.kind === 'text' ? inbound.text.trim() : ''
+    if (inbound && !text) return
+    const replyTo = inbound?.kind === 'text' ? inbound.replyTo : undefined
 
     const chatGuid = resolveChatGuid(space)
     if (!chatGuid) {
@@ -374,8 +379,29 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         return
     }
 
+    // An inbound photo/file becomes its text stand-in and flows through the
+    // normal reply path below. Text-only intents (connect links, memory
+    // commands, draft confirmations) are skipped: a screenshot of the word
+    // "gmail" is not a connect request, and a photo never confirms a draft.
+    let textIntents = true
+    if (isAttachment) {
+        textIntents = false
+        startTyping(space)
+        const read = await readInboundAttachment(message.content as InboundAttachmentContent).catch((err) => {
+            logErr('attachment read failed', err)
+            return { ok: false as const, label: '[sent an attachment]', reply: "couldn't read that attachment - try sending it again in a moment." }
+        })
+        if (!read.ok) {
+            await saveMessage(chatGuid, 'user', read.label).catch((err) => logErr('message save failed', err))
+            await sendText(space, chatGuid, 'reply', read.reply)
+            await saveMessage(chatGuid, 'assistant', read.reply).catch((err) => logErr('message save failed', err))
+            return
+        }
+        text = read.standin
+    }
+
     // Owner: email waitlist invites ("invite next 5", "invite someone@x.com").
-    if (role === 'owner') {
+    if (textIntents && role === 'owner') {
         const wl = parseWaitlistInviteCommand(text)
         if (wl) {
             try {
@@ -389,7 +415,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     }
 
     // Owner: mint an invite code ("invite", "invite 5").
-    if (role === 'owner') {
+    if (textIntents && role === 'owner') {
         const uses = parseInviteCommand(text)
         if (uses !== null) {
             try {
@@ -412,7 +438,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     }
 
     // On-demand contact card.
-    if (isContactCardRequest(text)) {
+    if (textIntents && isContactCardRequest(text)) {
         await (space as InboundSpace & { send(b: unknown): Promise<unknown> })
             .send(dinghyContactCard())
             .catch((err) => logErr('contact card failed', err))
@@ -470,7 +496,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     }
 
     // Gmail/Calendar requested while unconnected: one-use connect link.
-    if (wantsGoogle(text) && !(await isGoogleConnected(chatGuid).catch(() => false))) {
+    if (textIntents && wantsGoogle(text) && !(await isGoogleConnected(chatGuid).catch(() => false))) {
         try {
             const link = await createConnectLink(chatGuid, text)
             await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
@@ -483,7 +509,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 'connect_link',
                 "email + calendar aren't connected yet - tap below to connect google and i'll take it from there:"
             )
-            await sendText(space, chatGuid, 'connect_link', link)
+            await sendLink(space as LinkSender, chatGuid, 'connect_link', link)
         } catch (err) {
             logErr('connect link failed', err)
             await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
@@ -493,7 +519,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
 
     // Another Gmail while one is already connected: same one-use link; the
     // auth route always shows Google's account chooser.
-    if (wantsAnotherGoogle(text) && (await isGoogleConnected(chatGuid).catch(() => false))) {
+    if (textIntents && wantsAnotherGoogle(text) && (await isGoogleConnected(chatGuid).catch(() => false))) {
         try {
             const link = await createConnectLink(chatGuid, text)
             await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
@@ -503,7 +529,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 'connect_link',
                 "tap below and pick the google account to add - your current one stays connected:"
             )
-            await sendText(space, chatGuid, 'connect_link', link)
+            await sendLink(space as LinkSender, chatGuid, 'connect_link', link)
         } catch (err) {
             logErr('connect link failed', err)
             await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
@@ -512,7 +538,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     }
 
     // GitHub asked about while unconnected: one-use GitHub connect link.
-    if (wantsGithub(text) && !(await isGithubConnected(chatGuid).catch(() => false))) {
+    if (textIntents && wantsGithub(text) && !(await isGithubConnected(chatGuid).catch(() => false))) {
         try {
             const link = await createConnectLink(chatGuid, text, 'github')
             await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
@@ -522,7 +548,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 'connect_link',
                 "github isn't connected yet - tap below to connect it (i'll only read repos, issues and PRs) and i'll take it from there:"
             )
-            await sendText(space, chatGuid, 'connect_link', link)
+            await sendLink(space as LinkSender, chatGuid, 'connect_link', link)
         } catch (err) {
             logErr('github connect link failed', err)
             await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
@@ -531,7 +557,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     }
 
     // Sleep/recovery asked about with no wearable connected: Oura + WHOOP links.
-    if (wantsHealth(text) && !(await isHealthConnected(chatGuid).catch(() => false))) {
+    if (textIntents && wantsHealth(text) && !(await isHealthConnected(chatGuid).catch(() => false))) {
         try {
             const oura = await createConnectLink(chatGuid, text, 'oura')
             const whoop = await createConnectLink(chatGuid, text, 'whoop')
@@ -542,9 +568,9 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 'connect_link',
                 "no wearable connected yet - tap whichever you use (read-only: sleep, recovery, activity) and i'll take it from there. oura:"
             )
-            await sendText(space, chatGuid, 'connect_link', oura)
+            await sendLink(space as LinkSender, chatGuid, 'connect_link', oura)
             await sendText(space, chatGuid, 'connect_link', 'whoop:')
-            await sendText(space, chatGuid, 'connect_link', whoop)
+            await sendLink(space as LinkSender, chatGuid, 'connect_link', whoop)
         } catch (err) {
             logErr('health connect link failed', err)
             await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
@@ -553,7 +579,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     }
 
     // Wallet asked about while PayBox is unconnected: one-use PayBox connect link.
-    if (wantsWallet(text) && !(await isPayboxConnected(chatGuid).catch(() => false))) {
+    if (textIntents && wantsWallet(text) && !(await isPayboxConnected(chatGuid).catch(() => false))) {
         try {
             const link = await createConnectLink(chatGuid, text, 'paybox')
             await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
@@ -563,7 +589,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 'connect_link',
                 "your wallet isn't connected yet - tap below to connect paybox (email + passkey, read-only for now) and i'll take it from there:"
             )
-            await sendText(space, chatGuid, 'connect_link', link)
+            await sendLink(space as LinkSender, chatGuid, 'connect_link', link)
         } catch (err) {
             logErr('paybox connect link failed', err)
             await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
@@ -574,10 +600,12 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     // Morning briefing mute intent: the digest footer's exact opt-out
     // ("mute mornings"), plus its mirror "unmute mornings". Checked before
     // the pending-action parse so it works even with a draft open.
-    const muteAck = await handleMuteIntent(chatGuid, text).catch((err) => {
-        logErr('briefing mute intent failed', err)
-        return null
-    })
+    const muteAck = textIntents
+        ? await handleMuteIntent(chatGuid, text).catch((err) => {
+              logErr('briefing mute intent failed', err)
+              return null
+          })
+        : null
     if (muteAck) {
         await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
         await sendText(space, chatGuid, 'reply', muteAck)
@@ -587,7 +615,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
 
     // /memory transparency (F1): show exactly what is remembered. Runs
     // before the pending-action parse so it works even with a draft open.
-    if (isMemoryCommand(text)) {
+    if (textIntents && isMemoryCommand(text)) {
         await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
         try {
             const report = await renderMemoryReport(chatGuid)
@@ -602,10 +630,12 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
 
     // An open "wipe everything" gate (F1) resolves on the very next message:
     // only an explicit YES wipes; anything else cancels and flows on.
-    const wipeReply = await handlePendingMemoryWipe(chatGuid, text).catch((err) => {
-        logErr('memory wipe gate failed', err)
-        return null
-    })
+    const wipeReply = textIntents
+        ? await handlePendingMemoryWipe(chatGuid, text).catch((err) => {
+              logErr('memory wipe gate failed', err)
+              return null
+          })
+        : null
     if (wipeReply !== null) {
         await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
         await sendText(space, chatGuid, 'reply', wipeReply)
@@ -615,7 +645,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
 
     // "forget X" (F1): single facts drop right away (soft delete, reversible);
     // "forget everything" opens the explicit-YES wipe gate instead.
-    const forget = parseForgetIntent(text)
+    const forget = textIntents ? parseForgetIntent(text) : null
     if (forget) {
         await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
         let out: string
@@ -644,7 +674,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     // An open draft (email / invite) runs only on a clear yes as the very
     // next message. "no" or anything else cancels it; anything else then
     // goes through the normal path as a fresh request.
-    if (await hasPendingAction(chatGuid).catch((err) => { logErr('pending action peek failed', err); return false })) {
+    if (textIntents && (await hasPendingAction(chatGuid).catch((err) => { logErr('pending action peek failed', err); return false }))) {
         const answer = parseConfirmation(text)
         if (answer === 'yes') {
             await runPendingYes(space, chatGuid, message, text)
@@ -692,7 +722,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         return
     }
 
-    const full: Message[] = [...history, { role: 'user', content: withReplyContext(text, inbound.replyTo) }]
+    const full: Message[] = [...history, { role: 'user', content: withReplyContext(text, replyTo) }]
     await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
 
     const tChatStart = Date.now()
@@ -776,8 +806,21 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         const tChatEnd = Date.now()
         clearTimeout(eyesTimer)
         const recentAfter = await loadHistory(chatGuid, 6).catch(() => [] as HistoryMessage[])
-        if (shouldThread(inbound, recentAfter, text)) await sendThreaded(space, chatGuid, message, reply)
-        else await sendText(space, chatGuid, 'reply', reply)
+        const threaded = shouldThread({ replyTo }, recentAfter, text)
+        // A bare URL on the reply's last line goes out as its own rich-link
+        // bubble so the preview card unfurls (articles, bookings, pages).
+        const split = splitStandaloneUrl(reply)
+        if (split.url) {
+            if (split.text) {
+                if (threaded) await sendThreaded(space, chatGuid, message, split.text)
+                else await sendText(space, chatGuid, 'reply', split.text)
+            }
+            await sendLink(space as LinkSender, chatGuid, 'reply', split.url)
+        } else if (threaded) {
+            await sendThreaded(space, chatGuid, message, reply)
+        } else {
+            await sendText(space, chatGuid, 'reply', reply)
+        }
         if (eyes) {
             const handle = await (eyes as Promise<{ unsend?: () => Promise<unknown> } | null>)
             if (handle?.unsend) await handle.unsend().catch((err) => logErr('eyes unsend failed', err))

@@ -25,6 +25,10 @@ export function getSpectrumConfig(env: NodeJS.ProcessEnv = process.env): Spectru
     return { projectId, projectSecret, webhookSecret }
 }
 
+export const GEMINI_API_KEY = process.env.GEMINI_API_KEY
+/** Image understanding for inbound photos/screenshots (attachments.ts). */
+export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash'
+
 export const GATEWAY_URL = process.env.SHIPYARD_GATEWAY_URL ?? 'https://shipyard-inference.vercel.app'
 export const SHIPYARD_API_KEY = process.env.SHIPYARD_API_KEY
 // Pinned Hopscotch-catalog model id (#22): every Dinghy call routes through

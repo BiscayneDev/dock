@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
 
-vi.mock('spectrum-ts', () => ({ attachment: (data: Buffer, o: { name: string; mimeType: string }) => ({ data, ...o }) }))
+vi.mock('spectrum-ts', () => ({
+  attachment: (data: Buffer, o: { name: string; mimeType: string }) => ({ data, ...o }),
+  richlink: (url: string) => ({ type: 'richlink', url }),
+}))
 const renderOgCard = vi.fn((_i: unknown) => ({ arrayBuffer: async () => new Uint8Array([137, 80, 78, 71]).buffer }))
 vi.mock('@/lib/brand/og-card', () => ({ renderOgCard: (i: unknown) => renderOgCard(i), clip: (s: string, n: number) => s.slice(0, n) }))
 
@@ -63,10 +66,10 @@ import { hostedHistoryLine, sendHostedFile } from '@/lib/files/send'
 describe('file link send', () => {
   const f = { title: 'Heat Schedule', format: 'pdf' as const, hosted: { url: 'https://calm-boat-1a2b.here.now/', expiresAt: '2026-10-24T16:00:00Z' } }
 
-  it('sends just the link, alone, so it unfurls into the file card', async () => {
+  it('sends just the link, alone as a rich link, so it unfurls into the file card', async () => {
     const sent: unknown[] = []
     await sendHostedFile({ send: async (c) => void sent.push(c) }, f)
-    expect(sent).toEqual(['https://calm-boat-1a2b.here.now/'])
+    expect(sent).toEqual([{ type: 'richlink', url: 'https://calm-boat-1a2b.here.now/' }])
   })
 
   it('history line keeps the link for later revoke_file calls', () => {
