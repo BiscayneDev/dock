@@ -29,6 +29,8 @@ import { getSpectrumApp, getImessage } from '@/lib/spectrum/app'
 import { IMESSAGE_READ_TOOLS, loadImessageToolContext } from '@/lib/spectrum/imessage-tools'
 import { isBriefingEnabled, isBriefingForced, clearBriefingForce, MUTE_FOOTER } from '@/lib/spectrum/briefing'
 import { enqueueOutbox, markOutboxSent } from '@/lib/spectrum/outbox'
+import { isOverDailyAllowance } from '@/lib/allowance'
+import { recordUsage, type GatewayUsage } from '@/lib/spectrum/metering'
 import { chatWithTools } from '@/lib/spectrum/dinghy'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from '@/lib/spectrum/config'
 import { loadFacts, saveMessage } from '@/spectrum/store'
@@ -88,6 +90,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
             // Opt-in: a briefing_settings row wins; no row means default-on.
             if (!(await isBriefingEnabled(ctx.userId))) {
+                results.skipped++
+                continue
+            }
+
+            // Daily allowance: briefings are paid work too. At the limit
+            // the briefing skips silently until the midnight reset.
+            if ((await isOverDailyAllowance({ chatGuid, userId: ctx.userId, tz: ctx.timezone })).over) {
                 results.skipped++
                 continue
             }
@@ -154,12 +163,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 '. ' +
                 BRIEF_JSON_SPEC
 
+            const usage: GatewayUsage[] = []
             const { reply } = await chatWithTools(
                 [{ role: 'user', content: ask }],
-                { gatewayUrl: GATEWAY_URL, apiKey: SHIPYARD_API_KEY, model: SHIPYARD_MODEL, facts },
+                {
+                    gatewayUrl: GATEWAY_URL,
+                    apiKey: SHIPYARD_API_KEY,
+                    model: SHIPYARD_MODEL,
+                    facts,
+                    onUsage: (u: GatewayUsage) => usage.push(u),
+                },
                 IMESSAGE_READ_TOOLS,
                 ctx
             )
+            // Briefings count toward the daily allowance like any other work.
+            await recordUsage(chatGuid, 'briefing', usage).catch(() => {})
             const now = new Date()
             const brief = parseBriefReply(reply, { date: cardDate(now, timezone), time: cardTime(now, timezone), weather })
             // Not card-shaped: fall back to the old plain-text briefing.
