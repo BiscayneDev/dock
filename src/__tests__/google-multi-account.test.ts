@@ -65,7 +65,8 @@ describe('google accounts', () => {
     })
 
     it('prompt line only with several accounts', () => {
-        expect(accountsLine(one)).toBe('')
+        expect(accountsLine(one)).toContain('exactly 1 Google account connected: halsey.huth@gmail.com')
+        expect(accountsLine(one)).toContain('Never say a second account is connected')
         expect(accountsLine(two)).toContain('halsey.huth@gmail.com (primary)')
     })
 })
@@ -93,5 +94,35 @@ describe('add-another intent', () => {
     })
     it.each(['check my email', 'what is on my calendar', 'send another email to sam'])('ignores %s', (t) => {
         expect(wantsAnotherGoogle(t)).toBe(false)
+    })
+})
+
+import { googleConnectedLine, isConnectRequest } from '@/lib/spectrum/connect-lines'
+import { buildSystemPrompt } from '@/lib/spectrum/dinghy'
+
+describe('post-connect confirmation', () => {
+    it('names the account', () => {
+        expect(googleConnectedLine(one)).toContain('halsey.huth@gmail.com')
+        expect(googleConnectedLine(two)).toContain('halsey.huth@gmail.com and halsey@biscayneventures.xyz')
+    })
+    it('flags re-connecting the same account on an add-another request', () => {
+        const line = googleConnectedLine(one, true)
+        expect(line).toContain('halsey.huth@gmail.com again')
+        expect(line).not.toContain('getdinghy')
+    })
+    it('connect-only requests are not replayed', () => {
+        expect(isConnectRequest('Help me connect my second email')).toBe(true)
+        expect(isConnectRequest('connect my gmail')).toBe(true)
+        expect(isConnectRequest("what's on my calendar tomorrow and anything from the hotel in reims")).toBe(false)
+    })
+})
+
+describe('prompt grounding', () => {
+    it('treats email as one source, one question, never routes connects to the website', () => {
+        const p = buildSystemPrompt([], false, { google: true, wallet: false, googleAccounts: accountsLine(one) })
+        expect(p).toContain("i don't see it in the inbox(es) i can see")
+        expect(p).toContain('Ask at most one question per message')
+        expect(p).toContain('Never send someone to the website to connect')
+        expect(p).toContain('exactly 1 Google account connected')
     })
 })

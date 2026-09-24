@@ -12,7 +12,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getSpectrumApp, getImessage } from '@/lib/spectrum/app'
 import { claimOutboxBatch, markOutboxFailed, markOutboxSent } from '@/lib/spectrum/outbox'
-import { chat, chatWithTools, MAX_HISTORY } from '@/lib/spectrum/dinghy'
+import { chat, chatWithTools, MAX_HISTORY, wantsAnotherGoogle } from '@/lib/spectrum/dinghy'
+import { googleConnectedLine, isConnectRequest } from '@/lib/spectrum/connect-lines'
 import { capabilitiesFor, loadImessageToolContext, toolsFor } from '@/lib/spectrum/imessage-tools'
 import { actionToolsFor, renderProposal } from '@/lib/spectrum/actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from '@/lib/spectrum/config'
@@ -110,6 +111,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 })
                 history.push({ role: 'user', content: claimed.pendingRequest })
                 const space = await im.space.get(guid)
+                // A pending request that was itself "connect my gmail" is done once the
+                // connect lands: confirm only. Replaying it re-answers a finished request
+                // (and races the user's own next message).
+                const connectOnly = claimed.provider === 'google' && isConnectRequest(claimed.pendingRequest)
+                if (connectOnly) {
+                    const toolCtxC = await loadImessageToolContext(guid).catch(() => null)
+                    const line = googleConnectedLine(toolCtxC, wantsAnotherGoogle(claimed.pendingRequest))
+                    await space.send(line)
+                    await ackResume(claimed.id)
+                    await saveMessage(guid, 'assistant', line).catch((err) =>
+                        console.error('resume message save failed:', err instanceof Error ? err.message : String(err))
+                    )
+                    results.resumes++
+                    continue
+                }
                 void space.send(typing()).catch(() => {})
                 // Freshly connected chats resume their original request —
                 // with tools when the binding is in place.
@@ -146,7 +162,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                           ? "github is connected — i can read your repos, issues and PRs now ✓"
                           : claimed.provider === 'oura' || claimed.provider === 'whoop'
                             ? `${claimed.provider === 'oura' ? 'oura' : 'whoop'} is connected — i can see your sleep, recovery and activity now ✓`
-                          : googleConnectedLine(toolCtx)
+                          : googleConnectedLine(toolCtx, wantsAnotherGoogle(claimed.pendingRequest))
                 await space.send(`${connectedLine}\n\n${reply}`)
                 const proposal = actions?.proposal()
                 if (proposal) await space.send(renderProposal(proposal))
@@ -167,11 +183,4 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     return NextResponse.json(results)
-}
-
-/** With several Google accounts, name them so an added account is visible. */
-function googleConnectedLine(ctx: Parameters<typeof googleAccountsOf>[0] | null): string {
-    const accounts = ctx ? googleAccountsOf(ctx) : []
-    if (accounts.length < 2) return "you're connected — gmail + calendar are in ✓"
-    return `connected ✓ i can see gmail + calendar for ${accounts.map((a) => a.email).join(' and ')} now (${accounts[0].email} is primary)`
 }
