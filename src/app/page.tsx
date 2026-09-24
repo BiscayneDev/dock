@@ -31,7 +31,7 @@ export default function LandingPage() {
         .label { display: flex; align-items: center; gap: 12px; font-family: var(--mono); font-weight: 500; font-size: 11px; line-height: 1; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ember); white-space: nowrap; margin-bottom: 24px; }
         .label::before { content: ""; width: 28px; height: 1px; background: currentColor; opacity: .6; flex: none; }
         nav.top { position: absolute; top: 0; left: 0; right: 0; z-index: 30; display: flex; justify-content: space-between; align-items: center; padding: 24px 32px; }
-        .mark { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-weight: 500; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--shell); }
+        .mark { display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-variation-settings: 'SOFT' 100; font-weight: 520; font-size: 22px; letter-spacing: -0.01em; line-height: 1; color: var(--shell); }
         .signin { font-family: var(--sans); font-size: 15px; color: var(--mist); transition: color .2s ease; }
         .signin:hover { color: var(--shell); }
         h1 { font-size: clamp(44px, 8vw, 72px); line-height: 1; letter-spacing: -0.025em; max-width: 14ch; }
