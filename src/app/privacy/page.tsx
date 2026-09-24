@@ -28,7 +28,6 @@ export default function PrivacyPolicy() {
           <ul style={{ marginTop: '0.5rem', paddingLeft: '1.25rem' }}>
             <li><strong>Gmail read</strong> - to search, read and summarize your email when you ask, and for your morning briefing</li>
             <li><strong>Gmail send</strong> - to send an email or reply you have seen and confirmed</li>
-            <li><strong>Gmail modify</strong> - to label, archive or mark messages read when you ask</li>
             <li><strong>Calendar</strong> - to read your events and to create or update events you ask for</li>
             <li><strong>Basic profile (email address)</strong> - to know which Google account is connected</li>
           </ul>
@@ -60,7 +59,7 @@ export default function PrivacyPolicy() {
           <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Retention and deletion</h2>
           <p>We keep your data while your account is active.</p>
           <ul style={{ marginTop: '0.5rem', paddingLeft: '1.25rem' }}>
-            <li>Disconnect a Google account at any time by texting Dinghy (for example &ldquo;disconnect my work gmail&rdquo;). Its tokens are deleted right away. You can also remove access at <a href="https://myaccount.google.com/permissions" style={{ color: 'var(--ink)', fontWeight: 600 }}>myaccount.google.com/permissions</a>.</li>
+            <li>Remove Dinghy&rsquo;s access to a Google account at any time at <a href="https://myaccount.google.com/permissions" style={{ color: 'var(--ink)', fontWeight: 600 }}>myaccount.google.com/permissions</a>.</li>
             <li>To delete your whole account and all associated data, email <a href="mailto:halsey@biscayneventures.xyz" style={{ color: 'var(--ink)', fontWeight: 600 }}>halsey@biscayneventures.xyz</a>. We delete it within 30 days.</li>
           </ul>
         </section>

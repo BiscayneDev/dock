@@ -91,7 +91,7 @@ export async function GET(
           result.accessToken,
           result.refreshToken,
           result.expiresAt,
-          ['openid', 'email', 'gmail.readonly', 'gmail.send', 'gmail.modify', 'calendar.readonly', 'calendar.events'],
+          ['openid', 'email', 'gmail.readonly', 'gmail.send', 'calendar.readonly', 'calendar.events'],
           result.email
         )
         break
@@ -233,7 +233,7 @@ async function handleGoogleConnectCallback(
       result.accessToken,
       result.refreshToken,
       result.expiresAt,
-      ['openid', 'email', 'gmail.readonly', 'gmail.send', 'gmail.modify', 'calendar.readonly', 'calendar.events'],
+      ['openid', 'email', 'gmail.readonly', 'gmail.send', 'calendar.readonly', 'calendar.events'],
       result.email
     )
 
