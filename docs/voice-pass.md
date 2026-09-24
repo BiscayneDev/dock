@@ -8,8 +8,8 @@ Every user-facing string Dinghy produces, rewritten in one voice: sentence case,
 
 | | Before | After |
 |---|---|---|
-| Subject | lowercase "you're in" subject | You're in the Dinghy beta |
-| Body | lowercase, "i'll", "seat on the boat" | Hey {First},<br>You're in. Your personal Dinghy line is {their number} - text it from the phone you signed up with and you're talking to me.<br>Tap here from your phone to start: [Text Dinghy]<br>No code, no setup. See you on the water.<br>- Dinghy |
+| Subject | your dinghy seat is open | You're in the Dinghy beta |
+| Body | hey {first} - your seat's open.<br>i live in your texts. this is your own dinghy number: {number} - save it. you're already aboard - tap the link on your phone and send the text that pops up.<br>[button]<br>or just text {number} from the phone you signed up with. no code needed. see you in there.<br>- dinghy | Hey {First},<br>You're in. Your personal Dinghy line is {their number} - text it from the phone you signed up with and you're talking to me.<br>Tap here from your phone to start: [Text Dinghy]<br>No code, no setup. See you on the water.<br>- Dinghy |
 | Prefilled text | hey dinghy, it's {first} | Hey Dinghy, it's {First} |
 
 ### Waitlist confirmation (src/lib/email/waitlist-confirmation.ts)
