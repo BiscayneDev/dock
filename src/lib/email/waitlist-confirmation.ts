@@ -1,29 +1,26 @@
 // Waitlist confirmation email, sent through Resend's HTTP API (no SDK dependency).
 // Fail-soft: a missing key or a Resend error never blocks the signup.
 
-import { maskPhone } from '@/lib/waitlist'
-
 const RESEND_URL = 'https://api.resend.com/emails'
 const DEFAULT_FROM = 'Dinghy <hi@getdinghy.sh>'
 
 export interface ConfirmationInput {
   email: string
   name: string
-  phone: string
+  phone?: string | null
 }
 
 export function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? ''
 }
 
-export function buildWaitlistConfirmation({ name, phone }: ConfirmationInput) {
+export function buildWaitlistConfirmation({ name }: ConfirmationInput) {
   const first = firstName(name).toLowerCase()
-  const masked = maskPhone(phone)
   const subject = "you're on the dinghy waitlist"
   const text = [
     `hey ${first} - you're on the list.`,
     '',
-    `when a seat opens, i'll text you at ${masked} from my own number. save it when it lands so you know it's me.`,
+    "when a seat opens, i'll email you my number and a link that opens a text to me. one tap and we're talking.",
     '',
     'nothing to do until then.',
     '',
@@ -34,7 +31,7 @@ export function buildWaitlistConfirmation({ name, phone }: ConfirmationInput) {
   const html = `<!doctype html><html><body style="margin:0;padding:32px 20px;background:#F6EFE4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#0B1224;">
 <div style="max-width:480px;margin:0 auto;font-size:16px;line-height:1.55;">
 <p style="margin:0 0 16px;">hey ${esc(first)} - you're on the list.</p>
-<p style="margin:0 0 16px;">when a seat opens, i'll text you at <strong>${esc(masked)}</strong> from my own number. save it when it lands so you know it's me.</p>
+<p style="margin:0 0 16px;">when a seat opens, i'll email you my number and a link that opens a text to me. one tap and we're talking.</p>
 <p style="margin:0 0 24px;">nothing to do until then.</p>
 <p style="margin:0;">- dinghy<br><a href="https://getdinghy.sh" style="color:#C8653F;">getdinghy.sh</a></p>
 </div></body></html>`

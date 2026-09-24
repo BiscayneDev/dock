@@ -32,10 +32,11 @@ export function WaitlistSection() {
       setMessage('Please enter a valid email address.')
       return
     }
-    const cleanPhone = normalizePhone(phone)
-    if (!cleanPhone) {
+    const phoneRaw = phone.trim()
+    const cleanPhone = phoneRaw ? normalizePhone(phoneRaw) : null
+    if (phoneRaw && !cleanPhone) {
       setStatus('error')
-      setMessage("Please enter a valid mobile number - that's where your invite will come from.")
+      setMessage("That mobile number doesn't look right.")
       return
     }
     const handle = normalizeTwitterHandle(twitter)
@@ -63,7 +64,7 @@ export function WaitlistSection() {
       setName('')
       setTwitter('')
       setPhone('')
-      setMessage("you're on the list. i'll text you when a seat opens.")
+      setMessage("you're on the list. watch your inbox for your seat.")
     } catch {
       setStatus('error')
       setMessage('Something went wrong. Please try again.')
@@ -102,11 +103,10 @@ export function WaitlistSection() {
       />
       <input
         type="tel"
-        required
         autoComplete="tel"
         inputMode="tel"
-        aria-label="Mobile number"
-        placeholder="mobile number"
+        aria-label="Mobile number (optional)"
+        placeholder="mobile (optional)"
         value={phone}
         onChange={(e) => setPhone(e.target.value)}
         disabled={status === 'loading'}
@@ -151,7 +151,7 @@ export function WaitlistSection() {
         {status === 'loading' ? 'joining…' : 'join the waitlist'}
       </button>
       <p style={{ width: '100%', fontFamily: 'var(--sans)', fontSize: '12px', color: 'rgba(200,210,235,0.55)', marginTop: '2px' }}>
-        your invite comes by text from dinghy. no spam - just your seat.
+        your invite comes by email - then you just text dinghy. no spam.
       </p>
       {status === 'error' && (
         <p style={{ width: '100%', fontFamily: 'var(--sans)', fontSize: '14px', color: 'var(--ember)', marginTop: '4px' }}>

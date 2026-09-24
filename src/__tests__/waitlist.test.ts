@@ -43,17 +43,17 @@ describe('waitlist phone', () => {
 })
 
 describe('waitlist confirmation email', () => {
-  it('uses first name and masked phone, never the full number', () => {
+  it('uses first name and promises an email invite', () => {
     const { subject, text, html } = buildWaitlistConfirmation({ email: 'a@b.co', name: 'Ada Lovelace', phone: '+14155550123' })
     expect(subject).toContain('waitlist')
     expect(text).toContain('hey ada')
-    expect(text).toContain('0123')
+    expect(text).toContain('email you my number')
     expect(text).not.toContain('4155550123')
     expect(html).not.toContain('4155550123')
     expect(firstName('  Grace Hopper ')).toBe('Grace')
   })
   it('escapes names in html', () => {
-    const { html } = buildWaitlistConfirmation({ email: 'a@b.co', name: '<b>x</b>', phone: '+14155550123' })
+    const { html } = buildWaitlistConfirmation({ email: 'a@b.co', name: '<b>x</b>', phone: null })
     expect(html).not.toContain('<b>x')
   })
 })
