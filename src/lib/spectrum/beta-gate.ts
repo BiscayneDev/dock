@@ -70,13 +70,13 @@ export async function claimGateNotice(chatGuid: string): Promise<boolean> {
 }
 
 /** Mints a code for the owner. Returns the plaintext code, or null if not the owner. */
-export async function mintInvite(ownerChat: string, maxUses: number): Promise<string | null> {
+export async function mintInvite(ownerChat: string, maxUses: number, note = 'minted from iMessage'): Promise<string | null> {
     const code = generateInviteCode()
     const { data, error } = await createServerClient().rpc('create_beta_invite', {
         p_owner_chat: ownerChat,
         p_code_hash: hashInviteCode(code),
         p_max_uses: maxUses,
-        p_note: 'minted from iMessage',
+        p_note: note,
     })
     if (error) throw new Error(`create_beta_invite failed: ${error.message}`)
     return data === true ? code : null
