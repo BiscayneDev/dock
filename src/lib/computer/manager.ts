@@ -118,10 +118,19 @@ export class E2BManager implements ComputerProvider {
   }
 }
 
-/** Mock unless explicitly configured for real E2B (key present, mock off). */
+/** Mock unless explicitly configured for real E2B (key present, mock off).
+ * The mock is a singleton so sandbox ids persist across calls within the
+ * process (mirroring E2B's persistent sandboxes); tests can reach it via
+ * getProvider().start() to pre-seed a sandbox id. */
+let mockSingleton: MockManager | null = null
+
 export function getProvider(): ComputerProvider {
   const mock = process.env.E2B_SANDBOX_MOCK === '1' || !process.env.E2B_API_KEY
-  return mock ? new MockManager() : new E2BManager()
+  if (mock) {
+    if (!mockSingleton) mockSingleton = new MockManager()
+    return mockSingleton
+  }
+  return new E2BManager()
 }
 
 export function usingMock(): boolean {

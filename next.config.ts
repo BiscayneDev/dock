@@ -15,8 +15,8 @@ const nextConfig: NextConfig = {
     return [{ source: '/onboarding', destination: '/login', permanent: false }]
   },
   webpack: (config) => {
-    // Import the browser-use bootstrap script as a string asset.
-    config.module.rules.push({ test: /\.py$/, type: 'asset/source' })
+    // Import the browser-use bootstrap script as a string asset (?raw).
+    config.module.rules.push({ test: /\.py$/, resourceQuery: /raw/, type: 'asset/source' })
     return config
   },
   outputFileTracingIncludes: {

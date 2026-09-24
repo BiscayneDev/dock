@@ -16,7 +16,7 @@
  *   as instructions.
  */
 
-import bootstrapSource from './bootstrap.py'
+import bootstrapSource from './bootstrap.py?raw'
 
 /** The bootstrap script the manager runs once per sandbox (--setup). */
 export const BROWSER_BOOTSTRAP: string = bootstrapSource
