@@ -38,4 +38,4 @@ export const sunrise = {
     sun: '#FFE2AA',
 } as const
 
-export const SITE_TAGLINE = 'your first mate lives in your texts'
+export const SITE_TAGLINE = 'Your first mate, one text away'

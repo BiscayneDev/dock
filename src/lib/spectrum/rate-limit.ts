@@ -6,7 +6,7 @@ import { createServerClient } from '@/lib/supabase/server'
 
 export type RateResult = 'ok' | 'limited_notify' | 'limited'
 
-export const RATE_NOTICE = "you're sending a lot at once - give me a few minutes and try again."
+export const RATE_NOTICE = "That's a lot at once. Give me a few minutes, then try again."
 
 /** Fails open to 'ok' on DB error: dedupe and the beta gate already need the DB. */
 export async function hitRateLimit(chatGuid: string): Promise<RateResult> {

@@ -77,8 +77,8 @@ export async function renderMemoryReport(chatGuid: string): Promise<string> {
         : [[], []]
     if (plans.length) lines.push(...plans.map((p) => `plan: ${renderPlan(p).replace(/ \[source: [a-z]+\]$/, '')}`))
     if (files.length) lines.push(...files.map((f) => `file: ${renderFileLine(f)}`))
-    if (!lines.length) return "nothing saved about you yet. tell me things and i'll remember - say 'forget x' anytime and i'll drop it."
-    return "here's what i remember about you:\n" + lines.map((l) => `- ${l}`).join('\n') + "\n\nsay 'forget x' to drop one, 'forget everything' to wipe it all."
+    if (!lines.length) return "Nothing saved about you yet. Tell me things and I'll remember them. Say 'forget x' any time and I'll drop it."
+    return "Here's what I remember about you:\n" + lines.map((l) => `- ${l}`).join('\n') + "\n\nSay 'forget x' to drop one, or 'forget everything' to wipe it all."
 }
 
 // ── Wipe-all gate (dinghy_memory_wipes, migration 039) ───────────────────────
@@ -127,7 +127,7 @@ const WIPE_CONFIRM = /^\s*(?:yes|y)\s*[.!]*\s*$/i
  * The text the server sends for a wipe-all request (explicit-YES gate; the
  * destructive bulk clear never runs on a casual "ok").
  */
-export const WIPE_PROMPT = 'that clears everything i remember about you, across all our chats. reply YES to wipe it all - anything else cancels.'
+export const WIPE_PROMPT = 'That clears everything I remember about you, across all our chats. Reply YES to wipe it all - anything else cancels.'
 
 /**
  * Handle a message that arrives with a wipe-all request open. Returns the
@@ -139,10 +139,10 @@ export async function handlePendingMemoryWipe(chatGuid: string, text: string): P
     if (!(await hasPendingMemoryWipe(chatGuid))) return null
     if (WIPE_CONFIRM.test(text)) {
         const n = await forgetAllMemories(chatGuid)
-        return n > 0 ? `done - wiped everything i remembered (${n} thing${n === 1 ? '' : 's'}). fresh start.` : 'nothing was saved anyway, but the slate is clean.'
+        return n > 0 ? `Done. I wiped everything I remembered (${n} thing${n === 1 ? '' : 's'}). Fresh start.` : 'Nothing was saved, so the slate is already clean.'
     }
     await clearMemoryWipe(chatGuid).catch(() => undefined)
-    return 'ok, cancelled - i kept everything.'
+    return 'OK, cancelled. I kept everything.'
 }
 
 // ── Single-fact forget ("forgot that" runs directly; it's reversible) ────────

@@ -43,8 +43,8 @@ export function parseWaitlistInviteCommand(text: string): WaitlistInviteCommand 
 interface Row { id: string; email: string; name: string | null; status: string; phone: string | null }
 
 export function introText(name: string): string {
-  const first = firstName(name).toLowerCase()
-  return `ahoy${first ? ` ${first}` : ''} - it's dinghy. you're aboard. save this number and text me whatever you need.`
+  const first = firstName(name)
+  return `Hi${first ? ` ${first}` : ''}, it's Dinghy. You're in the beta. Save this number and text me whatever you need.`
 }
 
 export function chatGuidForPhone(phone: string): string {
@@ -67,7 +67,7 @@ export async function sendIntroText(phone: string, text: string): Promise<boolea
 
 /** Returns a short lowercase summary for the owner. */
 export async function runWaitlistInvites(_ownerChat: string, cmd: WaitlistInviteCommand): Promise<string> {
-  if (!process.env.RESEND_API_KEY) return "can't send invites yet - RESEND_API_KEY isn't set."
+  if (!process.env.RESEND_API_KEY) return "Can't send invites yet - RESEND_API_KEY isn't set."
   const supabase = createServerClient()
   const query = supabase.from('waitlist').select('id, email, name, status, phone')
   const { data, error } = cmd.kind === 'next'
@@ -76,7 +76,7 @@ export async function runWaitlistInvites(_ownerChat: string, cmd: WaitlistInvite
   if (error) throw new Error(`waitlist select failed: ${error.message}`)
   const rows = (data ?? []) as Row[]
   if (rows.length === 0) {
-    return cmd.kind === 'next' ? 'no one waiting on the list right now.' : `${cmd.email} isn't on the list (or is already active).`
+    return cmd.kind === 'next' ? 'No one is waiting on the list right now.' : `${cmd.email} isn't on the list (or is already active).`
   }
 
   const texted: string[] = []
@@ -110,9 +110,9 @@ export async function runWaitlistInvites(_ownerChat: string, cmd: WaitlistInvite
   }
 
   const lines: string[] = []
-  if (texted.length) lines.push(`texted ${texted.length}: ${texted.join(', ')}`)
-  if (emailed.length) lines.push(`emailed ${emailed.length} (text didn't go through - they're allowlisted, they just need to text their line): ${emailed.join(', ')}`)
-  if (noPhone.length) lines.push(`no phone on file, skipped: ${noPhone.join(', ')}`)
-  if (failed.length) lines.push(`couldn't invite: ${failed.join(', ')}`)
+  if (texted.length) lines.push(`Texted ${texted.length}: ${texted.join(', ')}`)
+  if (emailed.length) lines.push(`Emailed ${emailed.length} (the text didn't go through - they're allowlisted and just need to text their line): ${emailed.join(', ')}`)
+  if (noPhone.length) lines.push(`No phone on file, skipped: ${noPhone.join(', ')}`)
+  if (failed.length) lines.push(`Couldn't invite: ${failed.join(', ')}`)
   return lines.join('\n')
 }

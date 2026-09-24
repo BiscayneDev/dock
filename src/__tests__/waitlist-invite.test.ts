@@ -32,9 +32,9 @@ describe('photon onboarding helpers', () => {
     expect(prettyPhone('+16286293507')).toBe('(628) 629-3507')
     expect(prettyPhone('+447700900123')).toBe('+447700900123')
   })
-  it('writes the intro in dinghy voice, no code', () => {
-    expect(introText('Adam Lee')).toBe("ahoy adam - it's dinghy. you're aboard. save this number and text me whatever you need.")
-    expect(introText('')).toMatch(/^ahoy - it's dinghy/)
+  it('writes the intro in the Dinghy voice, no code', () => {
+    expect(introText('Adam Lee')).toBe("Hi Adam, it's Dinghy. You're in the beta. Save this number and text me whatever you need.")
+    expect(introText('')).toMatch(/^Hi, it's Dinghy/)
   })
   it('maps phones to chat guids and back', () => {
     expect(chatGuidForPhone('+16784680733')).toBe('any;-;+16784680733')

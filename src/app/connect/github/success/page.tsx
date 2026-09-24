@@ -16,7 +16,7 @@ export const metadata: Metadata = {
         url: '/api/og',
         width: 1200,
         height: 630,
-        alt: 'Dinghy · your first mate lives in your texts',
+        alt: 'Dinghy · Your first mate, one text away',
         type: 'image/png',
       },
     ],

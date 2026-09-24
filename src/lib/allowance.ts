@@ -77,7 +77,7 @@ export async function isOverDailyAllowance(
 
 /** The only thing a user ever sees about the allowance, sent once a day. */
 export function allowanceUsedUpMessage(): string {
-  return "that's today's allowance used up - i'm back at midnight your time."
+  return "You've used today's allowance. I'm back at midnight your time."
 }
 
 /**

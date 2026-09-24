@@ -43,10 +43,10 @@ describe('parseConfirmation', () => {
 describe('renderProposal', () => {
   it('shows the exact email draft', () => {
     const t = renderProposal({ id: '1', kind: 'gmail_send', payload: { to: 'a@b.co', subject: 'Hi', body: 'Body here' } })
-    expect(t).toContain('to: a@b.co')
-    expect(t).toContain('subject: Hi')
+    expect(t).toContain('To: a@b.co')
+    expect(t).toContain('Subject: Hi')
     expect(t).toContain('Body here')
-    expect(t).toMatch(/reply y to send/)
+    expect(t).toMatch(/Reply Y to send/)
   })
 })
 
@@ -85,7 +85,7 @@ describe('executePendingAction', () => {
         : Promise.resolve({ data: null, error: null }),
     )
     sendExec.mockResolvedValue({ success: true, data: { id: 'm1' } })
-    expect(await executePendingAction('chat-1', ctx)).toBe('sent to a@b.co.')
+    expect(await executePendingAction('chat-1', ctx)).toBe('Sent to a@b.co.')
     expect(sendExec).toHaveBeenCalledTimes(1)
     expect(rpcMock).toHaveBeenCalledWith('finish_pending_action', expect.objectContaining({ p_id: 'pa-1', p_status: 'done' }))
   })
@@ -109,7 +109,7 @@ describe('executePendingAction', () => {
     )
     const out = await executePendingAction('chat-1', ctx)
     expect(sendExec).not.toHaveBeenCalled()
-    expect(out).toMatch(/couldn't send/)
+    expect(out).toMatch(/Couldn't send/)
   })
 
   it('says expired when nothing is open', async () => {

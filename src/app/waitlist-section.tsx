@@ -64,7 +64,7 @@ export function WaitlistSection() {
       setName('')
       setTwitter('')
       setPhone('')
-      setMessage("you're on the list. watch your inbox for your seat.")
+      setMessage("You're on the list. Watch your inbox for your invite.")
     } catch {
       setStatus('error')
       setMessage('Something went wrong. Please try again.')
@@ -94,7 +94,7 @@ export function WaitlistSection() {
         required
         autoComplete="name"
         aria-label="Name"
-        placeholder="your name"
+        placeholder="Your name"
         maxLength={80}
         value={name}
         onChange={(e) => setName(e.target.value)}
@@ -106,7 +106,7 @@ export function WaitlistSection() {
         autoComplete="tel"
         inputMode="tel"
         aria-label="Mobile number (optional)"
-        placeholder="mobile (optional)"
+        placeholder="Mobile (optional)"
         value={phone}
         onChange={(e) => setPhone(e.target.value)}
         disabled={status === 'loading'}
@@ -118,7 +118,7 @@ export function WaitlistSection() {
         autoCapitalize="none"
         spellCheck={false}
         aria-label="X / Twitter handle (optional)"
-        placeholder="@handle on x (optional)"
+        placeholder="X handle (optional)"
         value={twitter}
         onChange={(e) => setTwitter(e.target.value)}
         disabled={status === 'loading'}
@@ -148,10 +148,10 @@ export function WaitlistSection() {
           transition: 'background .2s ease',
         }}
       >
-        {status === 'loading' ? 'joining…' : 'join the waitlist'}
+        {status === 'loading' ? 'Joining…' : 'Join the waitlist'}
       </button>
       <p style={{ width: '100%', fontFamily: 'var(--sans)', fontSize: '12px', color: 'rgba(200,210,235,0.55)', marginTop: '2px' }}>
-        your invite comes by email - then you just text dinghy. no spam.
+        Your invite comes by email. After that, you just text Dinghy. No spam.
       </p>
       {status === 'error' && (
         <p style={{ width: '100%', fontFamily: 'var(--sans)', fontSize: '14px', color: 'var(--ember)', marginTop: '4px' }}>

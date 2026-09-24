@@ -243,7 +243,7 @@ async function handleGatedMessage(space: InboundSpace, chatGuid: string, text: s
     }
 }
 
-export const LOCATION_ACK = "got it. I'll use that for your morning weather."
+export const LOCATION_ACK = "Got it. I'll use that for your morning weather."
 
 /**
  * A shared location (iMessage "Send My Current Location", a dropped maps
@@ -283,7 +283,7 @@ async function runPendingYes(space: InboundSpace, chatGuid: string, message: Inb
         out = executed.text
     } catch (err) {
         logErr('pending action failed', err)
-        out = "that didn't go through - try again in a moment."
+        out = "That didn't go through. Try again in a moment."
     }
     await sendText(space, chatGuid, 'reply', out)
     await saveMessage(chatGuid, 'assistant', out).catch((err) => logErr('message save failed', err))
@@ -320,8 +320,8 @@ async function handleInboundTapback(space: InboundSpace, message: InboundMessage
     }
     await cancelPendingActions(chatGuid).catch((err) => logErr('pending action cancel failed', err))
     await saveMessage(chatGuid, 'user', `[${inbound.emoji} on the draft]`).catch((err) => logErr('message save failed', err))
-    await sendText(space, chatGuid, 'reply', 'ok, scrapped it.')
-    await saveMessage(chatGuid, 'assistant', 'ok, scrapped it.').catch((err) => logErr('message save failed', err))
+    await sendText(space, chatGuid, 'reply', 'OK, scrapped it.')
+    await saveMessage(chatGuid, 'assistant', 'OK, scrapped it.').catch((err) => logErr('message save failed', err))
 }
 
 export async function handleSpectrumMessage(space: InboundSpace, message: InboundMessage): Promise<void> {
@@ -395,7 +395,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         startTyping(space)
         const read = await readInboundAttachment(message.content as InboundAttachmentContent).catch((err) => {
             logErr('attachment read failed', err)
-            return { ok: false as const, label: '[sent an attachment]', reply: "couldn't read that attachment - try sending it again in a moment." }
+            return { ok: false as const, label: '[sent an attachment]', reply: "Couldn't read that attachment. Try sending it again in a moment." }
         })
         if (!read.ok) {
             await saveMessage(chatGuid, 'user', read.label).catch((err) => logErr('message save failed', err))
@@ -415,7 +415,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 await sendText(space, chatGuid, 'reply', await runWaitlistInvites(chatGuid, wl))
             } catch (err) {
                 logErr('waitlist invites failed', err)
-                await sendText(space, chatGuid, 'error_notice', "couldn't send those invites - try again in a moment.")
+                await sendText(space, chatGuid, 'error_notice', "Couldn't send those invites. Try again in a moment.")
             }
             return
         }
@@ -432,13 +432,13 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                     chatGuid,
                     'reply',
                     code
-                        ? `invite code: ${code} (${uses} use${uses === 1 ? '' : 's'}, expires in 30 days). they text it to this number.`
-                        : "couldn't mint that invite."
+                        ? `Invite code: ${code} (${uses} use${uses === 1 ? '' : 's'}, expires in 30 days). They text it to this number.`
+                        : "Couldn't make that invite code."
                 )
                 if (code) await sendText(space, chatGuid, 'reply', code)
             } catch (err) {
                 logErr('invite mint failed', err)
-                await sendText(space, chatGuid, 'error_notice', "couldn't mint an invite - try again in a moment.")
+                await sendText(space, chatGuid, 'error_notice', "Couldn't make an invite code. Try again in a moment.")
             }
             return
         }
@@ -514,12 +514,12 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 space,
                 chatGuid,
                 'connect_link',
-                "email + calendar aren't connected yet - tap below to connect google and i'll take it from there:"
+                "Your email and calendar aren't connected yet. Tap below to connect Google and I'll take it from there:"
             )
             await sendLink(space as LinkSender, chatGuid, 'connect_link', link)
         } catch (err) {
             logErr('connect link failed', err)
-            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
+            await sendText(space, chatGuid, 'error_notice', "Couldn't start the connection. Try again in a moment.")
         }
         return
     }
@@ -539,7 +539,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             await sendLink(space as LinkSender, chatGuid, 'connect_link', link)
         } catch (err) {
             logErr('connect link failed', err)
-            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
+            await sendText(space, chatGuid, 'error_notice', "Couldn't start the connection. Try again in a moment.")
         }
         return
     }
@@ -558,7 +558,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             await sendLink(space as LinkSender, chatGuid, 'connect_link', link)
         } catch (err) {
             logErr('github connect link failed', err)
-            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
+            await sendText(space, chatGuid, 'error_notice', "Couldn't start the connection. Try again in a moment.")
         }
         return
     }
@@ -576,11 +576,11 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 "no wearable connected yet - tap whichever you use (read-only: sleep, recovery, activity) and i'll take it from there. oura:"
             )
             await sendLink(space as LinkSender, chatGuid, 'connect_link', oura)
-            await sendText(space, chatGuid, 'connect_link', 'whoop:')
+            await sendText(space, chatGuid, 'connect_link', 'Connect WHOOP here:')
             await sendLink(space as LinkSender, chatGuid, 'connect_link', whoop)
         } catch (err) {
             logErr('health connect link failed', err)
-            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
+            await sendText(space, chatGuid, 'error_notice', "Couldn't start the connection. Try again in a moment.")
         }
         return
     }
@@ -599,7 +599,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             await sendLink(space as LinkSender, chatGuid, 'connect_link', link)
         } catch (err) {
             logErr('paybox connect link failed', err)
-            await sendText(space, chatGuid, 'error_notice', "couldn't start the connect flow - try again in a moment.")
+            await sendText(space, chatGuid, 'error_notice', "Couldn't start the connection. Try again in a moment.")
         }
         return
     }
@@ -630,7 +630,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             await saveMessage(chatGuid, 'assistant', report).catch((err) => logErr('message save failed', err))
         } catch (err) {
             logErr('memory report failed', err)
-            await sendText(space, chatGuid, 'error_notice', "couldn't pull your memories up right now - try again in a moment.")
+            await sendText(space, chatGuid, 'error_notice', "Couldn't pull up what I remember right now. Try again in a moment.")
         }
         return
     }
@@ -690,8 +690,8 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         await cancelPendingActions(chatGuid).catch((err) => logErr('pending action cancel failed', err))
         if (answer === 'no') {
             await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
-            await sendText(space, chatGuid, 'reply', 'ok, scrapped it.')
-            await saveMessage(chatGuid, 'assistant', 'ok, scrapped it.').catch((err) => logErr('message save failed', err))
+            await sendText(space, chatGuid, 'reply', 'OK, scrapped it.')
+            await saveMessage(chatGuid, 'assistant', 'OK, scrapped it.').catch((err) => logErr('message save failed', err))
             return
         }
     }
