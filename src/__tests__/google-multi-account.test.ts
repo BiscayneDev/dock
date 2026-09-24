@@ -113,6 +113,7 @@ describe('post-connect confirmation', () => {
     it('connect-only requests are not replayed', () => {
         expect(isConnectRequest('Help me connect my second email')).toBe(true)
         expect(isConnectRequest('connect my gmail')).toBe(true)
+        expect(wantsAnotherGoogle("Let's try connecting google again")).toBe(true)
         expect(isConnectRequest("what's on my calendar tomorrow and anything from the hotel in reims")).toBe(false)
     })
 })

@@ -244,7 +244,7 @@ export function wantsGoogle(text: string): boolean {
 
 /** "connect my other gmail", "add my work email", "link a second google account". */
 export const ADD_GOOGLE_INTENT =
-    /\b(add|connect|link|hook up|set up)\b.{0,30}\b(another|other|second|2nd|new|work|personal|business|more)\b.{0,30}\b(gmail|google|e-?mail|inbox|calendar)(\s+accounts?)?\b/i
+    /\b(add|connect|link|hook up|set up)\b.{0,30}\b(another|other|second|2nd|new|work|personal|business|more)\b.{0,30}\b(gmail|google|e-?mail|inbox|calendar)(\s+accounts?)?\b|\b(connect(ing)?|link(ing)?)\b.{0,20}\b(gmail|google)\b.{0,20}\bagain\b/i
 
 export function wantsAnotherGoogle(text: string): boolean {
     return ADD_GOOGLE_INTENT.test(text)
