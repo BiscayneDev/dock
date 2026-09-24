@@ -282,7 +282,6 @@ async function runPendingYes(space: InboundSpace, chatGuid: string, message: Inb
     }
     await sendText(space, chatGuid, 'reply', out)
     await saveMessage(chatGuid, 'assistant', out).catch((err) => logErr('message save failed', err))
-    // 👍 on the confirmation itself when the action actually ran.
     if (executed?.ok) {
         // ✅ on their "y" once it actually ran (a tapback can't be tapbacked).
         if (!viaTapback) {
