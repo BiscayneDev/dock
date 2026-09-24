@@ -84,9 +84,24 @@ export class E2BManager implements ComputerProvider {
     return Sandbox
   }
 
+  /**
+   * Env vars the sandbox bootstrap needs (browser-use talks to Shipyard).
+   * Injected at create and re-applied on every connect — E2B envs are
+   * sandbox-scoped and never logged; no Dinghy master keys go in here, only
+   * the sandbox-scoped Shipyard key minted for this purpose.
+   */
+  private sandboxEnvs(): Record<string, string> {
+    const envs: Record<string, string> = {}
+    const url = process.env.SHIPYARD_GATEWAY_URL
+    const key = process.env.SHIPYARD_SANDBOX_KEY
+    if (url) envs.SHIPYARD_GATEWAY_URL = url
+    if (key) envs.SHIPYARD_SANDBOX_KEY = key
+    return envs
+  }
+
   async start(): Promise<{ sandboxId: string }> {
     const Sandbox = await this.sdk()
-    const sandbox = await Sandbox.create({ timeoutMs: 15 * 60_000 })
+    const sandbox = await Sandbox.create({ timeoutMs: 15 * 60_000, envs: this.sandboxEnvs() })
     return { sandboxId: sandbox.sandboxId }
   }
 
@@ -103,7 +118,7 @@ export class E2BManager implements ComputerProvider {
   async run(sandboxId: string, command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const Sandbox = await this.sdk()
     const sandbox = await Sandbox.connect(sandboxId)
-    const result = await sandbox.commands.run(command)
+    const result = await sandbox.commands.run(command, { envs: this.sandboxEnvs() })
     return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode }
   }
 
