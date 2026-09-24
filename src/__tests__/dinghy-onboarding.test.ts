@@ -26,3 +26,12 @@ describe('onboarding prompt', () => {
     expect(p).toContain('contact card just arrived')
   })
 })
+
+describe('grounding rules', () => {
+  it('search-enabled prompt requires dated sources for recency claims', async () => {
+    const { GROUNDING_LINE } = await import('@/lib/spectrum/dinghy')
+    expect(GROUNDING_LINE).toContain('published_date')
+    expect(GROUNDING_LINE).toContain('never turn it into a recency claim')
+    expect(GROUNDING_LINE).toContain('search again')
+  })
+})

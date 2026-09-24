@@ -132,3 +132,17 @@ No change. It carries the name "Dinghy", the person's own line and the site URL.
 | Sign-in | sign in to dinghy / phone number / check your texts / sign-in code / use a different number / send a new code / get on the waitlist | Same words, sentence case |
 
 The mobile field stays optional.
+
+## Grounding rules (added after the "launches this week" failure)
+
+Added to the persona whenever web search is on (GROUNDING_LINE in src/lib/spectrum/dinghy.ts):
+- Name the source for any factual claim from a search or page.
+- Before saying something launched or happened "this week", "today" or "recently", check the result's published date and confirm it's in that window.
+- An undated result never becomes a recency claim. Say it exists and that the date couldn't be confirmed.
+- Only list confirmed items. Fewer real items beat a padded list.
+- Extra care with companies or people the user is tied to.
+- When corrected: search again, check dates and sources, then answer with the source. No apologize-and-guess.
+
+The web_search tool now returns each result's published_date, and takes recentDays for "this week" questions (news mode, which comes with dates).
+
+The persona also bans markdown outright (no **bold**, headings or * bullets), on top of the send-side strip in #89.
