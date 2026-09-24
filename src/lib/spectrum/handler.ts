@@ -16,7 +16,6 @@ import {
     loadFacts,
     loadHistory,
     saveMessage,
-    fileMarker,
     createConnectLink,
     type DinghyFact,
     type HistoryMessage,
@@ -160,7 +159,7 @@ async function sendFile(space: InboundSpace, chatGuid: string, file: MadeFile): 
     }
     try {
         await sendFileWithPreview(space as ContentSender, file)
-        await saveMessage(chatGuid, 'assistant', fileMarker(file.filename)).catch((err) => logErr('message save failed', err))
+        await saveMessage(chatGuid, 'assistant', `[file: ${file.title}] sent as a ${file.format} attachment`).catch((err) => logErr('message save failed', err))
     } catch (err) {
         logErr('file send failed', err)
         const fallback = file.link

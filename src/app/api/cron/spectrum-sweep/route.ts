@@ -27,7 +27,6 @@ import {
     loadFacts,
     loadHistory,
     saveMessage,
-    fileMarker,
     type DinghyFact,
     type HistoryMessage,
 } from '@/spectrum/store'
@@ -63,7 +62,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 if ('error' in parsed) throw new Error(`bad file row: ${parsed.error}`)
                 const file = await renderFile(parsed.doc, parsed.format, { ogImage: 'https://www.getdinghy.sh/api/og' })
                 await sendFileWithPreview(space, { ...file, format: parsed.format, title: parsed.doc.title, subtitle: parsed.doc.subtitle })
-                await saveMessage(row.chat_guid, 'assistant', fileMarker(file.filename)).catch(() => undefined)
+                await saveMessage(row.chat_guid, 'assistant', `[file: ${parsed.doc.title}] sent as a ${parsed.format} attachment`).catch(() => undefined)
             } else if (row.kind === 'brief') {
                 // text is JSON {card, text}: the card, or the text if it can't render.
                 const payload = JSON.parse(row.text) as BriefPayload

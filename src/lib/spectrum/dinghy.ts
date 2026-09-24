@@ -110,6 +110,7 @@ const FILES_LINE =
     'By default each one becomes a file link (a here.now page with a pdf download on it) that opens with one tap, sent right after your reply; ' +
     'it is private unless they forward it, and anyone they forward it to can open it. Links expire after 7 days; making the file again gives a fresh link. ' +
     'If they want the file itself in the chat, set attach=true. revoke_file kills a link they no longer want working. ' +
+    'Every file you make is saved to memory with its full text: recall_file reopens one from any earlier chat, so to update a file, recall it, change it and create_file the full new version. ' +
     'Offer one when a list or plan would be easier to keep as a document, and make it when asked.'
 
 const COMPUTER_LINE =

@@ -138,7 +138,7 @@ describe('D3 isolation: guest / unbound chats stay chat_guid-keyed', () => {
     expect(rpcMock.mock.calls.some((c) => c[0] === 'recent_user_memories')).toBe(false)
     const ctxCall = rpcMock.mock.calls.find((c) => c[0] === 'dinghy_memory_context')!
     expect(ctxCall[1]).toEqual({ p_chat_guid: 'guest-chat' })
-    expect(m).toEqual({ profile: '', summaries: [], facts: [] })
+    expect(m).toEqual({ profile: '', summaries: [], facts: [], plans: [], files: [] })
 
     // writes: claim at chat level, facts stored without a user_id
     rpcMock.mockImplementation(async (fn: string) => {
