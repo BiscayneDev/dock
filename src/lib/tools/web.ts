@@ -37,7 +37,7 @@ async function tavilySearch(query: string, maxResults: number, recentDays?: numb
     results: (data.results ?? []).map((r) => ({
       title: r.title ?? '',
       url: r.url ?? '',
-      content: (r.content ?? '').slice(0, 500),
+      content: (r.content ?? '').slice(0, 800),
       published_date: r.published_date ?? null,
     })),
   }
