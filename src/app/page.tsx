@@ -101,7 +101,6 @@ export default function LandingPage() {
             </p>
             <div className="cta">
               <a href="#waitlist" className="btn primary">join the beta</a>
-              <a href="sms:+16282647754" className="btn quiet">have an invite? text dinghy</a>
             </div>
           </section>
           <div className="hero-spacer" />
