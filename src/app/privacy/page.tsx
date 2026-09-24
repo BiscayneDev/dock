@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { HarborShell } from '@/components/HarborShell'
 
 export default function PrivacyPolicy() {
@@ -5,93 +6,78 @@ export default function PrivacyPolicy() {
     <HarborShell title="Privacy Policy" showBack backHref="/">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', fontSize: '0.9rem', lineHeight: 1.7, opacity: 0.8 }}>
         <p style={{ fontFamily: "'Outfit', sans-serif", fontSize: '0.75rem', opacity: 0.5 }}>
-          Last updated: March 22, 2026
+          Last updated: September 24, 2026
         </p>
 
         <section>
-          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>What Dinghy Is</h2>
-          <p>
-            Dinghy is an AI assistant that lives in Telegram and helps you manage email, calendar, GitHub, crypto wallets, and health data. It also provides a companion web app (&ldquo;The Harbor&rdquo;) for account management, integrations, and recipe automation.
-          </p>
+          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>What Dinghy is</h2>
+          <p>Dinghy is an AI assistant you text over iMessage (and, for older accounts, Telegram). When you connect accounts, it can read and summarize your email and calendar, draft emails and events, and send or create them only after you confirm. Dinghy is operated by Biscayne Ventures (&ldquo;we&rdquo;). Web pages at getdinghy.sh let you connect accounts and read this policy.</p>
         </section>
 
         <section>
-          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Information We Collect</h2>
-          <p><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Account information:</strong> When you connect via Telegram, we store your Telegram user ID, first name, and username. No phone number or password is collected.</p>
-          <p style={{ marginTop: '0.5rem' }}><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Integration tokens:</strong> When you connect services (Google, GitHub, Oura, WHOOP, MoonPay), we store encrypted OAuth access tokens and refresh tokens. These are used solely to make API calls on your behalf. All tokens are encrypted at rest using AES-256-GCM.</p>
-          <p style={{ marginTop: '0.5rem' }}><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Messages:</strong> Your conversation history with the Dinghy bot is stored to maintain context across sessions. Messages are associated with your user ID and are not shared with other users.</p>
-          <p style={{ marginTop: '0.5rem' }}><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Health data:</strong> If you connect Oura Ring or WHOOP, we access sleep, readiness/recovery, activity, and heart rate data through their APIs. This data is fetched on demand and not stored persistently — it is retrieved each time the agent needs it.</p>
-          <p style={{ marginTop: '0.5rem' }}><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Recipes and automation:</strong> Recipes you create (including instructions, trigger configurations, and run history) are stored in our database.</p>
-          <p style={{ marginTop: '0.5rem' }}><strong style={{ fontFamily: "'Outfit', sans-serif" }}>Wallet information:</strong> If you connect a MoonPay wallet, your wallet address and chain preference are stored. Private keys are never stored by Dinghy — signing happens through the OpenWallet Standard (OWS) client you control.</p>
+          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Information we collect</h2>
+          <p><strong>Your chat identity:</strong> the phone number or Apple ID handle you text Dinghy from (or your Telegram ID), your name if you give it, and your timezone.</p>
+          <p style={{ marginTop: '0.5rem' }}><strong>Messages:</strong> your conversation with Dinghy, so it can keep context. Dinghy may also save short notes it learns about you (for example preferences you tell it) so it can help later.</p>
+          <p style={{ marginTop: '0.5rem' }}><strong>Connected account tokens:</strong> when you connect Google, GitHub, Oura, WHOOP or PayBox, we store OAuth access and refresh tokens, encrypted with AES-256-GCM, plus the email address of each connected Google account.</p>
+          <p style={{ marginTop: '0.5rem' }}><strong>Files and reminders</strong> you ask Dinghy to create.</p>
         </section>
 
         <section>
-          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>How We Use Your Information</h2>
-          <p>We use your information to:</p>
+          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Google user data</h2>
+          <p>If you connect a Google account, Dinghy asks for these permissions:</p>
           <ul style={{ marginTop: '0.5rem', paddingLeft: '1.25rem' }}>
-            <li>Execute the actions you request (send emails, create events, check balances, etc.)</li>
-            <li>Run automated recipes on the schedules and triggers you configure</li>
-            <li>Maintain conversation context so the assistant remembers previous interactions</li>
-            <li>Learn your communication preferences to personalize responses</li>
-            <li>Process payments for paid recipes via the x402 protocol</li>
+            <li><strong>Gmail read</strong> - to search, read and summarize your email when you ask, and for your morning briefing</li>
+            <li><strong>Gmail send</strong> - to send an email or reply you have seen and confirmed</li>
+            <li><strong>Gmail modify</strong> - to label, archive or mark messages read when you ask</li>
+            <li><strong>Calendar</strong> - to read your events and to create or update events you ask for</li>
+            <li><strong>Basic profile (email address)</strong> - to know which Google account is connected</li>
+          </ul>
+          <p style={{ marginTop: '0.5rem' }}><strong>How we use it:</strong> only to provide the features you use in Dinghy, at your request or on a schedule you turned on (like the morning briefing). Dinghy never sends email or calendar invites without showing you the exact draft and getting your yes first.</p>
+          <p style={{ marginTop: '0.5rem' }}><strong>What we store:</strong> your encrypted tokens and the account email. Email and calendar content is fetched when needed to answer you. Dinghy&rsquo;s replies to you (which may quote or summarize that content) are kept in your conversation history. We do not keep a separate copy of your mailbox or calendar.</p>
+          <p style={{ marginTop: '0.5rem' }}><strong>Who sees it:</strong> to answer you, the relevant email or calendar content is processed by the AI model provider behind Dinghy (currently Anthropic, through our own inference gateway). It is used only to generate your reply. We do not sell Google user data, do not use it for advertising, and do not use it to train AI models, ours or anyone else&rsquo;s. People at Biscayne Ventures do not read your Google data, except with your permission, when needed for security or to investigate abuse, or to comply with the law.</p>
+          <p style={{ marginTop: '0.5rem' }}>Dinghy&rsquo;s use and transfer of information received from Google APIs to any other app will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" style={{ color: 'var(--ink)', fontWeight: 600 }}>Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+        </section>
+
+        <section>
+          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Service providers</h2>
+          <p>We use these providers to run Dinghy. Each handles data only to provide its service to us:</p>
+          <ul style={{ marginTop: '0.5rem', paddingLeft: '1.25rem' }}>
+            <li>Supabase - database (encrypted tokens, conversation history)</li>
+            <li>Vercel - hosting</li>
+            <li>Anthropic (via the Shipyard inference gateway) - AI model processing</li>
+            <li>Photon / Spectrum - iMessage delivery</li>
+            <li>E2B - the sandboxed computer Dinghy uses when you ask it to run code or browse</li>
+            <li>Telegram - messaging, for Telegram users</li>
           </ul>
         </section>
 
         <section>
-          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Third-Party Services</h2>
-          <p>Dinghy integrates with the following third-party services. Each has its own privacy policy:</p>
+          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Security</h2>
+          <p>OAuth tokens are encrypted at rest with AES-256-GCM. Connect links are single-use and expire. Access to production systems is limited to the people who run Dinghy.</p>
+        </section>
+
+        <section>
+          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Retention and deletion</h2>
+          <p>We keep your data while your account is active.</p>
           <ul style={{ marginTop: '0.5rem', paddingLeft: '1.25rem' }}>
-            <li>Google (Gmail, Calendar) — for email and calendar management</li>
-            <li>GitHub — for repository, issue, and PR management</li>
-            <li>Oura — for sleep, readiness, and activity data</li>
-            <li>WHOOP — for recovery, strain, and heart rate data</li>
-            <li>MoonPay / OpenWallet — for crypto wallet operations</li>
-            <li>OpenAI — for AI language model processing</li>
-            <li>Telegram — for bot messaging</li>
-            <li>Supabase — for data storage</li>
-            <li>Vercel — for hosting</li>
+            <li>Disconnect a Google account at any time by texting Dinghy (for example &ldquo;disconnect my work gmail&rdquo;). Its tokens are deleted right away. You can also remove access at <a href="https://myaccount.google.com/permissions" style={{ color: 'var(--ink)', fontWeight: 600 }}>myaccount.google.com/permissions</a>.</li>
+            <li>To delete your whole account and all associated data, email <a href="mailto:halsey@biscayneventures.xyz" style={{ color: 'var(--ink)', fontWeight: 600 }}>halsey@biscayneventures.xyz</a>. We delete it within 30 days.</li>
           </ul>
-          <p style={{ marginTop: '0.5rem' }}>Your messages are sent to OpenAI for processing. We do not use your data to train AI models.</p>
-        </section>
-
-        <section>
-          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Data Security</h2>
-          <p>All OAuth tokens are encrypted using AES-256-GCM before storage. Sessions use httpOnly cookies with 7-day expiration. Magic sign-in links use HMAC-SHA256 signatures with 15-minute TTL. We do not store passwords — authentication is handled through Telegram.</p>
-        </section>
-
-        <section>
-          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Data Retention</h2>
-          <p>Your data is retained for as long as your account is active. Conversation history is automatically summarized after 50 messages to manage storage. You can delete your entire account and all associated data at any time from Settings {">"} Danger Zone.</p>
-        </section>
-
-        <section>
-          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Your Rights</h2>
-          <p>You can:</p>
-          <ul style={{ marginTop: '0.5rem', paddingLeft: '1.25rem' }}>
-            <li>Disconnect any integration at any time (removes stored tokens)</li>
-            <li>Delete your entire account and all data from Settings</li>
-            <li>Request a copy of your data by contacting us</li>
-          </ul>
-        </section>
-
-        <section>
-          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>x402 Payments</h2>
-          <p>When using paid recipes or x402 services, payments are processed on-chain (USDC on Base, Ethereum, or Solana). Transaction hashes are stored for record-keeping. Dinghy does not hold or custody any funds — all transactions are initiated through your connected wallet.</p>
         </section>
 
         <section>
           <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Children</h2>
-          <p>Dinghy is not intended for use by anyone under the age of 13. We do not knowingly collect personal information from children.</p>
+          <p>Dinghy is not for anyone under 13, and we do not knowingly collect their information.</p>
         </section>
 
         <section>
           <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Changes</h2>
-          <p>We may update this policy from time to time. Changes will be posted on this page with an updated date.</p>
+          <p>If we change this policy we will update this page and the date above. If a change affects how we use Google user data, we will tell you in Dinghy before it applies.</p>
         </section>
 
         <section>
           <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Contact</h2>
-          <p>Questions about this policy? Reach out via Telegram at <a href="https://t.me/heydeckhandbot" style={{ color: 'var(--ink)', fontWeight: 600 }}>@heydeckhandbot</a>.</p>
+          <p>Questions or requests: <a href="mailto:halsey@biscayneventures.xyz" style={{ color: 'var(--ink)', fontWeight: 600 }}>halsey@biscayneventures.xyz</a>. See also our <Link href="/terms" style={ color: 'var(--ink)', fontWeight: 600 }>terms of service</Link>.</p>
         </section>
       </div>
     </HarborShell>

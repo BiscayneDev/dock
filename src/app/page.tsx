@@ -131,6 +131,7 @@ export default function LandingPage() {
             <span>dinghy · a shipyard product</span>
             <div style={{ display: 'flex', gap: '20px' }}>
               <Link href="/privacy">privacy</Link>
+              <Link href="/terms">terms</Link>
               <a href="https://openshipyard.xyz">shipyard</a>
             </div>
           </div>
