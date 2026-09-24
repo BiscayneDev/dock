@@ -42,6 +42,7 @@ export type SpendSource =
   | 'wallet_send'
   | 'x402'
   | 'recipe'
+  | 'sandbox'
 
 /**
  * Record a settled money movement in the shared spend ledger. Throws on
