@@ -32,7 +32,7 @@ const HEIC = /^image\/hei[cf](-sequence)?$/
 export async function heicToJpeg(buf: Buffer): Promise<Buffer> {
     const { default: convert } = await import('heic-convert')
     const out = await convert({ buffer: buf, format: 'JPEG', quality: 0.85 })
-    return Buffer.from(out as ArrayBuffer)
+    return Buffer.from(out)
 }
 
 /** Extensions treated as readable text even when the MIME type is generic. */
