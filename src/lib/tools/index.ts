@@ -7,8 +7,6 @@ import {
   gmailDraft,
   gmailSend,
   gmailReply,
-  gmailLabel,
-  gmailArchive,
 } from './gmail'
 import {
   gcalListCalendars,
@@ -81,8 +79,6 @@ export const integrationTools: Tool[] = [
   gmailDraft,
   gmailSend,
   gmailReply,
-  gmailLabel,
-  gmailArchive,
   // Google Calendar
   gcalListCalendars,
   gcalListEvents,
