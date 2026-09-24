@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, type FormEvent, type CSSProperties } from 'react'
-import { normalizeEmail, normalizeName, normalizeTwitterHandle } from '@/lib/waitlist'
+import { normalizeEmail, normalizeName, normalizePhone, normalizeTwitterHandle } from '@/lib/waitlist'
 
 const inputStyle: CSSProperties = {
   flex: '1 1 220px', minWidth: 0, height: '48px',
@@ -14,6 +14,7 @@ export function WaitlistSection() {
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [twitter, setTwitter] = useState('')
+  const [phone, setPhone] = useState('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [message, setMessage] = useState('')
 
@@ -31,6 +32,12 @@ export function WaitlistSection() {
       setMessage('Please enter a valid email address.')
       return
     }
+    const cleanPhone = normalizePhone(phone)
+    if (!cleanPhone) {
+      setStatus('error')
+      setMessage("Please enter a valid mobile number - that's where your invite will come from.")
+      return
+    }
     const handle = normalizeTwitterHandle(twitter)
     if (handle === null) {
       setStatus('error')
@@ -43,7 +50,7 @@ export function WaitlistSection() {
       const res = await fetch('/api/waitlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, name: cleanName, twitter: handle }),
+        body: JSON.stringify({ email: cleanEmail, name: cleanName, phone: cleanPhone, twitter: handle }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -55,7 +62,8 @@ export function WaitlistSection() {
       setEmail('')
       setName('')
       setTwitter('')
-      setMessage("You're on the list. We'll text you when a seat opens.")
+      setPhone('')
+      setMessage("you're on the list. i'll text you when a seat opens.")
     } catch {
       setStatus('error')
       setMessage('Something went wrong. Please try again.')
@@ -89,6 +97,18 @@ export function WaitlistSection() {
         maxLength={80}
         value={name}
         onChange={(e) => setName(e.target.value)}
+        disabled={status === 'loading'}
+        style={inputStyle}
+      />
+      <input
+        type="tel"
+        required
+        autoComplete="tel"
+        inputMode="tel"
+        aria-label="Mobile number"
+        placeholder="mobile number"
+        value={phone}
+        onChange={(e) => setPhone(e.target.value)}
         disabled={status === 'loading'}
         style={inputStyle}
       />
@@ -130,6 +150,9 @@ export function WaitlistSection() {
       >
         {status === 'loading' ? 'joining…' : 'join the waitlist'}
       </button>
+      <p style={{ width: '100%', fontFamily: 'var(--sans)', fontSize: '12px', color: 'rgba(200,210,235,0.55)', marginTop: '2px' }}>
+        your invite comes by text from dinghy. no spam - just your seat.
+      </p>
       {status === 'error' && (
         <p style={{ width: '100%', fontFamily: 'var(--sans)', fontSize: '14px', color: 'var(--ember)', marginTop: '4px' }}>
           {message}
