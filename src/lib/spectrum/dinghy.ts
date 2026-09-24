@@ -322,6 +322,8 @@ export async function chat(
         interviewLine?: string
         /** Called once per gateway call with its token usage (metering.ts). */
         onUsage?: (u: GatewayUsage) => void
+        /** Task-aware Shipyard routing for this turn (routing.ts); unset = pinned model. */
+        routing?: RoutingPrefs
     }
 ): Promise<string> {
     const messages = [
@@ -339,7 +341,7 @@ export async function chat(
             'Content-Type': 'application/json',
             Authorization: `Bearer ${opts.apiKey}`,
         },
-        body: JSON.stringify({ model: opts.model, messages, stream: false }),
+        body: JSON.stringify({ ...modelFields(opts.model, opts.routing), messages, stream: false }),
     })
 
     if (!res.ok) {
@@ -363,6 +365,7 @@ export async function chat(
 
 import type { Tool, UserContext } from '@/lib/llm/types'
 import { readGatewayUsage, type GatewayUsage } from './metering'
+import { modelFields, type RoutingPrefs } from './routing'
 
 function reportUsage(
     onUsage: ((u: GatewayUsage) => void) | undefined,
@@ -417,6 +420,8 @@ export async function chatWithTools(
         interviewLine?: string
         /** Called once per gateway call with its token usage (metering.ts). */
         onUsage?: (u: GatewayUsage) => void
+        /** Task-aware Shipyard routing for this turn (routing.ts); unset = pinned model. */
+        routing?: RoutingPrefs
     },
     tools: Tool[],
     ctx: UserContext
@@ -446,7 +451,7 @@ export async function chatWithTools(
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${opts.apiKey}`,
             },
-            body: JSON.stringify({ model: opts.model, messages, tools: toolDefs, stream: false }),
+            body: JSON.stringify({ ...modelFields(opts.model, opts.routing), messages, tools: toolDefs, stream: false }),
         })
         if (!res.ok) {
             const body = await res.text().catch(() => '')
@@ -496,7 +501,7 @@ export async function chatWithTools(
     const res = await fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.apiKey}` },
-        body: JSON.stringify({ model: opts.model, messages, stream: false }),
+        body: JSON.stringify({ ...modelFields(opts.model, opts.routing), messages, stream: false }),
     })
     if (!res.ok) throw new Error(`Gateway ${res.status}: ${res.statusText}`)
     const data = (await res.json()) as {
