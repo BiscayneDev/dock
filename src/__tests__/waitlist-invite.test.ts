@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: () => ({}) }))
 import { buildWaitlistInvite } from '@/lib/email/waitlist-invite'
-import { FIRST_TASK, startSmsLink, startLink } from '@/lib/spectrum/start-link'
+import { START_TASKS, startSmsLink, startLink } from '@/lib/spectrum/start-link'
 import { parseWaitlistInviteCommand, introText, chatGuidForPhone } from '@/lib/spectrum/waitlist-invites'
 import { phoneFromChatGuid } from '@/lib/spectrum/line-for-chat'
 import { prettyPhone } from '@/lib/spectrum/photon-users'
@@ -9,8 +9,10 @@ import { parseInviteCommand } from '@/lib/spectrum/beta-gate'
 
 describe('waitlist invite email', () => {
   it('prefills a useful task with the assigned line, no code', () => {
-    expect(FIRST_TASK).toContain('Find three useful AI stories')
-    expect(startSmsLink('+16286293507')).toBe(`sms:+16286293507?&body=${encodeURIComponent(FIRST_TASK)}`)
+    expect(START_TASKS[0].text).toContain('Find three useful AI stories')
+    expect(startSmsLink('+16286293507')).toBe(`sms:+16286293507?&body=${encodeURIComponent(START_TASKS[0].text)}`)
+    expect(startSmsLink('+16286293507', START_TASKS[1].text)).toContain('Draft%20a%20warm')
+    expect(startSmsLink('+16286293507', '')).toBe('sms:+16286293507')
     expect(startLink('a'.repeat(32))).toBe(`https://www.getdinghy.sh/start/${'a'.repeat(32)}`)
   })
   it('carries their own line and no code', () => {

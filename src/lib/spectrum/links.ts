@@ -20,24 +20,26 @@ function logErr(context: string, err: unknown): void {
  * URL so the sweep's text retry still delivers the link; if the rich send
  * itself fails, the bare URL goes out immediately as a fallback.
  */
-export async function sendLink(space: LinkSender, chatGuid: string, kind: OutboxKind, url: string): Promise<void> {
+export async function sendLink(space: LinkSender, chatGuid: string, kind: OutboxKind, url: string): Promise<boolean> {
     const outboxId = await enqueueOutbox(chatGuid, kind, url, { lease: true })
     try {
         await space.send(richlink(url))
         if (outboxId) await markOutboxSent(outboxId)
-        return
+        return true
     } catch (err) {
         logErr('rich link send failed', err)
     }
     try {
         await space.send(url)
         if (outboxId) await markOutboxSent(outboxId)
+        return true
     } catch (err) {
         if (outboxId) {
             await markOutboxFailed({ id: outboxId, chat_guid: chatGuid, kind, text: url, attempts: 0 }, err)
         } else {
             logErr('link send failed and outbox enqueue failed (untracked)', err)
         }
+        return false
     }
 }
 

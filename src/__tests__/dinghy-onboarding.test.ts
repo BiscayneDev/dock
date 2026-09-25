@@ -22,8 +22,9 @@ describe('onboarding prompt', () => {
 
   it('first message gets the welcome + opener, even with product facts present', () => {
     const p = buildSystemPrompt(productFactsFor('member', facts), true)
-    expect(p).toContain("What's taking up most of your time this week?")
-    expect(p).toContain('contact card just arrived')
+    expect(p).toContain('lead with the useful result')
+    expect(p).not.toContain("What's taking up most of your time this week?")
+    expect(p).toContain('publication date and source link')
   })
 })
 

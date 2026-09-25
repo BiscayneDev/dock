@@ -1,8 +1,12 @@
-/** One editable, useful request that works before connecting any account. */
-export const FIRST_TASK = 'Find three useful AI stories from today and give me the sources.'
+/** Editable first requests that work without connecting an account. */
+export const START_TASKS = [
+  { label: 'Find three useful AI stories today, with sources', text: 'Find three useful AI stories from today and give me the publication dates and sources.' },
+  { label: 'Draft a warm text to get out of dinner tonight', text: "Draft a warm, direct text saying I can't make dinner tonight. Don't invent a reason." },
+  { label: 'Ask my own question', text: '' },
+] as const
 
-export function startSmsLink(line: string): string {
-  return `sms:${line}?&body=${encodeURIComponent(FIRST_TASK)}`
+export function startSmsLink(line: string, text: string = START_TASKS[0].text): string {
+  return text ? `sms:${line}?&body=${encodeURIComponent(text)}` : `sms:${line}`
 }
 
 export function startLink(token: string): string {

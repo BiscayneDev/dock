@@ -35,6 +35,7 @@ import { actionToolsFor, cancelPendingActions, executePendingActionDetailed, has
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { dinghyContactCard } from './contact-card'
 import { dinghyLineFor } from './line-for-chat'
+import { createServerClient } from '@/lib/supabase/server'
 import { hitRateLimit, RATE_NOTICE } from './rate-limit'
 import {
     claimGateNotice,
@@ -137,23 +138,25 @@ function stopTypingReTap(space: InboundSpace, handle: ReturnType<typeof setInter
 
 /** A native threaded reply to `message`, tracked in the outbox like sendText.
  *  Falls back to a plain send when threading isn't available or fails. */
-async function sendThreaded(space: InboundSpace, chatGuid: string, message: InboundMessage, raw: string): Promise<void> {
+async function sendThreaded(space: InboundSpace, chatGuid: string, message: InboundMessage, raw: string): Promise<boolean> {
     const text = toPlainText(raw)
     if (typeof message.reply !== 'function') return sendText(space, chatGuid, 'reply', text)
     const outboxId = await enqueueOutbox(chatGuid, 'reply', text, { lease: true })
     try {
         await message.reply.call(message, text)
         if (outboxId) await markOutboxSent(outboxId)
-        return
+        return true
     } catch (err) {
         logErr('threaded reply failed (plain send instead)', err)
     }
     try {
         await space.send(text)
         if (outboxId) await markOutboxSent(outboxId)
+        return true
     } catch (err) {
         if (outboxId) await markOutboxFailed({ id: outboxId, chat_guid: chatGuid, kind: 'reply', text, attempts: 0 }, err)
         else logErr('send failed and outbox enqueue failed (untracked)', err)
+        return false
     }
 }
 
@@ -204,12 +207,13 @@ async function sendFile(space: InboundSpace, chatGuid: string, file: MadeFile): 
     }
 }
 
-async function sendText(space: InboundSpace, chatGuid: string, kind: OutboxKind, raw: string): Promise<void> {
+async function sendText(space: InboundSpace, chatGuid: string, kind: OutboxKind, raw: string): Promise<boolean> {
     const text = toPlainText(raw)
     const outboxId = await enqueueOutbox(chatGuid, kind, text, { lease: true })
     try {
         await space.send(text)
         if (outboxId) await markOutboxSent(outboxId)
+        return true
     } catch (err) {
         if (outboxId) {
             await markOutboxFailed(
@@ -219,6 +223,7 @@ async function sendText(space: InboundSpace, chatGuid: string, kind: OutboxKind,
         } else {
             logErr('send failed and outbox enqueue failed (untracked)', err)
         }
+        return false
     }
 }
 
@@ -496,26 +501,16 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     // short follow-ups go out over separate turns (skipped if already
     // answered); answers land as profile facts via the memory write path.
     // State failure ends the interview, never the reply.
-    if (includeOpener) {
+    if (includeOpener && role === 'owner') {
         await markOpenerAsked(chatGuid).catch((err) => logErr('interview opener mark failed', err))
     }
     const interviewLine =
-        history.length > 0
+        history.length > 0 && role === 'owner'
             ? await interviewDirective(chatGuid, history[0]?.content ?? '', text, await verifiedWaitlistFirstName(message.sender?.handle, chatGuid)).catch((err) => {
                   logErr('interview step failed', err)
                   return null
               })
             : null
-
-    // First-ever message in this chat: onboarding contact card. DB-backed
-    // (was a process-memory Set on the VPS) so it works statelessly. Our own
-    // vCard, not nativeContactCard(): the shared line's native card is the
-    // pool's "Spectrum" identity.
-    if (history.length === 0) {
-        await (space as InboundSpace & { send(b: unknown): Promise<unknown> })
-            .send(dinghyContactCard(await dinghyLineFor(chatGuid)))
-            .catch((err) => logErr('onboarding contact card failed', err))
-    }
 
     // Gmail/Calendar requested while unconnected: one-use connect link.
     if (textIntents && wantsGoogle(text) && !(await isGoogleConnected(chatGuid).catch(() => false))) {
@@ -869,16 +864,18 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         // iMessage shows markdown as raw asterisks: send and store plain text.
         const plainReply = toPlainText(reply)
         const split = splitStandaloneUrl(plainReply)
+        let answerDelivered = false
         if (split.url) {
             if (split.text) {
-                if (threaded) await sendThreaded(space, chatGuid, message, split.text)
-                else await sendText(space, chatGuid, 'reply', split.text)
+                answerDelivered = threaded
+                    ? await sendThreaded(space, chatGuid, message, split.text)
+                    : await sendText(space, chatGuid, 'reply', split.text)
             }
-            await sendLink(space as LinkSender, chatGuid, 'reply', split.url)
+            answerDelivered = (await sendLink(space as LinkSender, chatGuid, 'reply', split.url)) && (answerDelivered || !split.text)
         } else if (threaded) {
-            await sendThreaded(space, chatGuid, message, plainReply)
+            answerDelivered = await sendThreaded(space, chatGuid, message, plainReply)
         } else {
-            await sendText(space, chatGuid, 'reply', plainReply)
+            answerDelivered = await sendText(space, chatGuid, 'reply', plainReply)
         }
         if (eyes) {
             const handle = await (eyes as Promise<{ unsend?: () => Promise<unknown> } | null>)
@@ -894,6 +891,24 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         }
         // Files made this turn go out after the text: a file link, or an attachment.
         for (const file of fileTools?.files() ?? []) await sendFile(space, chatGuid, file)
+        // The card follows a delivered answer. Claim once across serverless
+        // workers; release the claim if the native card itself fails.
+        if (answerDelivered && plainReply.trim() && role === 'member' && !(actions?.proposal() ?? lastLooseProposal()) && !/^(?:I couldn't|Couldn't|I can't|Sorry|Something went wrong)/i.test(plainReply.trim())) {
+            const db = createServerClient()
+            const { error: claimError } = await db.from('dinghy_first_reply_cards').insert({ chat_guid: chatGuid })
+            if (!claimError) {
+                try {
+                    await (space as InboundSpace & { send(b: unknown): Promise<unknown> })
+                        .send(dinghyContactCard(await dinghyLineFor(chatGuid)))
+                    await sendText(space, chatGuid, 'reply', 'Save this card so this number shows up as Dinghy.')
+                } catch (err) {
+                    logErr('first reply contact card failed', err)
+                    await db.from('dinghy_first_reply_cards').delete().eq('chat_guid', chatGuid)
+                }
+            } else if (claimError.code !== '23505') {
+                logErr('first reply contact card claim failed', claimError)
+            }
+        }
         // Warm-path latency ledger: read these from the function logs.
         console.log(
             `dinghy timing ${JSON.stringify({
