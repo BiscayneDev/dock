@@ -33,10 +33,10 @@ export function WaitlistSection() {
       return
     }
     const phoneRaw = phone.trim()
-    const cleanPhone = phoneRaw ? normalizePhone(phoneRaw) : null
-    if (phoneRaw && !cleanPhone) {
+    const cleanPhone = normalizePhone(phoneRaw)
+    if (!cleanPhone) {
       setStatus('error')
-      setMessage("That mobile number doesn't look right.")
+      setMessage("Enter the mobile number you'll text Dinghy from.")
       return
     }
     const handle = normalizeTwitterHandle(twitter)
@@ -105,8 +105,9 @@ export function WaitlistSection() {
         type="tel"
         autoComplete="tel"
         inputMode="tel"
-        aria-label="Mobile number (optional)"
-        placeholder="Mobile (optional)"
+        aria-label="Mobile number"
+        placeholder="Mobile number"
+        required
         value={phone}
         onChange={(e) => setPhone(e.target.value)}
         disabled={status === 'loading'}
@@ -151,7 +152,7 @@ export function WaitlistSection() {
         {status === 'loading' ? 'Joining…' : 'Join the waitlist'}
       </button>
       <p style={{ width: '100%', fontFamily: 'var(--sans)', fontSize: '12px', color: 'rgba(200,210,235,0.55)', marginTop: '2px' }}>
-        Your invite comes by email. After that, you just text Dinghy. No spam.
+        Use the phone you&apos;ll text Dinghy from. Your invite comes by email with your own number to text. No spam.
       </p>
       {status === 'error' && (
         <p style={{ width: '100%', fontFamily: 'var(--sans)', fontSize: '14px', color: 'var(--ember)', marginTop: '4px' }}>

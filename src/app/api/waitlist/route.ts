@@ -41,11 +41,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!cleanName) {
     return NextResponse.json({ error: 'Please enter your name.' }, { status: 400 })
   }
-  // Optional: blank is fine (Dinghy learns the number when they text in).
   const phoneRaw = typeof phone === 'string' ? phone.trim() : ''
-  const cleanPhone = phoneRaw ? normalizePhone(phoneRaw) : null
-  if (phoneRaw && !cleanPhone) {
-    return NextResponse.json({ error: 'That mobile number doesn\'t look right.' }, { status: 400 })
+  const cleanPhone = normalizePhone(phoneRaw)
+  if (!cleanPhone) {
+    return NextResponse.json({ error: 'Enter the mobile number you\'ll text Dinghy from.' }, { status: 400 })
   }
   const handle = normalizeTwitterHandle(twitter)
   if (handle === null) {

@@ -1,29 +1,31 @@
 import { describe, it, expect, vi } from 'vitest'
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: () => ({}) }))
-import { buildWaitlistInvite, inviteTextBody, smsLink } from '@/lib/email/waitlist-invite'
+import { buildWaitlistInvite } from '@/lib/email/waitlist-invite'
+import { FIRST_TASK, startSmsLink, startLink } from '@/lib/spectrum/start-link'
 import { parseWaitlistInviteCommand, introText, chatGuidForPhone } from '@/lib/spectrum/waitlist-invites'
 import { phoneFromChatGuid } from '@/lib/spectrum/line-for-chat'
 import { prettyPhone } from '@/lib/spectrum/photon-users'
 import { parseInviteCommand } from '@/lib/spectrum/beta-gate'
 
 describe('waitlist invite email', () => {
-  it('prefills a text with first name, no code', () => {
-    expect(inviteTextBody('Ada Lovelace')).toBe("Hey Dinghy, it's Ada")
-    expect(inviteTextBody('')).toBe('Hey Dinghy')
-    expect(smsLink('+16286293507', 'Ada')).toMatch(/^sms:\+16286293507\?&body=Hey%20Dinghy/)
+  it('prefills a useful task with the assigned line, no code', () => {
+    expect(FIRST_TASK).toContain('Find three useful AI stories')
+    expect(startSmsLink('+16286293507')).toBe(`sms:+16286293507?&body=${encodeURIComponent(FIRST_TASK)}`)
+    expect(startLink('a'.repeat(32))).toBe(`https://www.getdinghy.sh/start/${'a'.repeat(32)}`)
   })
   it('carries their own line and no code', () => {
-    const { subject, text, html } = buildWaitlistInvite('Ada', '+16286293507')
+    const { subject, text, html } = buildWaitlistInvite('Ada', '+16286293507', 'a'.repeat(32))
     expect(subject).toBe("You're in the Dinghy beta")
     expect(text).toContain('Hey Ada,')
-    expect(text).toContain('No code, no setup.')
+    expect(text).toContain('No code or setup.')
     expect(text).not.toMatch(/i live in your texts/i)
     expect(text).not.toMatch(/[A-Z2-9]{4}-[A-Z2-9]{4}/)
-    expect(text).toContain('sms:+16286293507')
+    expect(text).toContain(`https://www.getdinghy.sh/start/${'a'.repeat(32)}`)
     expect(text).toContain('(628) 629-3507')
     expect(html).toContain('(628) 629-3507')
     expect(text).not.toContain('264-7754')
     expect(html).toContain('Text Dinghy')
+    expect(html).not.toContain('sms:')
   })
 })
 

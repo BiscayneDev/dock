@@ -17,6 +17,7 @@
  * No phone on file means no Photon user and no line that can reach them, so
  * those rows are skipped and named in the reply.
  */
+import { randomBytes } from 'node:crypto'
 import { createServerClient } from '@/lib/supabase/server'
 import { sendWaitlistInvite } from '@/lib/email/waitlist-invite'
 import { firstName } from '@/lib/email/waitlist-confirmation'
@@ -41,7 +42,7 @@ export function parseWaitlistInviteCommand(text: string): WaitlistInviteCommand 
   return null
 }
 
-interface Row { id: string; email: string; name: string | null; status: string; phone: string | null }
+interface Row { id: string; email: string; name: string | null; status: string; phone: string | null; start_token: string | null }
 
 export function introText(name: string): string {
   const first = firstName(name)
@@ -91,7 +92,7 @@ export async function markWaitlistFirstInbound(phone: string | null | undefined,
 export async function runWaitlistInvites(_ownerChat: string, cmd: WaitlistInviteCommand): Promise<string> {
   if (!process.env.RESEND_API_KEY) return "Can't send invites yet - RESEND_API_KEY isn't set."
   const supabase = createServerClient()
-  const query = supabase.from('waitlist').select('id, email, name, status, phone')
+  const query = supabase.from('waitlist').select('id, email, name, status, phone, start_token')
   const { data, error } = cmd.kind === 'next'
     ? await query.eq('status', 'joined').order('created_at', { ascending: true }).limit(cmd.count)
     : await query.eq('email', cmd.email).in('status', ['joined', 'invited']).limit(1)
@@ -120,8 +121,15 @@ export async function runWaitlistInvites(_ownerChat: string, cmd: WaitlistInvite
     )
     if (allowErr) { failed.push(`${row.email} (couldn't allowlist)`); continue }
 
+    // An opaque token keeps the phone, assigned line and name out of the URL.
+    // Reuse it for an invite resend so an earlier email never breaks.
+    const token = row.start_token ?? randomBytes(24).toString('base64url')
+    if (!row.start_token) {
+      const { error: tokenError } = await supabase.from('waitlist').update({ start_token: token }).eq('id', row.id)
+      if (tokenError) { failed.push(`${row.email} (couldn't create start link)`); continue }
+    }
     const didText = await sendIntroText(row.phone, introText(row.name ?? ''))
-    const didEmail = await sendWaitlistInvite(row.email, row.name ?? '', user.assignedPhoneNumber)
+    const didEmail = await sendWaitlistInvite(row.email, row.name ?? '', user.assignedPhoneNumber, token)
     if (!didText && !didEmail) { failed.push(row.email); continue }
 
     const now = new Date().toISOString()
@@ -137,4 +145,18 @@ export async function runWaitlistInvites(_ownerChat: string, cmd: WaitlistInvite
   if (noPhone.length) lines.push(`No phone on file, skipped: ${noPhone.join(', ')}`)
   if (failed.length) lines.push(`Couldn't invite: ${failed.join(', ')}`)
   return lines.join('\n')
+}
+
+/** Only use the name from the exact phone + bound chat identity, never from a text. */
+export async function verifiedWaitlistFirstName(phone: string | null | undefined, chatGuid: string): Promise<string | null> {
+  if (!phone || !/^\+[1-9]\d{7,14}$/.test(phone)) return null
+  const supabase = createServerClient()
+  const { data: identity, error: identityError } = await supabase.from('spectrum_identities')
+    .select('handle').eq('chat_guid', chatGuid).maybeSingle()
+  if (identityError || identity?.handle !== phone) return null
+  const { data: rows, error } = await supabase.from('waitlist')
+    .select('name').eq('phone', phone).in('status', ['invited', 'active']).limit(2)
+  if (error || rows?.length !== 1) return null
+  const name = firstName(rows[0].name ?? '')
+  return name && /^[\p{L}][\p{L}'-]{0,39}$/u.test(name) ? name : null
 }

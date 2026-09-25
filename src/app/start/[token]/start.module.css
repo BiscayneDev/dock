@@ -1,0 +1,13 @@
+.page { min-height: 100vh; display: grid; place-items: center; padding: 32px 20px; background: #060B1A; color: #F3EDE3; font-family: Arial, sans-serif; }
+.shell { width: min(100%, 520px); padding: 32px; border: 1px solid #33405A; border-radius: 20px; background: #0C1530; }
+.brand { display: flex; align-items: center; gap: 12px; font: 600 28px Georgia, serif; }
+.brand img { border-radius: 12px; }
+.eyebrow { margin: 48px 0 8px; color: #F2A380; font-size: 12px; text-transform: uppercase; letter-spacing: .14em; }
+.shell h1 { margin: 0 0 18px; font: 500 clamp(36px, 8vw, 54px)/1.08 Georgia, serif; letter-spacing: -.035em; }
+.intro { max-width: 45ch; line-height: 1.55; color: #C7D0E0; }
+.sample { margin: 26px 0; padding: 20px; border-left: 3px solid #F2A380; border-radius: 0 8px 8px 0; background: #16213B; line-height: 1.5; }
+.button { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-radius: 10px; background: #F3EDE3; color: #0C1530; text-decoration: none; font-weight: 700; }
+.button:hover, .button:focus-visible { background: #FFE0C9; }
+.fallback { margin: 30px 0 12px; color: #C7D0E0; font-size: 14px; line-height: 1.6; }
+.fallback a { color: #F3EDE3; font-size: 20px; font-weight: 700; }
+.fine { margin: 0; color: #A9B7CD; font-size: 13px; }

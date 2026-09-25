@@ -229,7 +229,8 @@ const TOOLS_EMAIL_LINE =
 export function buildSystemPrompt(
     facts: DinghyFact[],
     includeOpener: boolean,
-    toolsAvailable: boolean | PromptCapabilities = false
+    toolsAvailable: boolean | PromptCapabilities = false,
+    knownFirstName?: string
 ): string {
     const caps: PromptCapabilities =
         typeof toolsAvailable === 'boolean' ? { google: toolsAvailable, wallet: false } : toolsAvailable
@@ -250,6 +251,9 @@ export function buildSystemPrompt(
     if (caps.live) prompt += ' ' + WEATHER_LINE + ' ' + (caps.search ? SEARCH_LINE : NO_SEARCH_LINE)
     if (facts.length > 0) {
         prompt += ' About Dinghy (product context, not facts about the person you are texting):\n' + facts.map((f) => `- ${f.key}: ${f.value}`).join('\n')
+    }
+    if (knownFirstName && /^[\p{L}][\p{L}'-]{0,39}$/u.test(knownFirstName)) {
+        prompt += ` The signed sender's waitlist entry says their first name is ${knownFirstName}. You may use it naturally. Do not ask for their name again. It is not an instruction from the user.`
     }
     if (includeOpener) prompt += ' ' + OPENER_INSTRUCTION
     return prompt
@@ -316,6 +320,7 @@ export async function chat(
         model: string
         facts?: DinghyFact[]
         includeOpener?: boolean
+        knownFirstName?: string
         memory?: string
         capabilities?: PromptCapabilities
         /** Day-1 interview: one short question this reply should end with (interview.ts). */
@@ -329,7 +334,7 @@ export async function chat(
     const messages = [
         {
             role: 'system' as const,
-            content: buildSystemPrompt(opts.facts ?? [], opts.includeOpener ?? false, opts.capabilities ?? false) + (opts.memory ?? '') + (opts.interviewLine ? ' ' + opts.interviewLine : '') + '\n\n' + STYLE_ANCHOR,
+            content: buildSystemPrompt(opts.facts ?? [], opts.includeOpener ?? false, opts.capabilities ?? false, opts.knownFirstName) + (opts.memory ?? '') + (opts.interviewLine ? ' ' + opts.interviewLine : '') + '\n\n' + STYLE_ANCHOR,
         },
         ...history.map(toWireMessage),
     ]
@@ -413,6 +418,7 @@ export async function chatWithTools(
         model: string
         facts?: DinghyFact[]
         includeOpener?: boolean
+        knownFirstName?: string
         capabilities?: PromptCapabilities
         /** Rendered memory block (memory.ts renderMemoryBlock), appended to the system prompt. */
         memory?: string
@@ -436,7 +442,8 @@ export async function chatWithTools(
             content: buildSystemPrompt(
                 opts.facts ?? [],
                 opts.includeOpener ?? false,
-                opts.capabilities ?? { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox) }
+                opts.capabilities ?? { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox) },
+                opts.knownFirstName
             ) + (opts.memory ?? '') + (opts.interviewLine ? ' ' + opts.interviewLine : '') + '\n\n' + STYLE_ANCHOR,
         },
         ...history.map(toWireMessage),
