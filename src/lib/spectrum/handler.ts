@@ -780,9 +780,9 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             logErr('tool context load failed', err)
             return null
         })
-        // Right model for the task, via Shipyard (routing.ts). One call per turn,
-        // so research stays on the strong model through the whole tool loop.
-        const routing = routingFor(text)
+        // Right model for the task: Shipyard's Jev judges each call's tier
+        // (routing.ts). Dinghy only pins the provider allowlist.
+        const routing = routingFor()
         let reply: string
         let toolCalls = 0
         let iterations = 0
