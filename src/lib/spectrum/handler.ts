@@ -65,6 +65,7 @@ import {
 } from './memory-commands'
 import { buildIcs } from './ics'
 import { markWaitlistFirstInbound, parseWaitlistInviteCommand, runWaitlistInvites, verifiedWaitlistFirstName } from './waitlist-invites'
+import { balanceText, inviteBalance, isInviteStatusCommand, mintMemberInvite } from './user-invites'
 import { interviewDirective, markOpenerAsked } from './interview'
 import { attachment } from 'spectrum-ts'
 import { ackTapback, normalizeInbound, reactionDecision, shouldThread, tapback, withReplyContext, type Inbound, type MessageLike } from './tapbacks'
@@ -456,6 +457,40 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             } catch (err) {
                 logErr('invite mint failed', err)
                 await sendText(space, chatGuid, 'error_notice', "Couldn't make an invite code. Try again in a moment.")
+            }
+            return
+        }
+    }
+
+    // Member: shareable invite link ("invite", "invite 3") + balance
+    // ("invites", "my invites"). Grants come from the admin (migration 053).
+    if (textIntents && role === 'member') {
+        if (isInviteStatusCommand(text)) {
+            try {
+                await sendText(space, chatGuid, 'reply', balanceText(await inviteBalance(chatGuid)))
+            } catch (err) {
+                logErr('invite balance failed', err)
+                await sendText(space, chatGuid, 'error_notice', "Couldn't check your invites. Try again in a moment.")
+            }
+            return
+        }
+        const uses = parseInviteCommand(text)
+        if (uses !== null) {
+            try {
+                const mint = await mintMemberInvite(chatGuid, uses)
+                if (!mint.ok) {
+                    await sendText(space, chatGuid, 'reply', "You don't have any invites left. Ask us for more and we'll top you up.")
+                    return
+                }
+                await sendText(
+                    space,
+                    chatGuid,
+                    'reply',
+                    `Here's your invite link - send it to whoever you want in:\n${mint.link}\nIt's good for ${uses} ${uses === 1 ? 'person' : 'people'} and expires in 30 days. ${mint.remaining} left after this.`,
+                )
+            } catch (err) {
+                logErr('member invite mint failed', err)
+                await sendText(space, chatGuid, 'error_notice', "Couldn't make an invite link. Try again in a moment.")
             }
             return
         }
