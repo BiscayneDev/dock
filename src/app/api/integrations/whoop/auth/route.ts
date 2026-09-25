@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth/session'
 import { getWhoopAuthUrl } from '@/lib/integrations/whoop'
 import { beginConnectByToken } from '@/lib/connect-token'
 
-export async function GET(request?: NextRequest): Promise<NextResponse> {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   // In-thread connect flow (iMessage, no web session): one-use token -> state.
   const connectToken = request?.nextUrl?.searchParams.get('connect')
   if (connectToken) {
