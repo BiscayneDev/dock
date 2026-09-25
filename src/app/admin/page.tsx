@@ -85,7 +85,7 @@ export default function OperatorDashboard() {
           ['First text', data.counts.awaitingFirstText, 'Invited, not yet active'],
           ['Active 7d', data.counts.active7d, 'Members who texted'],
           ['Retrying', data.counts.retryingSends, 'Pending sends with attempts'],
-          ['Today cost', `$${Number(data.counts.todayCostUsd).toFixed(2)}`, 'Inference + sandbox'],
+          ['Today cost', `$${Number(data.counts.todayCostUsd).toFixed(2)}`, 'All accounts · inference + sandbox'],
         ].map(([label, value, note]) => <div className="dock-card" key={label} style={{ gap: '0.15rem', padding: '0.9rem' }}><span className="meta-text">{label}</span><strong style={{ fontSize: '1.45rem' }}>{value}</strong><span style={{ fontSize: '0.69rem', opacity: 0.7 }}>{note}</span></div>)}
       </div>
       <section style={{ display: 'grid', gap: '0.55rem' }}>

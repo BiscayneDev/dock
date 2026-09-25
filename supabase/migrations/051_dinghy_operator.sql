@@ -24,9 +24,9 @@ people as (
          w.line_assigned_at, w.invite_sent_at,
          i.chat_guid,
          (select max(m.created_at) from spectrum_messages m
-          where m.chat_guid = i.chat_guid and m.role = 'user') as last_inbound_at,
+          where m.chat_guid = i.chat_guid and m.role = 'user' and m.created_at >= w.first_text_at) as last_inbound_at,
          (select max(m.created_at) from spectrum_messages m
-          where m.chat_guid = i.chat_guid and m.role = 'assistant') as last_reply_at
+          where m.chat_guid = i.chat_guid and m.role = 'assistant' and m.created_at >= w.first_text_at) as last_reply_at
   from waitlist w
   left join lateral (
     select si.chat_guid from spectrum_identities si
