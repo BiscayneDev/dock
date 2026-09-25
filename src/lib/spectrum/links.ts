@@ -21,7 +21,7 @@ function logErr(context: string, err: unknown): void {
  * itself fails, the bare URL goes out immediately as a fallback.
  */
 export async function sendLink(space: LinkSender, chatGuid: string, kind: OutboxKind, url: string): Promise<void> {
-    const outboxId = await enqueueOutbox(chatGuid, kind, url)
+    const outboxId = await enqueueOutbox(chatGuid, kind, url, { lease: true })
     try {
         await space.send(richlink(url))
         if (outboxId) await markOutboxSent(outboxId)

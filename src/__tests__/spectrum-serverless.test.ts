@@ -111,6 +111,26 @@ describe('enqueueOutbox', () => {
     fromMock.mockReturnValue({ insert: vi.fn().mockReturnValue({ select }) })
     expect(await enqueueOutbox('guid-1', 'reply', 'hi')).toBeNull()
   })
+
+  it('takes the 60s lease at insert when the caller sends the row itself', async () => {
+    const single = vi.fn().mockResolvedValue({ data: { id: 'row-1' }, error: null })
+    const select = vi.fn().mockReturnValue({ single })
+    const insert = vi.fn().mockReturnValue({ select })
+    fromMock.mockReturnValue({ insert })
+    await enqueueOutbox('guid-1', 'brief', 'hi', { lease: true })
+    const row = insert.mock.calls[0]![0] as Record<string, unknown>
+    expect(typeof row.lease_claimed_at).toBe('string')
+  })
+
+  it('stays sweep-eligible immediately by default (sweep-only producers)', async () => {
+    const single = vi.fn().mockResolvedValue({ data: { id: 'row-1' }, error: null })
+    const select = vi.fn().mockReturnValue({ single })
+    const insert = vi.fn().mockReturnValue({ select })
+    fromMock.mockReturnValue({ insert })
+    await enqueueOutbox('guid-1', 'reminder', 'hi')
+    const row = insert.mock.calls[0]![0] as Record<string, unknown>
+    expect('lease_claimed_at' in row).toBe(false)
+  })
 })
 
 describe('outbox lease', () => {

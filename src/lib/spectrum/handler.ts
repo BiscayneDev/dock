@@ -140,7 +140,7 @@ function stopTypingReTap(space: InboundSpace, handle: ReturnType<typeof setInter
 async function sendThreaded(space: InboundSpace, chatGuid: string, message: InboundMessage, raw: string): Promise<void> {
     const text = toPlainText(raw)
     if (typeof message.reply !== 'function') return sendText(space, chatGuid, 'reply', text)
-    const outboxId = await enqueueOutbox(chatGuid, 'reply', text)
+    const outboxId = await enqueueOutbox(chatGuid, 'reply', text, { lease: true })
     try {
         await message.reply.call(message, text)
         if (outboxId) await markOutboxSent(outboxId)
@@ -206,7 +206,7 @@ async function sendFile(space: InboundSpace, chatGuid: string, file: MadeFile): 
 
 async function sendText(space: InboundSpace, chatGuid: string, kind: OutboxKind, raw: string): Promise<void> {
     const text = toPlainText(raw)
-    const outboxId = await enqueueOutbox(chatGuid, kind, text)
+    const outboxId = await enqueueOutbox(chatGuid, kind, text, { lease: true })
     try {
         await space.send(text)
         if (outboxId) await markOutboxSent(outboxId)
