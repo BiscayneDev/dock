@@ -71,7 +71,7 @@ export function renderOgCard(input: OgCardInput): ImageResponse {
                 { name: 'Schibsted Grotesk', data: fontData(schibsted400), weight: 400, style: 'normal' },
                 { name: 'DM Mono', data: fontData(dmMono500), weight: 500, style: 'normal' },
             ],
-            headers: { 'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800' },
+            headers: { 'Cache-Control': 'public, max-age=300, s-maxage=300, stale-while-revalidate=86400' },
         },
     )
 }
