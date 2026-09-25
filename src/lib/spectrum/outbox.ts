@@ -59,12 +59,33 @@ export async function claimInboundDelivery(
     }
 }
 
-/** Enqueue a text send. Returns the row id for self-claim by the enqueuer. */
-export async function enqueueOutbox(chatGuid: string, kind: OutboxKind, text: string): Promise<string | null> {
+/**
+ * Enqueue a text send. Returns the row id for self-claim by the enqueuer.
+ *
+ * Pass { lease: true } when the caller immediately sends the row itself: the
+ * insert takes the 60s lease, so the every-minute sweep can't claim and
+ * double-send the row while the direct send is still in flight (the cause of
+ * the duplicated morning brief on 2026-09-25 - a brief's card send takes
+ * 10s+, and the row was claimable the whole time). markOutboxSent and
+ * markOutboxFailed both release the lease; if the function dies mid-send,
+ * the lease expires and the sweep retries. Producers that rely on the sweep
+ * to send (reminders) leave it false so the next sweep picks the row up.
+ */
+export async function enqueueOutbox(
+    chatGuid: string,
+    kind: OutboxKind,
+    text: string,
+    opts?: { lease?: boolean }
+): Promise<string | null> {
     const supabase = createServerClient()
     const { data, error } = await supabase
         .from('spectrum_outbox')
-        .insert({ chat_guid: chatGuid, kind, text })
+        .insert({
+            chat_guid: chatGuid,
+            kind,
+            text,
+            ...(opts?.lease ? { lease_claimed_at: new Date().toISOString() } : {}),
+        })
         .select('id')
         .single()
     if (error) {

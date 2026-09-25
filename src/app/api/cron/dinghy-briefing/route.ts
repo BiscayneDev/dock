@@ -192,8 +192,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             // Outbox first: the row exists before the attempt, so a kill or
             // a send failure is always retried by the spectrum-sweep cron.
             const outboxId = brief
-                ? await enqueueOutbox(chatGuid, 'brief', JSON.stringify({ card: brief.card, text }))
-                : await enqueueOutbox(chatGuid, 'reply', text)
+                ? await enqueueOutbox(chatGuid, 'brief', JSON.stringify({ card: brief.card, text }), { lease: true })
+                : await enqueueOutbox(chatGuid, 'reply', text, { lease: true })
             if (!outboxId) {
                 console.error(`briefing outbox enqueue failed (${chatGuid})`)
                 results.errors++
