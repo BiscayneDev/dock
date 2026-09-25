@@ -10,7 +10,7 @@ interface HarborShellProps {
   backHref?: string
 }
 
-export function HarborShell({ children, title, showBack, backHref = '/harbor' }: HarborShellProps) {
+export function HarborShell({ children, title, showBack, backHref = "/" }: HarborShellProps) {
   const [dateStr, setDateStr] = useState('')
 
   useEffect(() => {
@@ -110,7 +110,7 @@ export function HarborShell({ children, title, showBack, backHref = '/harbor' }:
                 </svg>
               </Link>
             ) : (
-              <Link href="/harbor" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none', color: 'var(--ink)' }}>
+              <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none', color: 'var(--ink)' }}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M5 21h14M12 21v-12M8 6c1.5 0 4-3 4-3s2.5 3 4 3" />
                 </svg>
@@ -124,7 +124,7 @@ export function HarborShell({ children, title, showBack, backHref = '/harbor' }:
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <span style={{ fontFamily: "'Lora', serif", fontStyle: 'italic', fontSize: '0.85rem', opacity: 0.6 }}>{dateStr}</span>
-            <Link href="/dashboard" style={{
+            <Link href="/" style={{
               width: '32px', height: '32px', border: '1.5px solid var(--ink)', borderRadius: '50%',
               display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: 'var(--cream)',
             }}>

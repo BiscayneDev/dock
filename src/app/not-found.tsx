@@ -20,7 +20,7 @@ export default function NotFound() {
       <p style={{ opacity: 0.6, marginBottom: '1.5rem', textAlign: 'center', maxWidth: '24rem' }}>
         This page doesn&apos;t exist. Let&apos;s get you back on course.
       </p>
-      <Link href="/harbor" className="dock-btn-primary" style={{ padding: '0.6rem 1.25rem' }}>
+      <Link href="/" className="dock-btn-primary" style={{ padding: '0.6rem 1.25rem' }}>
         Back to Harbor
       </Link>
     </div>

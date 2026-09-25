@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useCallback, useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { HarborShell } from '@/components/HarborShell'
 
 interface ConnectedIntegrations { google: boolean; github: boolean; openwallet: boolean; oura: boolean; whoop: boolean; twitter: boolean; paybox: boolean }
@@ -24,7 +24,6 @@ export default function OnboardingPageWrapper() {
 }
 
 function OnboardingPage() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const justConnected = searchParams.get('connected')
   const [authenticated, setAuthenticated] = useState(false)
@@ -82,7 +81,7 @@ function OnboardingPage() {
   if (loading) return <HarborShell title="Welcome aboard" showBack><div style={{ paddingTop: '5rem', textAlign: 'center', opacity: 0.5 }}>Loading...</div></HarborShell>
 
   return (
-    <HarborShell title="Welcome aboard" showBack backHref="/harbor">
+    <HarborShell title="Welcome aboard" showBack backHref="/">
       {justConnected && (
         <div className="dock-card" style={{ padding: '0.75rem 1rem', marginBottom: '0.75rem', flexDirection: 'row', alignItems: 'center', gap: '0.5rem' }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--mesh-mint)" strokeWidth="2.5" strokeLinecap="round"><path d="M20 6L9 17l-5-5" /></svg>
@@ -222,44 +221,14 @@ function OnboardingPage() {
           </div>
 
           {anyConnected && (
-            <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {/* Primary CTA: Workspace */}
-              <button
-                onClick={() => router.push('/dashboard/recipes/workspace?from=onboarding')}
-                className="dock-card"
-                style={{
-                  padding: '1.5rem',
-                  cursor: 'pointer',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  backgroundImage: 'linear-gradient(135deg, rgba(91,167,205,0.15) 0%, rgba(148,196,163,0.15) 100%)',
-                  textAlign: 'left',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-                  </svg>
-                  <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: '1.1rem', letterSpacing: '-0.02em' }}>
-                    Try the Workspace
-                  </span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="2" strokeLinecap="round" style={{ marginLeft: 'auto' }}>
-                    <path d="M5 12h14M12 5l7 7-7 7" />
-                  </svg>
-                </div>
-                <p style={{ fontSize: '0.85rem', opacity: 0.6, lineHeight: 1.5 }}>
-                  Test your integrations live, explore x402 APIs, and build your first recipe with the agent.
+            <div style={{ marginTop: '1.5rem' }}>
+              <div className="dock-card" style={{ padding: '1.5rem', textAlign: 'center', alignItems: 'center' }}>
+                <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.05rem', letterSpacing: '-0.02em' }}>
+                  You&apos;re all set
                 </p>
-              </button>
-
-              {/* Secondary options */}
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
-                <button onClick={() => router.push('/dashboard/recipes/gallery')} className="dock-btn-secondary" style={{ flex: 1 }}>
-                  Browse ideas
-                </button>
-                <a href="https://t.me/heydeckhandbot" className="dock-btn-secondary" style={{ flex: 1, textAlign: 'center', textDecoration: 'none' }}>
-                  Back to Telegram
-                </a>
+                <p style={{ fontSize: '0.85rem', opacity: 0.6, lineHeight: 1.5, marginTop: '0.35rem' }}>
+                  Your accounts are connected. Just text Dinghy — everything else happens over iMessage.
+                </p>
               </div>
             </div>
           )}
