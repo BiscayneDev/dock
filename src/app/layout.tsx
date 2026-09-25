@@ -52,7 +52,7 @@ export const metadata: Metadata = {
     siteName: "Dinghy",
     images: [
       {
-        url: `${SITE_URL}/api/og`,
+        url: `${SITE_URL}/api/og?v=2`,
         width: 1200,
         height: 630,
         alt: "Dinghy · Your first mate, one text away",
@@ -67,7 +67,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: TITLE,
     description: DESCRIPTION,
-    images: [`${SITE_URL}/api/og`],
+    images: [`${SITE_URL}/api/og?v=2`],
   },
 
   // Other
