@@ -299,7 +299,7 @@ async function runPendingYes(space: InboundSpace, chatGuid: string, message: Inb
     if (executed?.ok) {
         // ✅ on their "y" once it actually ran (a tapback can't be tapbacked).
         if (!viaTapback) {
-            await sendConfirmedReaction(message, () => sendText(space, chatGuid, 'reply', '✅')).catch((err) =>
+            await sendConfirmedReaction(message, async () => { await sendText(space, chatGuid, 'reply', '✅') }).catch((err) =>
                 logErr('confirmation reaction failed', err)
             )
         }
