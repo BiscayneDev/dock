@@ -63,7 +63,7 @@ import {
     WIPE_PROMPT,
 } from './memory-commands'
 import { buildIcs } from './ics'
-import { markWaitlistFirstInbound, parseWaitlistInviteCommand, runWaitlistInvites } from './waitlist-invites'
+import { markWaitlistFirstInbound, parseWaitlistInviteCommand, runWaitlistInvites, verifiedWaitlistFirstName } from './waitlist-invites'
 import { interviewDirective, markOpenerAsked } from './interview'
 import { attachment } from 'spectrum-ts'
 import { ackTapback, normalizeInbound, reactionDecision, shouldThread, tapback, withReplyContext, type Inbound, type MessageLike } from './tapbacks'
@@ -489,6 +489,9 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     // profile. dinghy_facts are product-wide context (every chat has them),
     // so they no longer suppress it.
     const includeOpener = history.length === 0 && !memory.profile
+    const knownFirstName = includeOpener
+        ? await verifiedWaitlistFirstName(message.sender?.handle, chatGuid).catch(() => null)
+        : null
     // Day-1 interview (F2): when the opener's answer arrives, at most two
     // short follow-ups go out over separate turns (skipped if already
     // answered); answers land as profile facts via the memory write path.
@@ -498,7 +501,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     }
     const interviewLine =
         history.length > 0
-            ? await interviewDirective(chatGuid, history[0]?.content ?? '', text).catch((err) => {
+            ? await interviewDirective(chatGuid, history[0]?.content ?? '', text, await verifiedWaitlistFirstName(message.sender?.handle, chatGuid)).catch((err) => {
                   logErr('interview step failed', err)
                   return null
               })
@@ -816,6 +819,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 routing,
                 facts,
                 includeOpener,
+                knownFirstName: knownFirstName ?? undefined,
                 capabilities: { ...(toolCtx ? capabilitiesFor(toolCtx) : guestCapabilities()), spend: true, reminders: true },
                 memory: memoryBlock,
                 interviewLine: interviewLine ?? undefined,
@@ -850,6 +854,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 routing,
                 facts,
                 includeOpener,
+                knownFirstName: knownFirstName ?? undefined,
                 memory: memoryBlock,
                 interviewLine: interviewLine ?? undefined,
                 onUsage,

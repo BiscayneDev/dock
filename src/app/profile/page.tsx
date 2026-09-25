@@ -12,8 +12,6 @@ export const metadata: Metadata = {
 
 export const dynamic = 'force-dynamic'
 
-const DINGHY_SMS = 'sms:+16282647754'
-
 /** What Dinghy can reach. Read-only everywhere from iMessage today. */
 const ACCOUNTS: Array<{ provider: string; name: string; desc: string; auth: string }> = [
   { provider: 'google', name: 'Google', desc: 'Gmail and Calendar', auth: '/api/integrations/google/auth' },
@@ -52,6 +50,10 @@ export default async function ProfilePage({
   const tz = user?.timezone && user.timezone !== 'UTC' ? (user.timezone as string) : 'America/New_York'
   const chatGuid = (identity?.chat_guid as string | undefined) ?? null
   const phone = formatPhone((identity?.handle as string | undefined) ?? null)
+
+  const { data: assigned } = phone ? await supabase.from('waitlist')
+    .select('dinghy_line').eq('phone', identity?.handle as string).in('status', ['invited', 'active']).not('dinghy_line', 'is', null).limit(1).maybeSingle() : { data: null }
+  const assignedLine = (assigned?.dinghy_line as string | undefined) ?? null
 
   let reminders: Array<{ id: string; message: string; fire_at: string }> = []
   if (chatGuid) {
@@ -115,7 +117,7 @@ export default async function ProfilePage({
         </ul>
       </section>
 
-      <a className={styles.cta} href={DINGHY_SMS}>text dinghy <span aria-hidden="true">{'\u2192'}</span></a>
+      {assignedLine ? <a className={styles.cta} href={`sms:${assignedLine}`}>Text Dinghy <span aria-hidden="true">{'\u2192'}</span></a> : <p className={styles.meta}>Use the number in your Dinghy invitation to text. If you need it again, check your invite email.</p>}
     </CoastShell>
   )
 }

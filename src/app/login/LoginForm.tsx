@@ -4,7 +4,6 @@ import { useState, type FormEvent } from 'react'
 import Link from 'next/link'
 import styles from './login.module.css'
 
-const DINGHY_SMS = 'sms:+16282647754'
 
 function formatUs(v: string): string {
   const d = v.replace(/\D/g, '').replace(/^1(?=\d{10})/, '').slice(0, 10)
@@ -66,7 +65,7 @@ export function LoginForm({ notice }: { notice?: string | null }): React.JSX.Ele
           <button type="button" className={styles.link} onClick={() => { setStep('phone'); setError(null); setResent(false) }}>Use a different number</button>
           <button type="button" className={styles.link} disabled={busy} onClick={() => sendCode()}>Send a new code</button>
         </div>
-        <p className={styles.divider}>Have an invite code? <a href={DINGHY_SMS}>Text it to Dinghy</a> first, then sign in.</p>
+        <p className={styles.divider}>Have an invite code? Text it to the Dinghy number you were given, then sign in.</p>
       </form>
     )
   }
@@ -85,7 +84,7 @@ export function LoginForm({ notice }: { notice?: string | null }): React.JSX.Ele
       {error && <p className={styles.error}>{error}</p>}
       <button className={styles.button} type="submit" disabled={busy || phone.replace(/\D/g, '').length < 10}>{busy ? 'sending\u2026' : 'send code'} <span aria-hidden="true">{"\u2192"}</span></button>
       <p className={styles.fine}>Use the number you text Dinghy from. See our <Link href="/privacy">privacy policy</Link>.</p>
-      <p className={styles.divider}>New to Dinghy? It&rsquo;s invite-only for now. <Link href="/#waitlist">Get on the list</Link>, or <a href={DINGHY_SMS}>text Dinghy</a> if you have an invite code.</p>
+      <p className={styles.divider}>New to Dinghy? It&rsquo;s invite-only for now. <Link href="/#waitlist">Get on the list</Link>. If you have an invite code, text it to the Dinghy number you were given.</p>
     </form>
   )
 }

@@ -95,12 +95,12 @@ async function storeAnswer(chatGuid: string, content: string, type: 'person' | '
  * or null for "no question this turn". Advances state and files answers as
  * profile facts. Total questions ever: 2 (the opener is separate).
  */
-export async function interviewDirective(chatGuid: string, firstUserText: string, answerText: string): Promise<string | null> {
+export async function interviewDirective(chatGuid: string, firstUserText: string, answerText: string, knownFirstName?: string | null): Promise<string | null> {
     try {
         const stage = await getStage(chatGuid)
         if (stage === STAGE_OPENER_ASKED) {
             if (!isSubstantive(answerText)) return null
-            const nameKnown = NAME_TOLD.test(firstUserText) || NAME_TOLD.test(answerText)
+            const nameKnown = Boolean(knownFirstName) || NAME_TOLD.test(firstUserText) || NAME_TOLD.test(answerText)
             const morningsKnown = MORNINGS_TOLD.test(firstUserText) || MORNINGS_TOLD.test(answerText)
             if (nameKnown && morningsKnown) {
                 await setStage(chatGuid, STAGE_DONE)
