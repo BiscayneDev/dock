@@ -25,7 +25,6 @@ export const metadata: Metadata = {
   creator: "Dinghy",
   keywords: [
     "AI assistant",
-    "Telegram bot",
     "email automation",
     "calendar management",
     "GitHub integration",
