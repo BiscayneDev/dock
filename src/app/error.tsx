@@ -33,7 +33,7 @@ export default function ErrorPage({
         >
           Try again
         </button>
-        <a href="/harbor" className="dock-btn-secondary" style={{ padding: '0.6rem 1.25rem' }}>
+        <a href="/" className="dock-btn-secondary" style={{ padding: '0.6rem 1.25rem' }}>
           Back to Harbor
         </a>
       </div>

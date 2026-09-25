@@ -6,7 +6,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/api/', '/profile', '/dashboard', '/admin', '/harbor', '/onboarding', '/connect', '/auth/'],
+        disallow: ['/api/', '/profile', '/admin', '/onboarding', '/connect', '/auth/'],
       },
     ],
     sitemap: 'https://www.getdinghy.sh/sitemap.xml',
