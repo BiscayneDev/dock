@@ -1,0 +1,419 @@
+'use client'
+
+import { useCallback, useEffect, useState } from 'react'
+import { AdminShell } from '@/components/brand/AdminShell'
+
+interface Stats {
+  overview: {
+    totalUsers: number; activeUsers7d: number; totalMessages: number
+    totalRecipes: number; totalRuns: number; totalIntegrations: number
+    activeReminders: number; avgRunDurationMs: number
+  }
+  runsByStatus: Record<string, number>
+  recipesByTrigger: Record<string, number>
+  integrationsByProvider: Record<string, number>
+  recentUsers: Array<{ id: string; name: string | null; telegram_username: string | null; created_at: string }>
+  topRecipes: Array<{ id: string; name: string; run_count: number; trigger_type: string; enabled: boolean }>
+}
+
+interface UserRow {
+  id: string; name: string | null; telegram_username: string | null; telegram_id: number
+  timezone: string; wallet_address: string | null; is_admin: boolean; created_at: string
+  messageCount: number; recipeCount: number; integrations: string[]
+}
+
+interface UsersData { users: UserRow[]; total: number; page: number; pages: number }
+
+interface WaitlistRow { id: string; email: string; name: string | null; status: string; created_at: string }
+
+interface DinghyData {
+  usage: {
+    totalCalls: number; calls24h: number; tokens24h: number; cost24h: number
+    calls7d: number; tokens7d: number; cost7d: number
+    calls30d: number; cost30d: number; byModel: Record<string, number>
+  }
+  chats: Array<{ chat_guid: string; handle: string | null; calls: number; tokens: number; cost_usd: number; last_used: string | null }>
+  daily: Array<{ date: string; calls: number; tokens: number; cost_usd: number }>
+  waitlist: { total: number; byStatus: Record<string, number>; recent: WaitlistRow[] }
+  invites: {
+    total: number; invites7d: number; redeemed: number
+    recent: Array<{ note: string | null; uses: number; max_uses: number; created_at: string; expires_at: string }>
+    allowlist: { total: number; added7d: number; recent: Array<{ chat: string; note: string | null; role: string; added_at: string }> }
+  }
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  success: 'var(--mesh-mint)', failed: 'var(--mesh-peach)', skipped: 'var(--ink)',
+  running: 'var(--mesh-cyan)', test: 'var(--mesh-yellow)',
+}
+
+const TRIGGER_LABELS: Record<string, string> = {
+  schedule: 'Schedule', email_event: 'Email', github_event: 'GitHub',
+  keyword: 'Keyword', manual: 'Manual',
+}
+
+export default function AdminDashboard() {
+  const [stats, setStats] = useState<Stats | null>(null)
+  const [usersData, setUsersData] = useState<UsersData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState<'overview' | 'users' | 'dinghy'>('overview')
+  const [dinghy, setDinghy] = useState<DinghyData | null>(null)
+  const [unauthorized, setUnauthorized] = useState(false)
+
+  const loadStats = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/stats', { credentials: 'include' })
+      // No admin session — show the not-authorized state (server is the gate).
+      if (res.status === 403) { setUnauthorized(true); return }
+      if (res.ok) setStats(await res.json())
+      else setUnauthorized(true)
+    } catch { setUnauthorized(true) } finally { setLoading(false) }
+  }, [])
+
+  const loadUsers = useCallback(async (page = 0) => {
+    const res = await fetch(`/api/admin/users?page=${page}`, { credentials: 'include' })
+    if (res.ok) setUsersData(await res.json())
+  }, [])
+
+  const loadDinghy = useCallback(async () => {
+    const res = await fetch('/api/admin/dinghy', { credentials: 'include' })
+    if (res.ok) setDinghy(await res.json())
+  }, [])
+
+  useEffect(() => { loadStats() }, [loadStats])
+  useEffect(() => { if (tab === 'users' && !usersData && !unauthorized) loadUsers() }, [tab, usersData, loadUsers, unauthorized])
+  useEffect(() => { if (tab === 'dinghy' && !dinghy && !unauthorized) loadDinghy() }, [tab, dinghy, loadDinghy, unauthorized])
+
+  // Not authorized — the server session check is the real gate; this just
+  // renders its outcome instead of asking for a client-side password.
+  if (unauthorized) {
+    return (
+      <AdminShell title="Legacy admin" showBack backHref="/admin">
+        <div className="dock-card" style={{ padding: '2rem 1.5rem', alignItems: 'center', textAlign: 'center', marginTop: '3rem' }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4, marginBottom: '1rem' }}>
+            <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          <p style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Not authorized</p>
+          <p style={{ fontSize: '0.85rem', opacity: 0.5 }}>You need an admin account to view this page.</p>
+        </div>
+      </AdminShell>
+    )
+  }
+
+  if (loading) return <AdminShell title="Legacy admin" showBack backHref="/admin"><div style={{ paddingTop: '5rem', textAlign: 'center', opacity: 0.5 }}>Loading...</div></AdminShell>
+  if (!stats) return <AdminShell title="Legacy admin" showBack backHref="/admin"><div style={{ paddingTop: '5rem', textAlign: 'center', opacity: 0.5 }}>Access denied</div></AdminShell>
+
+  const o = stats.overview
+
+  return (
+    <AdminShell title="Legacy admin" showBack backHref="/admin">
+      {/* Tab switcher */}
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
+        <button onClick={() => setTab('overview')} className={tab === 'overview' ? 'dock-btn-primary' : 'dock-btn-secondary'} style={{ flex: 1 }}>Overview</button>
+        <button onClick={() => setTab('users')} className={tab === 'users' ? 'dock-btn-primary' : 'dock-btn-secondary'} style={{ flex: 1 }}>Users</button>
+        <button onClick={() => setTab('dinghy')} className={tab === 'dinghy' ? 'dock-btn-primary' : 'dock-btn-secondary'} style={{ flex: 1 }}>Dinghy</button>
+      </div>
+
+      {/* Shipyard Inference — operator P&L, collection, settlements */}
+      <a href="/admin/shipyard" className="dock-card" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: '0.9rem 1.1rem', marginBottom: '1rem', textDecoration: 'none', color: 'inherit', borderColor: 'color-mix(in srgb, var(--mesh-mint) 45%, transparent)' }}>
+        <span><span style={{ marginRight: '0.5rem' }}>💰</span><span style={{ fontWeight: 700 }}>Shipyard Inference</span><span className="meta-text" style={{ marginLeft: '0.5rem' }}>revenue · margin · settlements</span></span>
+        <span style={{ color: 'var(--mesh-mint)' }}>→</span>
+      </a>
+
+      {tab === 'overview' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {/* KPI cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.75rem' }}>
+            {[
+              { label: 'Total Users', value: o.totalUsers, icon: '👤' },
+              { label: 'Active (7d)', value: o.activeUsers7d, icon: '🟢' },
+              { label: 'Messages', value: o.totalMessages.toLocaleString(), icon: '💬' },
+              { label: 'Recipes', value: o.totalRecipes, icon: '⚡' },
+              { label: 'Recipe Runs', value: o.totalRuns.toLocaleString(), icon: '🔄' },
+              { label: 'Integrations', value: o.totalIntegrations, icon: '🔌' },
+              { label: 'Reminders', value: o.activeReminders, icon: '⏰' },
+              { label: 'Avg Run Time', value: o.avgRunDurationMs > 0 ? `${(o.avgRunDurationMs / 1000).toFixed(1)}s` : '—', icon: '⏱️' },
+            ].map((kpi) => (
+              <div key={kpi.label} className="dock-card" style={{ alignItems: 'center', textAlign: 'center', padding: '1rem' }}>
+                <span style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>{kpi.icon}</span>
+                <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 800, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>{kpi.value}</span>
+                <span className="meta-text" style={{ marginTop: '0.25rem' }}>{kpi.label}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Run status breakdown */}
+          <div className="dock-card">
+            <p className="section-title">Run Status</p>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              {Object.entries(stats.runsByStatus).map(([status, count]) => (
+                <div key={status} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: STATUS_COLORS[status] ?? 'var(--ink)' }} />
+                  <span style={{ fontSize: '0.85rem' }}>{status}</span>
+                  <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 700 }}>{count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Integrations by provider */}
+          <div className="dock-card">
+            <p className="section-title">Connected Integrations</p>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              {Object.entries(stats.integrationsByProvider).map(([provider, count]) => (
+                <div key={provider} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span className="meta-text" style={{ border: '1px solid var(--ink)', borderRadius: '1rem', padding: '0.15rem 0.5rem' }}>{provider}</span>
+                  <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 700 }}>{count}</span>
+                </div>
+              ))}
+              {Object.keys(stats.integrationsByProvider).length === 0 && <span style={{ opacity: 0.4, fontSize: '0.85rem' }}>None yet</span>}
+            </div>
+          </div>
+
+          {/* Recipes by trigger */}
+          <div className="dock-card">
+            <p className="section-title">Recipes by Trigger</p>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              {Object.entries(stats.recipesByTrigger).map(([trigger, count]) => (
+                <div key={trigger} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span style={{ fontSize: '0.85rem' }}>{TRIGGER_LABELS[trigger] ?? trigger}</span>
+                  <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 700 }}>{count}</span>
+                </div>
+              ))}
+              {Object.keys(stats.recipesByTrigger).length === 0 && <span style={{ opacity: 0.4, fontSize: '0.85rem' }}>None yet</span>}
+            </div>
+          </div>
+
+          {/* Top recipes */}
+          <div className="dock-card">
+            <p className="section-title">Top Recipes</p>
+            {stats.topRecipes.length === 0 ? <span style={{ opacity: 0.4, fontSize: '0.85rem' }}>None yet</span> : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {stats.topRecipes.map((r) => (
+                  <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: r.enabled ? 'var(--mesh-mint)' : 'var(--ink)', opacity: r.enabled ? 1 : 0.3 }} />
+                      <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 600 }}>{r.name}</span>
+                    </div>
+                    <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 700 }}>{r.run_count} runs</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Recent signups */}
+          <div className="dock-card">
+            <p className="section-title">Recent Signups</p>
+            {stats.recentUsers.length === 0 ? <span style={{ opacity: 0.4, fontSize: '0.85rem' }}>None yet</span> : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                {stats.recentUsers.map((u) => (
+                  <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                    <span>{u.name ?? u.telegram_username ?? 'Unknown'}</span>
+                    <span style={{ opacity: 0.4 }}>{new Date(u.created_at).toLocaleDateString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'users' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {!usersData ? (
+            <div style={{ textAlign: 'center', opacity: 0.5, paddingTop: '3rem' }}>Loading users...</div>
+          ) : (
+            <>
+              <p className="meta-text">{usersData.total} users · Page {usersData.page + 1} of {usersData.pages || 1}</p>
+              {usersData.users.map((user) => (
+                <div key={user.id} className="dock-card" style={{ padding: '1rem 1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <p style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 700, fontSize: '0.95rem' }}>
+                        {user.name ?? 'Unnamed'}
+                        {user.is_admin && <span style={{ marginLeft: '0.5rem', fontSize: '0.7rem', border: '1px solid var(--mesh-peach)', borderRadius: '1rem', padding: '0.1rem 0.4rem', color: 'var(--mesh-peach)' }}>Admin</span>}
+                      </p>
+                      <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>
+                        {user.telegram_username ? `@${user.telegram_username}` : `ID: ${user.telegram_id}`} · {user.timezone}
+                      </p>
+                    </div>
+                    <span style={{ fontSize: '0.7rem', opacity: 0.4 }}>{new Date(user.created_at).toLocaleDateString()}</span>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', fontSize: '0.8rem' }}>
+                    <span><strong style={{ fontFamily: 'var(--font-schibsted), sans-serif' }}>{user.messageCount}</strong> msgs</span>
+                    <span><strong style={{ fontFamily: 'var(--font-schibsted), sans-serif' }}>{user.recipeCount}</strong> recipes</span>
+                    {user.integrations.length > 0 && (
+                      <span>{user.integrations.join(', ')}</span>
+                    )}
+                    {user.wallet_address && (
+                      <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', opacity: 0.5 }}>{user.wallet_address.slice(0, 6)}...{user.wallet_address.slice(-4)}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {usersData.pages > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
+                  <button disabled={usersData.page === 0} onClick={() => loadUsers(usersData.page - 1)} className="dock-btn-secondary" style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }}>Prev</button>
+                  <button disabled={usersData.page >= usersData.pages - 1} onClick={() => loadUsers(usersData.page + 1)} className="dock-btn-secondary" style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }}>Next</button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {tab === 'dinghy' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {!dinghy ? (
+            <div style={{ textAlign: 'center', opacity: 0.5, paddingTop: '3rem' }}>Loading Dinghy metrics...</div>
+          ) : (
+            <>
+              {/* Usage KPIs */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.75rem' }}>
+                {[
+                  { label: 'Total Calls', value: dinghy.usage.totalCalls.toLocaleString(), icon: '⛵' },
+                  { label: 'Calls (24h)', value: dinghy.usage.calls24h, icon: '🟢' },
+                  { label: 'Calls (7d)', value: dinghy.usage.calls7d, icon: '📈' },
+                  { label: 'Tokens (24h)', value: dinghy.usage.tokens24h.toLocaleString(), icon: '🔤' },
+                  { label: 'Tokens (7d)', value: dinghy.usage.tokens7d.toLocaleString(), icon: '🔤' },
+                  { label: 'Cost (24h)', value: `$${dinghy.usage.cost24h.toFixed(4)}`, icon: '💵' },
+                  { label: 'Cost (7d)', value: `$${dinghy.usage.cost7d.toFixed(4)}`, icon: '💵' },
+                  { label: 'Cost (30d)', value: `$${dinghy.usage.cost30d.toFixed(4)}`, icon: '💵' },
+                ].map((kpi) => (
+                  <div key={kpi.label} className="dock-card" style={{ alignItems: 'center', textAlign: 'center', padding: '1rem' }}>
+                    <span style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>{kpi.icon}</span>
+                    <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 800, fontSize: '1.35rem', letterSpacing: '-0.02em' }}>{kpi.value}</span>
+                    <span className="meta-text" style={{ marginTop: '0.25rem' }}>{kpi.label}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Daily calls, last 14 days */}
+              <div className="dock-card">
+                <p className="section-title">Daily Calls (14d)</p>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: 80 }}>
+                  {dinghy.daily.map((d) => {
+                    const max = Math.max(...dinghy.daily.map((x) => x.calls), 1)
+                    return (
+                      <div key={d.date} title={`${d.date}: ${d.calls} calls, $${d.cost_usd.toFixed(4)}`}
+                        style={{ flex: 1, height: `${Math.max((d.calls / max) * 100, 2)}%`, backgroundColor: 'var(--mesh-cyan)', borderRadius: '2px 2px 0 0', opacity: 0.85 }} />
+                    )
+                  })}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem' }}>
+                  <span className="meta-text">{dinghy.daily[0]?.date}</span>
+                  <span className="meta-text">{dinghy.daily[dinghy.daily.length - 1]?.date}</span>
+                </div>
+              </div>
+
+              {/* Beta invites */}
+              <div className="dock-card">
+                <p className="section-title">Beta Invites</p>
+                <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                  <div><span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 800, fontSize: '1.2rem' }}>{dinghy.invites.total}</span> <span className="meta-text">codes issued</span></div>
+                  <div><span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 800, fontSize: '1.2rem' }}>{dinghy.invites.invites7d}</span> <span className="meta-text">this week</span></div>
+                  <div><span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 800, fontSize: '1.2rem' }}>{dinghy.invites.redeemed}</span> <span className="meta-text">redeemed</span></div>
+                  <div><span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 800, fontSize: '1.2rem' }}>{dinghy.invites.allowlist.total}</span> <span className="meta-text">allowlisted</span></div>
+                  <div><span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 800, fontSize: '1.2rem' }}>{dinghy.invites.allowlist.added7d}</span> <span className="meta-text">allowlisted 7d</span></div>
+                </div>
+                {dinghy.invites.recent.length === 0 ? <span style={{ opacity: 0.4, fontSize: '0.85rem' }}>No invite codes yet</span> : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.75rem' }}>
+                    {dinghy.invites.recent.slice(0, 10).map((i) => (
+                      <div key={i.created_at + (i.note ?? '')} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                        <span>{i.note ?? 'unnamed invite'}</span>
+                        <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <span className="meta-text">{i.uses}/{i.max_uses} used</span>
+                          <span style={{ opacity: 0.4 }}>{new Date(i.created_at).toLocaleDateString()}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {dinghy.invites.allowlist.recent.length > 0 && (
+                  <>
+                    <p className="section-title" style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}>Allowlist (recent)</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                      {dinghy.invites.allowlist.recent.slice(0, 8).map((a) => (
+                        <div key={a.chat} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                          <span style={{ fontFamily: 'monospace' }}>{a.chat} <span style={{ opacity: 0.5 }}>{a.note ? `· ${a.note}` : ''}</span></span>
+                          <span style={{ opacity: 0.4 }}>{new Date(a.added_at).toLocaleDateString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Waitlist funnel */}
+              <div className="dock-card">
+                <p className="section-title">Waitlist — {dinghy.waitlist.total} signups</p>
+                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                  {(['joined', 'invited', 'active'] as const).map((s) => (
+                    <div key={s} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: s === 'active' ? 'var(--mesh-mint)' : s === 'invited' ? 'var(--mesh-yellow)' : 'var(--mesh-cyan)' }} />
+                      <span style={{ fontSize: '0.85rem', textTransform: 'capitalize' }}>{s}</span>
+                      <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 700 }}>{dinghy.waitlist.byStatus[s] ?? 0}</span>
+                    </div>
+                  ))}
+                </div>
+                {dinghy.waitlist.recent.length === 0 ? <span style={{ opacity: 0.4, fontSize: '0.85rem' }}>No signups yet</span> : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                    {dinghy.waitlist.recent.slice(0, 15).map((w) => (
+                      <div key={w.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                        <span>{w.name ? `${w.name} · ${w.email}` : w.email}</span>
+                        <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <span className="meta-text" style={{ border: '1px solid var(--ink)', borderRadius: '1rem', padding: '0.05rem 0.45rem' }}>{w.status}</span>
+                          <span style={{ opacity: 0.4 }}>{new Date(w.created_at).toLocaleDateString()}</span>
+                        </span>
+                      </div>
+                    ))}
+                    {dinghy.waitlist.recent.length > 15 && <span className="meta-text">…{dinghy.waitlist.recent.length - 15} more</span>}
+                  </div>
+                )}
+              </div>
+
+              {/* Per-chat usage */}
+              <div className="dock-card">
+                <p className="section-title">Usage by Chat (30d)</p>
+                {dinghy.chats.length === 0 ? <span style={{ opacity: 0.4, fontSize: '0.85rem' }}>No metered usage yet</span> : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {dinghy.chats.map((c) => (
+                      <div key={c.chat_guid} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
+                        <div>
+                          <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 600 }}>{c.handle ?? c.chat_guid.slice(0, 20) + '…'}</span>
+                          <span className="meta-text" style={{ marginLeft: '0.5rem' }}>last {c.last_used ? new Date(c.last_used).toLocaleDateString() : '—'}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '1rem' }}>
+                          <span>{c.calls} calls</span>
+                          <span>{c.tokens.toLocaleString()} tok</span>
+                          <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 700 }}>${c.cost_usd.toFixed(4)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Models */}
+              <div className="dock-card">
+                <p className="section-title">Calls by Model (30d)</p>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  {Object.entries(dinghy.usage.byModel).map(([model, count]) => (
+                    <div key={model} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <span className="meta-text" style={{ border: '1px solid var(--ink)', borderRadius: '1rem', padding: '0.15rem 0.5rem' }}>{model}</span>
+                      <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 700 }}>{count}</span>
+                    </div>
+                  ))}
+                  {Object.keys(dinghy.usage.byModel).length === 0 && <span style={{ opacity: 0.4, fontSize: '0.85rem' }}>None yet</span>}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </AdminShell>
+  )
+}

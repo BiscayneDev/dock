@@ -66,6 +66,27 @@ export async function sendIntroText(phone: string, text: string): Promise<boolea
   }
 }
 
+/** Mark an invited signup active only after an allowlisted, authenticated Photon inbound.
+ * The signed webhook supplies the sender handle; a guessed chat ID or email is
+ * not enough to identify a waitlist person. Conditional update is idempotent.
+ */
+export async function markWaitlistFirstInbound(phone: string | null | undefined, chatGuid: string): Promise<void> {
+  if (!phone || !/^\+[1-9]\d{7,14}$/.test(phone)) return
+  const supabase = createServerClient()
+  const { data: identity, error: identityError } = await supabase.from('spectrum_identities')
+    .select('handle').eq('chat_guid', chatGuid).maybeSingle()
+  if (identityError) throw new Error(`identity check failed: ${identityError.message}`)
+  if (identity?.handle !== phone) return
+  const { data: matches, error: matchError } = await supabase.from('waitlist')
+    .select('id').eq('phone', phone).eq('status', 'invited').limit(2)
+  if (matchError) throw new Error(`waitlist match failed: ${matchError.message}`)
+  if (matches?.length !== 1) return
+  const { error } = await supabase.from('waitlist')
+    .update({ status: 'active', first_text_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', matches[0].id).eq('status', 'invited')
+  if (error) throw new Error(`waitlist activation failed: ${error.message}`)
+}
+
 /** Returns a short lowercase summary for the owner. */
 export async function runWaitlistInvites(_ownerChat: string, cmd: WaitlistInviteCommand): Promise<string> {
   if (!process.env.RESEND_API_KEY) return "Can't send invites yet - RESEND_API_KEY isn't set."
@@ -90,7 +111,7 @@ export async function runWaitlistInvites(_ownerChat: string, cmd: WaitlistInvite
     if (!row.phone) { noPhone.push(row.email); continue }
     const user = await registerPhotonUser(row.phone, row.name)
     if (!user) { failed.push(`${row.email} (couldn't assign a line)`); continue }
-    await supabase.from('waitlist').update({ photon_user_id: user.id, dinghy_line: user.assignedPhoneNumber }).eq('id', row.id)
+    await supabase.from('waitlist').update({ photon_user_id: user.id, dinghy_line: user.assignedPhoneNumber, line_assigned_at: new Date().toISOString() }).eq('id', row.id)
 
     // Registered number = credential: allowlist it (no code).
     const { error: allowErr } = await supabase.from('beta_allowlist').upsert(
@@ -105,7 +126,7 @@ export async function runWaitlistInvites(_ownerChat: string, cmd: WaitlistInvite
 
     const now = new Date().toISOString()
     await supabase.from('waitlist')
-      .update({ status: 'invited', updated_at: now, ...(didText ? { intro_texted_at: now } : {}) })
+      .update({ status: 'invited', updated_at: now, ...((didEmail || didText) ? { invite_sent_at: now } : {}), ...(didText ? { intro_texted_at: now } : {}) })
       .eq('id', row.id)
     ;(didText ? texted : emailed).push(`${who} -> ${user.assignedPhoneNumber}`)
   }

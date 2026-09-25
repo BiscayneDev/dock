@@ -63,7 +63,7 @@ import {
     WIPE_PROMPT,
 } from './memory-commands'
 import { buildIcs } from './ics'
-import { parseWaitlistInviteCommand, runWaitlistInvites } from './waitlist-invites'
+import { markWaitlistFirstInbound, parseWaitlistInviteCommand, runWaitlistInvites } from './waitlist-invites'
 import { interviewDirective, markOpenerAsked } from './interview'
 import { attachment } from 'spectrum-ts'
 import { ackTapback, normalizeInbound, reactionDecision, shouldThread, tapback, withReplyContext, type Inbound, type MessageLike } from './tapbacks'
@@ -370,6 +370,14 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     } catch (err) {
         logErr('beta gate unavailable (message not processed)', err)
         return
+    }
+
+    if (role) {
+        // The signed sender and bound identity must agree. Mark the first
+        // allowed inbound before rate limits and intent-specific early returns.
+        await markWaitlistFirstInbound(message.sender?.handle, chatGuid).catch((err) =>
+            logErr('waitlist activation failed', err)
+        )
     }
 
     // Per-chat rate limit (owner exempt), before any LLM or gate work.
