@@ -24,7 +24,7 @@ interface UserRow {
 
 interface UsersData { users: UserRow[]; total: number; page: number; pages: number }
 
-interface WaitlistRow { id: string; email: string; status: string; created_at: string }
+interface WaitlistRow { id: string; email: string; name: string | null; status: string; created_at: string }
 
 interface DinghyData {
   usage: {
@@ -35,6 +35,11 @@ interface DinghyData {
   chats: Array<{ chat_guid: string; handle: string | null; calls: number; tokens: number; cost_usd: number; last_used: string | null }>
   daily: Array<{ date: string; calls: number; tokens: number; cost_usd: number }>
   waitlist: { total: number; byStatus: Record<string, number>; recent: WaitlistRow[] }
+  invites: {
+    total: number; invites7d: number; redeemed: number
+    recent: Array<{ note: string | null; uses: number; max_uses: number; created_at: string; expires_at: string }>
+    allowlist: { total: number; added7d: number; recent: Array<{ chat: string; note: string | null; role: string; added_at: string }> }
+  }
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -304,6 +309,44 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
+              {/* Beta invites */}
+              <div className="dock-card">
+                <p className="section-title">Beta Invites</p>
+                <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                  <div><span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 800, fontSize: '1.2rem' }}>{dinghy.invites.total}</span> <span className="meta-text">codes issued</span></div>
+                  <div><span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 800, fontSize: '1.2rem' }}>{dinghy.invites.invites7d}</span> <span className="meta-text">this week</span></div>
+                  <div><span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 800, fontSize: '1.2rem' }}>{dinghy.invites.redeemed}</span> <span className="meta-text">redeemed</span></div>
+                  <div><span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 800, fontSize: '1.2rem' }}>{dinghy.invites.allowlist.total}</span> <span className="meta-text">allowlisted</span></div>
+                  <div><span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 800, fontSize: '1.2rem' }}>{dinghy.invites.allowlist.added7d}</span> <span className="meta-text">allowlisted 7d</span></div>
+                </div>
+                {dinghy.invites.recent.length === 0 ? <span style={{ opacity: 0.4, fontSize: '0.85rem' }}>No invite codes yet</span> : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.75rem' }}>
+                    {dinghy.invites.recent.slice(0, 10).map((i) => (
+                      <div key={i.created_at + (i.note ?? '')} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                        <span>{i.note ?? 'unnamed invite'}</span>
+                        <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <span className="meta-text">{i.uses}/{i.max_uses} used</span>
+                          <span style={{ opacity: 0.4 }}>{new Date(i.created_at).toLocaleDateString()}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {dinghy.invites.allowlist.recent.length > 0 && (
+                  <>
+                    <p className="section-title" style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}>Allowlist (recent)</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                      {dinghy.invites.allowlist.recent.slice(0, 8).map((a) => (
+                        <div key={a.chat} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                          <span style={{ fontFamily: 'monospace' }}>{a.chat} <span style={{ opacity: 0.5 }}>{a.note ? `· ${a.note}` : ''}</span></span>
+                          <span style={{ opacity: 0.4 }}>{new Date(a.added_at).toLocaleDateString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
               {/* Waitlist funnel */}
               <div className="dock-card">
                 <p className="section-title">Waitlist — {dinghy.waitlist.total} signups</p>
@@ -320,7 +363,7 @@ export default function AdminDashboard() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                     {dinghy.waitlist.recent.slice(0, 15).map((w) => (
                       <div key={w.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                        <span>{w.email}</span>
+                        <span>{w.name ? `${w.name} · ${w.email}` : w.email}</span>
                         <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                           <span className="meta-text" style={{ border: '1px solid var(--ink)', borderRadius: '1rem', padding: '0.05rem 0.45rem' }}>{w.status}</span>
                           <span style={{ opacity: 0.4 }}>{new Date(w.created_at).toLocaleDateString()}</span>
