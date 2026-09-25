@@ -41,8 +41,26 @@ export async function GET(): Promise<NextResponse> {
     supabase.from('inference_usage').select('chat_guid, input_tokens, output_tokens, actual_cost_usd, created_at')
       .not('chat_guid', 'is', null).gte('created_at', since30d).order('created_at', { ascending: false }),
     supabase.from('spectrum_identities').select('chat_guid, handle'),
-    supabase.from('waitlist').select('id, email, status, created_at').order('created_at', { ascending: false }).limit(200),
+    supabase.from('waitlist').select('id, email, name, status, created_at, updated_at, dinghy_line, intro_texted_at').order('created_at', { ascending: false }).limit(200),
   ])
+
+  // Beta invites + allowlist (invite activity, separate from signups)
+  const [{ data: inviteRows }, { data: allowRows }] = await Promise.all([
+    supabase.from('beta_invites').select('code_hash, note, max_uses, uses, created_at, expires_at, created_by_chat')
+      .order('created_at', { ascending: false }).limit(100),
+    supabase.from('beta_allowlist').select('chat_guid, note, role, added_at')
+      .order('added_at', { ascending: false }).limit(100),
+  ])
+  const invites = inviteRows ?? []
+  const allowlist = allowRows ?? []
+  const invites7d = invites.filter((i) => (i.created_at as string) >= since7d).length
+  const allowAdded7d = allowlist.filter((a) => (a.added_at as string) >= since7d).length
+  const redeemed = invites.reduce((acc, i) => acc + (i.uses as number ?? 0), 0)
+  // Normalize allowlist guids for display (never show full numbers).
+  const maskGuid = (g: string) => {
+    const m = g.match(/(\d{2})\d+(\d{4})$/)
+    return m ? `+${m[1]}••••${m[2]}` : g.slice(0, 10) + '…'
+  }
 
   // Model breakdown needs actual rows (head:true gives only count) — cheap extra query.
   const { data: modelRows } = await supabase
@@ -127,6 +145,28 @@ export async function GET(): Promise<NextResponse> {
       total: waitlistTotal ?? waitlist.length,
       byStatus: waitlistByStatus,
       recent: waitlist.slice(0, 50),
+    },
+    invites: {
+      total: invites.length,
+      invites7d,
+      redeemed,
+      recent: invites.slice(0, 20).map((i) => ({
+        note: (i.note as string) ?? null,
+        uses: i.uses as number,
+        max_uses: i.max_uses as number,
+        created_at: i.created_at as string,
+        expires_at: i.expires_at as string,
+      })),
+      allowlist: {
+        total: allowlist.length,
+        added7d: allowAdded7d,
+        recent: allowlist.slice(0, 20).map((a) => ({
+          chat: maskGuid(a.chat_guid as string),
+          note: (a.note as string) ?? null,
+          role: (a.role as string) ?? 'member',
+          added_at: a.added_at as string,
+        })),
+      },
     },
   })
 }
