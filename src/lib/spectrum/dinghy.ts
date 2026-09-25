@@ -98,15 +98,15 @@ const BASE_PROMPT =
     SITE_LINE
 
 const OPENER_INSTRUCTION =
-    'This is their very first message to you. If it asks for something, help with it first. ' +
-    'Then, in two short lines at most: say hi as Dinghy, mention your contact card just arrived so they can save it, ' +
-    'and ask: "What\'s taking up most of your time this week?" Work from their answer.'
+    'This is their first message. Do the task they sent and lead with the useful result. ' +
+    'Do not add a welcome, onboarding tour, contact-card mention, or a question about their week. ' +
+    'For current news, use dated search results, include each publication date and source link, and never fill an empty result with a guess.'
 
 /**
  * System prompt assembly. Durable facts ride along on every message so a
  * thin-history chat never reads as a total stranger. The opener question
- * fires ONLY for a genuinely new user (zero facts AND zero history) — it
- * used to be unconditional, so every history-load blip re-asked it.
+ * fires ONLY for a genuinely new chat without a profile. It used to be
+ * unconditional, so every history-load blip re-asked it.
  */
 const WALLET_LINE =
     "You have live READ-ONLY access to this user's crypto wallets through PayBox (wallet_balances). " +
