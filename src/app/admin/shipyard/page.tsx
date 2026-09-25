@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { HarborShell } from '@/components/HarborShell'
+import { AdminShell } from '@/components/brand/AdminShell'
 
 interface Totals {
   requests: number
@@ -107,16 +107,16 @@ export default function ShipyardAdminPage() {
 
   if (loading) {
     return (
-      <HarborShell title="Shipyard" showBack backHref="/admin">
+      <AdminShell title="Shipyard" showBack backHref="/admin">
         <div style={{ paddingTop: '4rem', textAlign: 'center', opacity: 0.5 }}>Loading…</div>
-      </HarborShell>
+      </AdminShell>
     )
   }
   if (!data) {
     return (
-      <HarborShell title="Shipyard" showBack backHref="/admin">
+      <AdminShell title="Shipyard" showBack backHref="/admin">
         <div style={{ paddingTop: '4rem', textAlign: 'center', opacity: 0.5 }}>Access denied</div>
-      </HarborShell>
+      </AdminShell>
     )
   }
 
@@ -136,7 +136,7 @@ export default function ShipyardAdminPage() {
   ]
 
   return (
-    <HarborShell title="Shipyard" showBack backHref="/admin">
+    <AdminShell title="Shipyard" showBack backHref="/admin">
       <style>{`
         .sy-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.6rem; }
         .sy-kpi { align-items: center; text-align: center; padding: 1rem 0.5rem; }
@@ -247,6 +247,6 @@ export default function ShipyardAdminPage() {
           )
         })}
       </div>
-    </HarborShell>
+    </AdminShell>
   )
 }

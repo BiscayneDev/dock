@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { HarborShell } from '@/components/HarborShell'
+import { AdminShell } from '@/components/brand/AdminShell'
 
 interface Stats {
   overview: {
@@ -83,25 +83,25 @@ export default function AdminDashboard() {
   // renders its outcome instead of asking for a client-side password.
   if (unauthorized) {
     return (
-      <HarborShell title="Admin" showBack>
+      <AdminShell title="Admin" showBack>
         <div className="dock-card" style={{ padding: '2rem 1.5rem', alignItems: 'center', textAlign: 'center', marginTop: '3rem' }}>
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4, marginBottom: '1rem' }}>
             <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
-          <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Not authorized</p>
+          <p style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Not authorized</p>
           <p style={{ fontSize: '0.85rem', opacity: 0.5 }}>You need an admin account to view this page.</p>
         </div>
-      </HarborShell>
+      </AdminShell>
     )
   }
 
-  if (loading) return <HarborShell title="Admin" showBack><div style={{ paddingTop: '5rem', textAlign: 'center', opacity: 0.5 }}>Loading...</div></HarborShell>
-  if (!stats) return <HarborShell title="Admin" showBack><div style={{ paddingTop: '5rem', textAlign: 'center', opacity: 0.5 }}>Access denied</div></HarborShell>
+  if (loading) return <AdminShell title="Admin" showBack><div style={{ paddingTop: '5rem', textAlign: 'center', opacity: 0.5 }}>Loading...</div></AdminShell>
+  if (!stats) return <AdminShell title="Admin" showBack><div style={{ paddingTop: '5rem', textAlign: 'center', opacity: 0.5 }}>Access denied</div></AdminShell>
 
   const o = stats.overview
 
   return (
-    <HarborShell title="Admin" showBack>
+    <AdminShell title="Admin" showBack>
       {/* Tab switcher */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
         <button onClick={() => setTab('overview')} className={tab === 'overview' ? 'dock-btn-primary' : 'dock-btn-secondary'} style={{ flex: 1 }}>Overview</button>
@@ -131,7 +131,7 @@ export default function AdminDashboard() {
             ].map((kpi) => (
               <div key={kpi.label} className="dock-card" style={{ alignItems: 'center', textAlign: 'center', padding: '1rem' }}>
                 <span style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>{kpi.icon}</span>
-                <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>{kpi.value}</span>
+                <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 800, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>{kpi.value}</span>
                 <span className="meta-text" style={{ marginTop: '0.25rem' }}>{kpi.label}</span>
               </div>
             ))}
@@ -145,7 +145,7 @@ export default function AdminDashboard() {
                 <div key={status} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: STATUS_COLORS[status] ?? 'var(--ink)' }} />
                   <span style={{ fontSize: '0.85rem' }}>{status}</span>
-                  <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700 }}>{count}</span>
+                  <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 700 }}>{count}</span>
                 </div>
               ))}
             </div>
@@ -158,7 +158,7 @@ export default function AdminDashboard() {
               {Object.entries(stats.integrationsByProvider).map(([provider, count]) => (
                 <div key={provider} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   <span className="meta-text" style={{ border: '1px solid var(--ink)', borderRadius: '1rem', padding: '0.15rem 0.5rem' }}>{provider}</span>
-                  <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700 }}>{count}</span>
+                  <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 700 }}>{count}</span>
                 </div>
               ))}
               {Object.keys(stats.integrationsByProvider).length === 0 && <span style={{ opacity: 0.4, fontSize: '0.85rem' }}>None yet</span>}
@@ -172,7 +172,7 @@ export default function AdminDashboard() {
               {Object.entries(stats.recipesByTrigger).map(([trigger, count]) => (
                 <div key={trigger} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   <span style={{ fontSize: '0.85rem' }}>{TRIGGER_LABELS[trigger] ?? trigger}</span>
-                  <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700 }}>{count}</span>
+                  <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 700 }}>{count}</span>
                 </div>
               ))}
               {Object.keys(stats.recipesByTrigger).length === 0 && <span style={{ opacity: 0.4, fontSize: '0.85rem' }}>None yet</span>}
@@ -188,9 +188,9 @@ export default function AdminDashboard() {
                   <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: r.enabled ? 'var(--mesh-mint)' : 'var(--ink)', opacity: r.enabled ? 1 : 0.3 }} />
-                      <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 600 }}>{r.name}</span>
+                      <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 600 }}>{r.name}</span>
                     </div>
-                    <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700 }}>{r.run_count} runs</span>
+                    <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 700 }}>{r.run_count} runs</span>
                   </div>
                 ))}
               </div>
@@ -225,7 +225,7 @@ export default function AdminDashboard() {
                 <div key={user.id} className="dock-card" style={{ padding: '1rem 1.25rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
-                      <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.95rem' }}>
+                      <p style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 700, fontSize: '0.95rem' }}>
                         {user.name ?? 'Unnamed'}
                         {user.is_admin && <span style={{ marginLeft: '0.5rem', fontSize: '0.7rem', border: '1px solid var(--mesh-peach)', borderRadius: '1rem', padding: '0.1rem 0.4rem', color: 'var(--mesh-peach)' }}>Admin</span>}
                       </p>
@@ -237,8 +237,8 @@ export default function AdminDashboard() {
                   </div>
 
                   <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', fontSize: '0.8rem' }}>
-                    <span><strong style={{ fontFamily: "'Outfit', sans-serif" }}>{user.messageCount}</strong> msgs</span>
-                    <span><strong style={{ fontFamily: "'Outfit', sans-serif" }}>{user.recipeCount}</strong> recipes</span>
+                    <span><strong style={{ fontFamily: 'var(--font-schibsted), sans-serif' }}>{user.messageCount}</strong> msgs</span>
+                    <span><strong style={{ fontFamily: 'var(--font-schibsted), sans-serif' }}>{user.recipeCount}</strong> recipes</span>
                     {user.integrations.length > 0 && (
                       <span>{user.integrations.join(', ')}</span>
                     )}
@@ -280,7 +280,7 @@ export default function AdminDashboard() {
                 ].map((kpi) => (
                   <div key={kpi.label} className="dock-card" style={{ alignItems: 'center', textAlign: 'center', padding: '1rem' }}>
                     <span style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>{kpi.icon}</span>
-                    <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: '1.35rem', letterSpacing: '-0.02em' }}>{kpi.value}</span>
+                    <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 800, fontSize: '1.35rem', letterSpacing: '-0.02em' }}>{kpi.value}</span>
                     <span className="meta-text" style={{ marginTop: '0.25rem' }}>{kpi.label}</span>
                   </div>
                 ))}
@@ -312,7 +312,7 @@ export default function AdminDashboard() {
                     <div key={s} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                       <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: s === 'active' ? 'var(--mesh-mint)' : s === 'invited' ? 'var(--mesh-yellow)' : 'var(--mesh-cyan)' }} />
                       <span style={{ fontSize: '0.85rem', textTransform: 'capitalize' }}>{s}</span>
-                      <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700 }}>{dinghy.waitlist.byStatus[s] ?? 0}</span>
+                      <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 700 }}>{dinghy.waitlist.byStatus[s] ?? 0}</span>
                     </div>
                   ))}
                 </div>
@@ -340,13 +340,13 @@ export default function AdminDashboard() {
                     {dinghy.chats.map((c) => (
                       <div key={c.chat_guid} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
                         <div>
-                          <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 600 }}>{c.handle ?? c.chat_guid.slice(0, 20) + '…'}</span>
+                          <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 600 }}>{c.handle ?? c.chat_guid.slice(0, 20) + '…'}</span>
                           <span className="meta-text" style={{ marginLeft: '0.5rem' }}>last {c.last_used ? new Date(c.last_used).toLocaleDateString() : '—'}</span>
                         </div>
                         <div style={{ display: 'flex', gap: '1rem' }}>
                           <span>{c.calls} calls</span>
                           <span>{c.tokens.toLocaleString()} tok</span>
-                          <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700 }}>${c.cost_usd.toFixed(4)}</span>
+                          <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 700 }}>${c.cost_usd.toFixed(4)}</span>
                         </div>
                       </div>
                     ))}
@@ -361,7 +361,7 @@ export default function AdminDashboard() {
                   {Object.entries(dinghy.usage.byModel).map(([model, count]) => (
                     <div key={model} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                       <span className="meta-text" style={{ border: '1px solid var(--ink)', borderRadius: '1rem', padding: '0.15rem 0.5rem' }}>{model}</span>
-                      <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700 }}>{count}</span>
+                      <span style={{ fontFamily: 'var(--font-schibsted), sans-serif', fontWeight: 700 }}>{count}</span>
                     </div>
                   ))}
                   {Object.keys(dinghy.usage.byModel).length === 0 && <span style={{ opacity: 0.4, fontSize: '0.85rem' }}>None yet</span>}
@@ -371,6 +371,6 @@ export default function AdminDashboard() {
           )}
         </div>
       )}
-    </HarborShell>
+    </AdminShell>
   )
 }
