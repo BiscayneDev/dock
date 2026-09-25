@@ -32,6 +32,7 @@ people as (
     select si.chat_guid from spectrum_identities si
     join beta_allowlist ba on ba.chat_guid = si.chat_guid
     where si.handle = w.phone and ba.role = 'member'
+      and w.status = 'active' and w.first_text_at is not null
     order by si.created_at desc limit 1
   ) i on true
 ),
