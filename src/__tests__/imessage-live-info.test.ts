@@ -88,8 +88,8 @@ describe('live info wiring', () => {
     expect(guestCapabilities()).toMatchObject({ google: false, wallet: false, files: false, live: true, search: false })
     vi.stubEnv('TAVILY_API_KEY', 'k')
     expect(liveInfoTools().map((t) => t.name)).toEqual(['weather', 'web_search', 'x_read_post', 'x_profile', 'x_recent_posts'])
-    // A bound user with nothing connected still gets live info, and no account tools.
-    expect(toolsFor(ctx).map((t) => t.name)).toEqual(['weather', 'web_search', 'x_read_post', 'x_profile', 'x_recent_posts'])
+    // A bound user with nothing connected still gets live info, computer tools, and no account tools.
+    expect(toolsFor(ctx).map((t) => t.name)).toEqual(['weather', 'web_search', 'x_read_post', 'x_profile', 'x_recent_posts', 'computer_run', 'computer_browse', 'computer_status', 'computer_stop', 'computer_overage'])
   })
 
   it('prompt names the tools that are actually offered', () => {
