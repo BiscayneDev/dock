@@ -68,9 +68,11 @@ describe('invite idempotency', () => {
     const from = vi.fn()
     const select = vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
-        in: vi.fn().mockResolvedValue({
-          data: [{ id: '1', email: 'test@example.com', name: 'Test', status: 'invited', phone: '+15550001111', start_token: 'tok', dinghy_line: '+16286293507' }],
-          error: null,
+        in: vi.fn().mockReturnValue({
+          limit: vi.fn().mockResolvedValue({
+            data: [{ id: '1', email: 'test@example.com', name: 'Test', status: 'invited', phone: '+15550001111', start_token: 'tok', dinghy_line: '+16286293507' }],
+            error: null,
+          }),
         }),
       }),
     })
