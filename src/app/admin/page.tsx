@@ -98,6 +98,7 @@ export default function OperatorDashboard() {
       </section>
       <nav style={{ display: 'flex', gap: '0.7rem', flexWrap: 'wrap' }}>
         <Link className="dock-btn-secondary" href="/admin/legacy">Legacy metrics</Link>
+        <Link className="dock-btn-secondary" href="/admin/invites">Invite grants</Link>
         <Link className="dock-btn-secondary" href="/admin/shipyard">Shipyard settlements</Link>
       </nav>
     </div>}
