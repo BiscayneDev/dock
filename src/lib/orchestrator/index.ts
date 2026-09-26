@@ -316,12 +316,10 @@ async function handleCallbackQuery(query: TelegramCallbackQuery): Promise<void> 
   }
 
   if (data.startsWith('recipe_edit:')) {
-    const recipeId = data.replace('recipe_edit:', '')
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
     await answerCallbackQuery(query.id)
     await sendMessage({
       chatId,
-      text: `Edit this recipe in The Harbor:\n${appUrl}/dashboard/recipes/${recipeId}/edit`,
+      text: "Web recipe editing is retired - tell me what to change and I'll recreate it.",
     })
     return
   }
