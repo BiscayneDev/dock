@@ -63,7 +63,6 @@ export const recipeCreate: Tool = {
           message: 'Recipe created (disabled). Ask user to activate it.',
           activateCallbackData: `recipe_activate:${data.id}`,
           cancelCallbackData: `recipe_cancel:${data.id}`,
-          editUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/recipes/${data.id}/edit`,
         },
       }
     } catch (err) {
