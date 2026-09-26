@@ -46,7 +46,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // First-time users go to onboarding to connect accounts
   // Returning users with integrations go to Harbor
   if ((integrationCount ?? 0) > 0) {
-    return NextResponse.redirect(`${appUrl}/harbor`)
+    return NextResponse.redirect(`${appUrl}/profile`)
   }
 
   return NextResponse.redirect(`${appUrl}/onboarding`)

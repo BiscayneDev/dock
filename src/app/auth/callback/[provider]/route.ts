@@ -82,7 +82,7 @@ export async function GET(
   }
 
   if (!code) {
-    return NextResponse.redirect(`${appUrl}/dashboard?error=no_code`)
+    return NextResponse.redirect(`${appUrl}/onboarding?error=no_code`)
   }
 
   try {
@@ -175,7 +175,7 @@ export async function GET(
       }
 
       default:
-        return NextResponse.redirect(`${appUrl}/dashboard?error=unknown_provider`)
+        return NextResponse.redirect(`${appUrl}/onboarding?error=unknown_provider`)
     }
 
     return NextResponse.redirect(`${appUrl}/profile?connected=${provider}`)
