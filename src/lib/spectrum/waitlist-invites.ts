@@ -42,7 +42,7 @@ export function parseWaitlistInviteCommand(text: string): WaitlistInviteCommand 
   return null
 }
 
-interface Row { id: string; email: string; name: string | null; status: string; phone: string | null; start_token: string | null }
+interface Row { id: string; email: string; name: string | null; status: string; phone: string | null; start_token: string | null; dinghy_line: string | null }
 
 export function introText(name: string): string {
   const first = firstName(name)
@@ -92,7 +92,7 @@ export async function markWaitlistFirstInbound(phone: string | null | undefined,
 export async function runWaitlistInvites(_ownerChat: string, cmd: WaitlistInviteCommand): Promise<string> {
   if (!process.env.RESEND_API_KEY) return "Can't send invites yet - RESEND_API_KEY isn't set."
   const supabase = createServerClient()
-  const query = supabase.from('waitlist').select('id, email, name, status, phone, start_token')
+  const query = supabase.from('waitlist').select('id, email, name, status, phone, start_token, dinghy_line')
   const { data, error } = cmd.kind === 'next'
     ? await query.eq('status', 'joined').order('created_at', { ascending: true }).limit(cmd.count)
     : await query.eq('email', cmd.email).in('status', ['joined', 'invited']).limit(1)
@@ -105,9 +105,16 @@ export async function runWaitlistInvites(_ownerChat: string, cmd: WaitlistInvite
   const texted: string[] = []
   const emailed: string[] = []
   const noPhone: string[] = []
+  const alreadyInvited: string[] = []
   const failed: string[] = []
   for (const row of rows) {
     const who = row.name ? `${row.name} (${row.email})` : row.email
+    // Already invited: don't resend, reassign, or re-register. Just report it.
+    if (row.status === 'invited' || row.status === 'active') {
+      const line = row.dinghy_line
+      alreadyInvited.push(line ? `${who} — already invited, line ${line}` : `${who} — already invited`)
+      continue
+    }
     // Without a phone there's no Photon user, so no line that can reach them.
     if (!row.phone) { noPhone.push(row.email); continue }
     const user = await registerPhotonUser(row.phone, row.name)
@@ -140,6 +147,7 @@ export async function runWaitlistInvites(_ownerChat: string, cmd: WaitlistInvite
   }
 
   const lines: string[] = []
+  if (alreadyInvited.length) lines.push(`Already invited: ${alreadyInvited.join(', ')}`)
   if (texted.length) lines.push(`Texted ${texted.length}: ${texted.join(', ')}`)
   if (emailed.length) lines.push(`Emailed ${emailed.length} (the text didn't go through - they're allowlisted and just need to text their line): ${emailed.join(', ')}`)
   if (noPhone.length) lines.push(`No phone on file, skipped: ${noPhone.join(', ')}`)
