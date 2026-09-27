@@ -34,7 +34,7 @@
     },
     {
       "path": "/api/cron/dinghy-briefing",
-      "schedule": "0 12 * * *"
+      "schedule": "0 * * * *"
     }
   ]
 }
