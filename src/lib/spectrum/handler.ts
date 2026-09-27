@@ -52,6 +52,7 @@ import {
 import { claimInboundDelivery, enqueueOutbox, markOutboxFailed, markOutboxSent, type OutboxKind } from './outbox'
 import { briefableUserId, handleMuteIntent } from './briefing'
 import { isLocationAttachment, parseLocation, saveUserLocation } from './location'
+import { parseTimezoneIntent, resolvePlaceTimezone, resolvePinTimezone, setChatTimezone, timezoneAck } from './timezone'
 import { describeImage, readInboundAttachment, type InboundAttachmentContent } from './attachments'
 import { sendLink, splitStandaloneUrl, type LinkSender } from './links'
 import {
@@ -87,6 +88,7 @@ export interface InboundMessage {
     sender?: { handle?: string; id?: string }
     react?: MessageLike['react']
     reply?: MessageLike['reply']
+    timestamp?: Date | string
 }
 
 /**
@@ -276,10 +278,25 @@ async function maybeHandleLocationShare(space: InboundSpace, message: InboundMes
     if (!loc) return false
     const chatGuid = resolveChatGuid(space)
     if (!chatGuid) return true
-    if (message.id && !(await claimInboundDelivery(message.id, chatGuid))) return true
+    // A forwarded/stale pin is useful as a place, not proof of where they are now.
+    const created = message.timestamp ? new Date(message.timestamp).getTime() : NaN
+    const fresh = Number.isFinite(created) && created <= Date.now() + 60_000 && Date.now() - created < 15 * 60_000
     const userId = await briefableUserId(chatGuid).catch(() => null)
     if (!userId) return true
-    if (await saveUserLocation(userId, loc)) await sendText(space, chatGuid, 'reply', LOCATION_ACK)
+    if (!fresh) {
+        await sendText(space, chatGuid, 'reply', "That location may be old. Share your current location again to change your morning timezone.")
+        return true
+    }
+    const zone = await resolvePinTimezone(loc).catch((err) => { logErr('pin timezone lookup failed', err); return null })
+    if (!zone) {
+        await sendText(space, chatGuid, 'reply', "I couldn't confirm the timezone for that pin. Tell me the city and country instead.")
+        return true
+    }
+    await saveUserLocation(userId, loc)
+    const changed = await setChatTimezone(chatGuid, zone)
+    await sendText(space, chatGuid, 'reply', changed
+        ? timezoneAck({ zone, label: zone.split('/').pop()!.replaceAll('_', ' ') })
+        : "I couldn't save that timezone. Please try again.")
     return true
 }
 
@@ -335,11 +352,6 @@ async function handleInboundTapback(space: InboundSpace, message: InboundMessage
 }
 
 export async function handleSpectrumMessage(space: InboundSpace, message: InboundMessage): Promise<void> {
-    try {
-        if (await maybeHandleLocationShare(space, message)) return
-    } catch (err) {
-        logErr('location share failed', err)
-    }
     const inbound = normalizeInbound(message)
     const isAttachment = !inbound && message.content.type === 'attachment'
     if (!inbound && !isAttachment) return
@@ -400,6 +412,16 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         return
     }
 
+    // Location updates cannot bypass the authenticated beta gate and rate limit.
+    // Handle location attachments before the ordinary attachment stand-in.
+    try {
+        if (await maybeHandleLocationShare(space, message)) return
+    } catch (err) {
+        logErr('location share failed', err)
+        await sendText(space, chatGuid, 'error_notice', "Couldn't check that location right now. Try again in a moment.")
+        return
+    }
+
     // An inbound photo/file becomes its text stand-in and flows through the
     // normal reply path below. Text-only intents (connect links, memory
     // commands, draft confirmations) are skipped: a screenshot of the word
@@ -423,6 +445,31 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         }
         text = read.standin
         if (read.image) inboundImage = { dataUrl: read.image.dataUrl, label: read.label }
+    }
+
+    // A direct location or timezone update runs only in an allowlisted, signed
+    // chat after the rate gate, before the model can guess a timezone.
+    if (textIntents) {
+        const place = parseTimezoneIntent(text)
+        if (place) {
+            await saveMessage(chatGuid, 'user', text).catch(() => {})
+            try {
+                const result = await resolvePlaceTimezone(place)
+                const reply = result.kind === 'one'
+                    ? (await setChatTimezone(chatGuid, result.choice.zone))
+                        ? timezoneAck(result.choice)
+                        : "Connect your Google account first so I can save your morning timezone."
+                    : result.kind === 'ambiguous'
+                        ? `Which place do you mean? ${result.choices.map(c => `${c.label} (${c.zone})`).join('; ')}. Reply "I am in [city], [country]" or "set my timezone to [IANA zone]".`
+                        : "I couldn't confirm that place's timezone. Tell me the city and country, or an IANA timezone like Europe/Paris."
+                await sendText(space, chatGuid, 'reply', reply)
+                await saveMessage(chatGuid, 'assistant', reply).catch(() => {})
+            } catch (err) {
+                logErr('timezone lookup failed', err)
+                await sendText(space, chatGuid, 'error_notice', "Couldn't check that timezone right now. Try again in a moment.")
+            }
+            return
+        }
     }
 
     // Owner: email waitlist invites ("invite next 5", "invite someone@x.com").
