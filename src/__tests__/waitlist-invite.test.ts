@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn(() => ({})) }))
 import { createServerClient } from '@/lib/supabase/server'
-import { buildWaitlistInvite } from '@/lib/email/waitlist-invite'
+import { buildWaitlistInvite, sendWaitlistInvite } from '@/lib/email/waitlist-invite'
+vi.mock('@/lib/email/waitlist-invite', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/lib/email/waitlist-invite')>()
+  return { ...original, sendWaitlistInvite: vi.fn() }
+})
 import { START_TASKS, startSmsLink, startLink } from '@/lib/spectrum/start-link'
 import { parseWaitlistInviteCommand, introText, chatGuidForPhone } from '@/lib/spectrum/waitlist-invites'
 import { phoneFromChatGuid } from '@/lib/spectrum/line-for-chat'
@@ -63,28 +67,24 @@ describe('owner invite commands', () => {
 })
 
 describe('invite idempotency', () => {
-  it('reports already-invited rows without resending', async () => {
+  it('resends an invited row with its original token and line, without re-registering', async () => {
     const { runWaitlistInvites } = await import('@/lib/spectrum/waitlist-invites')
+    const { sendWaitlistInvite } = await import('@/lib/email/waitlist-invite')
+    vi.mocked(sendWaitlistInvite).mockResolvedValue(true)
     const from = vi.fn()
     const select = vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
         in: vi.fn().mockReturnValue({
-          limit: vi.fn().mockResolvedValue({
-            data: [{ id: '1', email: 'test@example.com', name: 'Test', status: 'invited', phone: '+15550001111', start_token: 'tok', dinghy_line: '+16286293507' }],
-            error: null,
-          }),
+          limit: vi.fn().mockResolvedValue({ data: [{ id: '1', email: 'test@example.com', name: 'Test', status: 'invited', phone: '+15550001111', start_token: 'tok', dinghy_line: '+16286293507' }], error: null }),
         }),
       }),
     })
     from.mockReturnValue({ select })
     vi.mocked(createServerClient).mockReturnValue({ from } as any)
     vi.stubEnv('RESEND_API_KEY', 'k')
-    vi.stubEnv('RESEND_FROM', 'test')
     const result = await runWaitlistInvites('chat', { kind: 'email', email: 'test@example.com' })
-    expect(result).toContain('Already invited')
-    expect(result).toContain('+16286293507')
-    expect(result).not.toContain('Texted')
-    expect(result).not.toContain('Emailed')
+    expect(result).toContain('Resent invite')
+    expect(sendWaitlistInvite).toHaveBeenCalledWith('test@example.com', 'Test', '+16286293507', 'tok')
+    expect(from).toHaveBeenCalledTimes(1)
   })
 })
-

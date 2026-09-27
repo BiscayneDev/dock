@@ -1,6 +1,7 @@
 import Image from 'next/image'
 import { Anchor } from './Scene'
 import styles from './PaperPage.module.css'
+import LocalTimezoneAction from './LocalTimezoneAction'
 
 /**
  * The paper surface: Halsey's coast art full-bleed under a navy wash, with one
@@ -22,7 +23,7 @@ export function PaperPage({
   title: string
   accent?: string
   body: React.ReactNode
-  action?: { href: string; label: string } | null
+  action?: { href: string; label: string; captureTimezone?: boolean } | null
   /** shown instead of the action when the link is unusable */
   missing?: string
   fine?: React.ReactNode
@@ -50,7 +51,7 @@ export function PaperPage({
         <p className={styles.body}>{body}</p>
         {children}
         {action ? (
-          <a className={styles.button} href={action.href}>{action.label}</a>
+          action.captureTimezone ? <LocalTimezoneAction href={action.href} label={action.label} className={styles.button} /> : <a className={styles.button} href={action.href}>{action.label}</a>
         ) : missing ? (
           <p className={styles.note}>{missing}</p>
         ) : null}

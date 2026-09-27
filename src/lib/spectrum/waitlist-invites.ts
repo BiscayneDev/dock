@@ -106,10 +106,19 @@ export async function runWaitlistInvites(_ownerChat: string, cmd: WaitlistInvite
   const emailed: string[] = []
   const noPhone: string[] = []
   const alreadyInvited: string[] = []
+  const resent: string[] = []
   const failed: string[] = []
   for (const row of rows) {
     const who = row.name ? `${row.name} (${row.email})` : row.email
-    // Already invited: don't resend, reassign, or re-register. Just report it.
+    // A targeted invite by email can resend the existing link without re-registering
+    // or re-texting. Batch invites remain idempotent.
+    if (row.status === 'invited' && cmd.kind === 'email') {
+      if (!row.start_token || !row.dinghy_line) { failed.push(`${row.email} (missing original start link or assigned line)`); continue }
+      if (await sendWaitlistInvite(row.email, row.name ?? '', row.dinghy_line, row.start_token)) {
+        resent.push(who)
+      } else failed.push(`${row.email} (resend failed)`)
+      continue
+    }
     if (row.status === 'invited' || row.status === 'active') {
       const line = row.dinghy_line
       alreadyInvited.push(line ? `${who} — already invited, line ${line}` : `${who} — already invited`)
@@ -147,6 +156,7 @@ export async function runWaitlistInvites(_ownerChat: string, cmd: WaitlistInvite
   }
 
   const lines: string[] = []
+  if (resent.length) lines.push(`Resent invite to ${resent.join(", ")}`)
   if (alreadyInvited.length) lines.push(`Already invited: ${alreadyInvited.join(', ')}`)
   if (texted.length) lines.push(`Texted ${texted.length}: ${texted.join(', ')}`)
   if (emailed.length) lines.push(`Emailed ${emailed.length} (the text didn't go through - they're allowlisted and just need to text their line): ${emailed.join(', ')}`)
