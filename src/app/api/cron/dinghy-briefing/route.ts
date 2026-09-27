@@ -1,5 +1,5 @@
 /**
- * Dinghy morning briefing (cron, 8am ET): one iMessage per bound Spectrum
+ * Dinghy morning briefing (cron, hourly at 8am in each user timezone): one iMessage per bound Spectrum
  * identity — today's calendar, unread/important email, and (owner only)
  * Dinghy waitlist signups. Delivered through the tool loop so the text is
  * grounded in live Gmail/Calendar reads, in Dinghy's voice.
@@ -46,9 +46,8 @@ export const maxDuration = 300
 
 const OWNER_DOMAIN = '@biscayneventures.xyz'
 
-// Send inside a morning window (7-10am local); the cron itself fires at 8.
-const BRIEFING_WINDOW_START = 7
-const BRIEFING_WINDOW_END = 10
+// The hourly cron fires at minute 0; each user gets the 8am local run.
+const BRIEFING_HOUR = 8
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
     if (request.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -124,7 +123,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 continue
             }
             const hour = getCurrentHour(timezone)
-            if (!forced && (hour < BRIEFING_WINDOW_START || hour >= BRIEFING_WINDOW_END)) {
+            if (!forced && hour !== BRIEFING_HOUR) {
                 results.skipped++
                 continue
             }
@@ -189,12 +188,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 continue
             }
             const text = `${plain}\n\n${MUTE_FOOTER}`
+            const localDay = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
+            const { error: claimError } = await supabase.from('dinghy_brief_delivery')
+                .insert({ user_id: ctx.userId, local_day: localDay })
+            if (claimError) {
+                if (claimError.code === '23505') results.skipped++
+                else { console.error(`briefing delivery claim failed (${chatGuid}):`, claimError.message); results.errors++ }
+                continue
+            }
             // Outbox first: the row exists before the attempt, so a kill or
             // a send failure is always retried by the spectrum-sweep cron.
             const outboxId = brief
                 ? await enqueueOutbox(chatGuid, 'brief', JSON.stringify({ card: brief.card, text }), { lease: true })
                 : await enqueueOutbox(chatGuid, 'reply', text, { lease: true })
             if (!outboxId) {
+                await supabase.from('dinghy_brief_delivery').delete().eq('user_id', ctx.userId).eq('local_day', localDay)
                 console.error(`briefing outbox enqueue failed (${chatGuid})`)
                 results.errors++
                 continue

@@ -50,7 +50,7 @@ export async function GET(
   // g_oauth_state cookie (10 min) must not hijack a chat connect into the
   // session flow (login -> profile, token dropped).
   if (provider === 'google' && state && request.cookies.get('g_oauth_state')?.value !== state) {
-    return handleGoogleConnectCallback(code, state, appUrl)
+    return handleGoogleConnectCallback(code, state, appUrl, request)
   }
   // PayBox in-thread flow: random state bound to the token row (the web
   // session flow uses the fixed state 'paybox' + PKCE cookies).
@@ -196,7 +196,8 @@ export async function GET(
 async function handleGoogleConnectCallback(
   code: string | null,
   state: string,
-  appUrl: string
+  appUrl: string,
+  request: NextRequest
 ): Promise<NextResponse> {
   const { logger } = await import('@/lib/logger')
 
@@ -229,6 +230,22 @@ async function handleGoogleConnectCallback(
       logger.error('connect flow: failed to bind identity', { platform: connect.platform })
       await notifyConnectFailure(connect)
       return NextResponse.redirect(`${appUrl}/onboarding?error=connect_identity_failed`)
+    }
+
+    // The browser running OAuth supplies its current IANA timezone. Save only
+    // on first connect; a later laptop/airport visit must not silently move
+    // someone's daily brief. Users can change their timezone explicitly.
+    if (connect.platform === 'imessage') {
+      const tz = decodeURIComponentSafe(request.cookies.get('dinghy_connect_tz')?.value)
+      if (tz && isIanaTimezone(tz)) {
+        const { createServerClient } = await import('@/lib/supabase/server')
+        const db = createServerClient()
+        const { data: current } = await db.from('users').select('timezone').eq('id', userId).maybeSingle()
+        if (!current?.timezone || current.timezone === 'UTC') {
+          const { error: tzError } = await db.from('users').update({ timezone: tz }).eq('id', userId)
+          if (tzError) logger.error('connect flow: timezone save failed', { error: tzError.message })
+        }
+      }
     }
 
     await storeGoogleTokens(
@@ -458,4 +475,14 @@ async function handleHealthConnectCallback(
     logger.error(`${provider} connect callback error`, { error: err instanceof Error ? err.message : String(err) })
     return NextResponse.redirect(`${appUrl}/onboarding?error=connect_failed`)
   }
+}
+
+function decodeURIComponentSafe(value: string | undefined): string | null {
+  if (!value) return null
+  try { return decodeURIComponent(value) } catch { return null }
+}
+
+function isIanaTimezone(value: string): boolean {
+  if (value.length > 80 || !/^[A-Za-z_+\-/]+$/.test(value)) return false
+  try { Intl.DateTimeFormat(undefined, { timeZone: value }); return true } catch { return false }
 }

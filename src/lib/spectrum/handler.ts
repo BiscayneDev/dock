@@ -926,12 +926,14 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         }
         // Files made this turn go out after the text: a file link, or an attachment.
         for (const file of fileTools?.files() ?? []) await sendFile(space, chatGuid, file)
+        let firstReplyCardClaimed = false
         // The card follows a delivered answer. Claim once across serverless
         // workers; release the claim if the native card itself fails.
         if (answerDelivered && plainReply.trim() && role === 'member' && !(actions?.proposal() ?? lastLooseProposal()) && !/^(?:I couldn't|Couldn't|I can't|Sorry|Something went wrong)/i.test(plainReply.trim())) {
             const db = createServerClient()
             const { error: claimError } = await db.from('dinghy_first_reply_cards').insert({ chat_guid: chatGuid })
             if (!claimError) {
+                firstReplyCardClaimed = true
                 try {
                     await (space as InboundSpace & { send(b: unknown): Promise<unknown> })
                         .send(dinghyContactCard(await dinghyLineFor(chatGuid)))
@@ -942,6 +944,19 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 }
             } else if (claimError.code !== '23505') {
                 logErr('first reply contact card claim failed', claimError)
+            }
+        }
+        // The useful first answer stays first. Then invite Google so the next
+        // request can use the person's own inbox and calendar. The durable
+        // first-reply-card claim prevents repeat prompts across workers.
+        if (answerDelivered && firstReplyCardClaimed && role === 'member' && !(await isGoogleConnected(chatGuid).catch(() => true))) {
+            const link = await createConnectLink(chatGuid, 'connect my gmail').catch((err) => {
+                logErr('first reply Google link failed', err)
+                return null
+            })
+            if (link) {
+                await sendText(space, chatGuid, 'connect_link', 'Connect Google so I can learn your day from your inbox and calendar. You approve the access on Google. Then I can brief you each morning at 8 your time:')
+                await sendLink(space as LinkSender, chatGuid, 'connect_link', link)
             }
         }
         // Warm-path latency ledger: read these from the function logs.

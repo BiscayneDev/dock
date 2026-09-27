@@ -50,7 +50,7 @@ export default async function ConnectPage({
       title="connect your"
       accent="google"
       body="One secure sign-in and Dinghy can read your Gmail and manage your Google Calendar."
-      action={authHref ? { href: authHref, label: 'connect with google' } : null}
+      action={authHref ? { href: authHref, label: 'connect with google', captureTimezone: true } : null}
       missing="This link is missing its token. Ask Dinghy for a fresh one."
       fine="You sign in with Google itself. Dinghy never sees your password."
     />
