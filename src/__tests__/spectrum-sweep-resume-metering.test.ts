@@ -6,7 +6,7 @@ const chat = vi.fn()
 const recordUsage = vi.fn()
 const isOver = vi.fn()
 const claimLimitNotice = vi.fn()
-const ackResume = vi.fn(async () => {})
+const ackResume = vi.fn(async (_id: string) => {})
 
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: () => ({}) }))
 vi.mock('@/lib/integrations/google-accounts', () => ({ googleAccountsOf: () => [] }))
