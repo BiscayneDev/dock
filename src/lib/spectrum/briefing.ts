@@ -41,14 +41,20 @@ export async function isBriefingEnabled(userId: string): Promise<boolean> {
  * hours for this user only. Mute/disable still win (checked separately).
  */
 export async function isBriefingForced(userId: string): Promise<boolean> {
+    return (await briefingForceKey(userId)) !== null
+}
+
+/** The active force_until stamp (identifies this "brief me now" request), or null. */
+export async function briefingForceKey(userId: string): Promise<string | null> {
     const supabase = createServerClient()
     const { data, error } = await supabase
         .from('briefing_settings')
         .select('force_until')
         .eq('user_id', userId)
         .maybeSingle()
-    if (error || !data?.force_until) return false
-    return new Date(data.force_until as string).getTime() > Date.now()
+    if (error || !data?.force_until) return null
+    const stamp = data.force_until as string
+    return new Date(stamp).getTime() > Date.now() ? stamp : null
 }
 
 /** Clear a one-off force once the briefing is queued. */
