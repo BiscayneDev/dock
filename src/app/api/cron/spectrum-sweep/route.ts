@@ -16,6 +16,8 @@ import { chat, chatWithTools, MAX_HISTORY, wantsAnotherGoogle } from '@/lib/spec
 import { googleConnectedLine, isConnectRequest } from '@/lib/spectrum/connect-lines'
 import { capabilitiesFor, loadImessageToolContext, toolsFor } from '@/lib/spectrum/imessage-tools'
 import { actionToolsFor, renderProposal } from '@/lib/spectrum/actions'
+import { allowanceUsedUpMessage, claimLimitNotice, isOverDailyAllowance } from '@/lib/allowance'
+import { recordUsage, type GatewayUsage } from '@/lib/spectrum/metering'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from '@/lib/spectrum/config'
 import { typing } from 'spectrum-ts'
 import { sendFileWithPreview } from '@/lib/files/send'
@@ -127,33 +129,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                     results.resumes++
                     continue
                 }
-                void space.send(typing()).catch(() => {})
                 // Freshly connected chats resume their original request —
                 // with tools when the binding is in place.
                 const toolCtx = await loadImessageToolContext(guid).catch(() => null)
-                const actions = toolCtx && capabilitiesFor(toolCtx).google ? actionToolsFor(guid) : null
-                const tools = toolCtx ? [...toolsFor(toolCtx), ...(actions?.tools ?? [])] : []
-                const reply = toolCtx && tools.length > 0
-                    ? (
-                          await chatWithTools(
-                              history,
-                              {
-                                  gatewayUrl: GATEWAY_URL,
-                                  apiKey: SHIPYARD_API_KEY,
-                                  model: SHIPYARD_MODEL,
-                                  facts,
-                                  capabilities: capabilitiesFor(toolCtx),
-                              },
-                              tools,
-                              toolCtx
-                          )
-                      ).reply
-                    : await chat(history, {
-                          gatewayUrl: GATEWAY_URL,
-                          apiKey: SHIPYARD_API_KEY,
-                          model: SHIPYARD_MODEL,
-                          facts,
-                      })
                 // Halsey, 2026-09-22: the follow-up must say he's connected,
                 // then resume his original request.
                 const connectedLine =
@@ -164,6 +142,56 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                           : claimed.provider === 'oura' || claimed.provider === 'whoop'
                             ? `${claimed.provider === 'oura' ? 'oura' : 'whoop'} is connected — i can see your sleep, recovery and activity now ✓`
                           : googleConnectedLine(toolCtx, wantsAnotherGoogle(claimed.pendingRequest))
+                // Daily allowance: the resumed request is paid model work like
+                // any reply. At the limit, confirm the connection (free), skip
+                // the model, send the one daily notice, and ack so the lease
+                // does not retry every minute. Fails open on meter errors.
+                if ((await isOverDailyAllowance({ chatGuid: guid })).over) {
+                    const notice = (await claimLimitNotice(guid)) ? `\n\n${allowanceUsedUpMessage()}` : ''
+                    await space.send(toPlainText(`${connectedLine}${notice}`))
+                    await ackResume(claimed.id)
+                    await saveMessage(guid, 'assistant', `${connectedLine}${notice}`).catch((err) =>
+                        console.error('resume message save failed:', err instanceof Error ? err.message : String(err))
+                    )
+                    results.resumes++
+                    continue
+                }
+                void space.send(typing()).catch(() => {})
+                const actions = toolCtx && capabilitiesFor(toolCtx).google ? actionToolsFor(guid) : null
+                const tools = toolCtx ? [...toolsFor(toolCtx), ...(actions?.tools ?? [])] : []
+                const usage: GatewayUsage[] = []
+                const onUsage = (u: GatewayUsage) => usage.push(u)
+                let reply: string
+                try {
+                    reply = toolCtx && tools.length > 0
+                        ? (
+                              await chatWithTools(
+                                  history,
+                                  {
+                                      gatewayUrl: GATEWAY_URL,
+                                      apiKey: SHIPYARD_API_KEY,
+                                      model: SHIPYARD_MODEL,
+                                      facts,
+                                      capabilities: capabilitiesFor(toolCtx),
+                                      onUsage,
+                                  },
+                                  tools,
+                                  toolCtx
+                              )
+                          ).reply
+                        : await chat(history, {
+                              gatewayUrl: GATEWAY_URL,
+                              apiKey: SHIPYARD_API_KEY,
+                              model: SHIPYARD_MODEL,
+                              facts,
+                              onUsage,
+                          })
+                } finally {
+                    // Record whatever was spent, even when the call throws midway.
+                    await recordUsage(guid, 'resume', usage).catch((err) =>
+                        console.error('resume usage record failed:', err instanceof Error ? err.message : String(err))
+                    )
+                }
                 await space.send(toPlainText(`${connectedLine}\n\n${reply}`))
                 const proposal = actions?.proposal()
                 if (proposal) await space.send(toPlainText(renderProposal(proposal)))

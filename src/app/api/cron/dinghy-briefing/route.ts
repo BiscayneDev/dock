@@ -27,8 +27,9 @@ import { createServerClient } from '@/lib/supabase/server'
 import { getAuthedClient } from '@/lib/integrations/google'
 import { getSpectrumApp, getImessage } from '@/lib/spectrum/app'
 import { IMESSAGE_READ_TOOLS, loadImessageToolContext } from '@/lib/spectrum/imessage-tools'
-import { isBriefingEnabled, isBriefingForced, clearBriefingForce, MUTE_FOOTER } from '@/lib/spectrum/briefing'
-import { enqueueOutbox, markOutboxSent } from '@/lib/spectrum/outbox'
+import { isBriefingEnabled, briefingForceKey, clearBriefingForce, MUTE_FOOTER } from '@/lib/spectrum/briefing'
+import { briefRequestKey, claimBrief, enqueueBriefAtomic, releaseBrief } from '@/lib/spectrum/brief-claim'
+import { markOutboxSent } from '@/lib/spectrum/outbox'
 import { isOverDailyAllowance } from '@/lib/allowance'
 import { recordUsage, type GatewayUsage } from '@/lib/spectrum/metering'
 import { chatWithTools } from '@/lib/spectrum/dinghy'
@@ -80,6 +81,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     for (const row of identities ?? []) {
         const chatGuid = row.chat_guid as string
+        // Set once this run owns the day's generation; cleared when the brief is queued.
+        let held: { userId: string; localDay: string; key: string } | null = null
         try {
             const ctx = await loadImessageToolContext(chatGuid)
             // Briefing is Google-driven; a PayBox-only binding has nothing to brief.
@@ -102,7 +105,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             }
 
             // One-off "brief me now" skips the window and quiet hours.
-            const forced = await isBriefingForced(ctx.userId)
+            const forceStamp = await briefingForceKey(ctx.userId)
+            const forced = forceStamp !== null
 
             // Quiet hours + morning window in the user's timezone.
             const { data: user } = await supabase
@@ -127,6 +131,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 results.skipped++
                 continue
             }
+
+            // Claim the day BEFORE any paid work (Gmail profile, weather, model).
+            // Overlapping or replayed cron runs lose here instead of paying for
+            // a second generation. "Brief me now" has its own key.
+            const claimNow = new Date()
+            const localDay = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(claimNow)
+            const requestKey = briefRequestKey(forceStamp)
+            const claim = await claimBrief(ctx.userId, localDay, requestKey)
+            if (!claim.ok) {
+                if (claim.reason === 'error') {
+                    console.error(`briefing claim failed (${chatGuid}):`, claim.error)
+                    results.errors++
+                } else {
+                    results.skipped++
+                }
+                continue
+            }
+            held = { userId: ctx.userId, localDay, key: requestKey }
 
             // Owner check via the Gmail profile on the bound account —
             // product-admin numbers never leave for anyone else.
@@ -188,25 +210,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 continue
             }
             const text = `${plain}\n\n${MUTE_FOOTER}`
-            const localDay = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
-            const { error: claimError } = await supabase.from('dinghy_brief_delivery')
-                .insert({ user_id: ctx.userId, local_day: localDay })
-            if (claimError) {
-                if (claimError.code === '23505') results.skipped++
-                else { console.error(`briefing delivery claim failed (${chatGuid}):`, claimError.message); results.errors++ }
+            // Queue + mark the day done in one transaction. Before this call the
+            // claim is a releasable lease; after it the key is 'sent', so no
+            // later run can reclaim it. The outbox row (leased) is retried by
+            // the spectrum-sweep cron if the direct send below fails or the
+            // process dies.
+            const queued = brief
+                ? await enqueueBriefAtomic(held.userId, held.localDay, held.key, chatGuid, 'brief', JSON.stringify({ card: brief.card, text }))
+                : await enqueueBriefAtomic(held.userId, held.localDay, held.key, chatGuid, 'reply', text)
+            if (!queued.ok) {
+                if (queued.reason === 'already_sent') {
+                    // A stale run lost the race to a reclaiming run that already queued it.
+                    held = null
+                    results.skipped++
+                } else {
+                    console.error(`briefing outbox enqueue failed (${chatGuid}):`, queued.error)
+                    results.errors++ // lease released in finally; a retry can claim
+                }
                 continue
             }
-            // Outbox first: the row exists before the attempt, so a kill or
-            // a send failure is always retried by the spectrum-sweep cron.
-            const outboxId = brief
-                ? await enqueueOutbox(chatGuid, 'brief', JSON.stringify({ card: brief.card, text }), { lease: true })
-                : await enqueueOutbox(chatGuid, 'reply', text, { lease: true })
-            if (!outboxId) {
-                await supabase.from('dinghy_brief_delivery').delete().eq('user_id', ctx.userId).eq('local_day', localDay)
-                console.error(`briefing outbox enqueue failed (${chatGuid})`)
-                results.errors++
-                continue
-            }
+            held = null
+            const outboxId = queued.outboxId
             if (forced) await clearBriefingForce(ctx.userId).catch(() => {})
             // Best-effort immediate send; the sweep covers any failure.
             try {
@@ -225,6 +249,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         } catch (err) {
             console.error(`briefing failed (${chatGuid}):`, err instanceof Error ? err.message : String(err))
             results.errors++
+        } finally {
+            // Any exit before the brief was queued frees the lease for a retry.
+            if (held) await releaseBrief(held.userId, held.localDay, held.key).catch(() => {})
         }
     }
 
