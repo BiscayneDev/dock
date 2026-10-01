@@ -8,7 +8,7 @@
 
 import { createServerClient } from '@/lib/supabase/server'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
-import { getOrStart, runInSandbox, stopSession, getProvider } from '@/lib/computer/manager'
+import { getOrStart, runInSandbox, stopSession, getProvider, replaceDeadSandbox, SandboxGoneError } from '@/lib/computer/manager'
 import {
   assertComputerAllowed,
   getComputerSettings,
@@ -20,6 +20,7 @@ import { getDailyUsage } from '@/lib/allowance'
 import {
   browserRunCommand,
   browserTaskTemplate,
+  BROWSER_RUN_TIMEOUT_MS,
   ensureBrowserUse,
   scrubInjectedInstructions,
 } from '@/lib/computer/browser'
@@ -168,9 +169,17 @@ export async function runApprovedBrowse(
   if (!guard.ok) return { success: false, error: guard.error }
 
   const provider = getProvider()
-  const run = async (command: string) => {
+  // Unmetered probe/setup runs (the browse run itself is metered below), but a
+  // dead sandbox id is still replaced so setup lands in a live sandbox.
+  const run = async (command: string, opts?: { timeoutMs?: number }) => {
     const { session } = await getOrStart(userId, supabase)
-    return provider.run(session.sandbox_id ?? '', command)
+    try {
+      return await provider.run(session.sandbox_id ?? '', command, opts)
+    } catch (err) {
+      if (!(err instanceof SandboxGoneError)) throw err
+      const sandboxId = await replaceDeadSandbox(session, supabase, provider)
+      return provider.run(sandboxId, command, opts)
+    }
   }
 
   const ready = await ensureBrowserUse(run)
@@ -183,7 +192,8 @@ export async function runApprovedBrowse(
     browserRunCommand(browserTaskTemplate(input.task, input.urls), []),
     supabase,
     provider,
-    'browser'
+    'browser',
+    { timeoutMs: BROWSER_RUN_TIMEOUT_MS }
   )
   if ('error' in result) return { success: false, error: result.error }
 
