@@ -41,7 +41,7 @@ vi.mock('@/lib/spectrum/brief-card-send', () => ({ sendBrief: async () => {} }))
 vi.mock('@/lib/files/render', () => ({ renderFile: async () => ({}) }))
 vi.mock('@/lib/files/tool', () => ({ parseFileInput: () => ({}) }))
 vi.mock('@/spectrum/store', () => ({
-  ackResume: (...a: unknown[]) => ackResume(...a),
+  ackResume: (id: string) => ackResume(id),
   claimPendingResume: async () => ({ id: 'r1', pendingRequest: 'what is on my calendar', provider: 'google' }),
   listUnresumedResumeChats: async () => ['chat-1'],
   loadFacts: async () => [],
