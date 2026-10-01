@@ -33,15 +33,36 @@ export async function claimBrief(userId: string, localDay: string, requestKey: s
     return data === true ? { ok: true } : { ok: false, reason: 'held' }
 }
 
-/** The brief is queued in the outbox: the day is done for this key. */
-export async function completeBrief(userId: string, localDay: string, requestKey: string): Promise<void> {
-    const { error } = await createServerClient()
-        .from('dinghy_brief_delivery')
-        .update({ status: 'sent', completed_at: new Date().toISOString() })
-        .eq('user_id', userId)
-        .eq('local_day', localDay)
-        .eq('request_key', requestKey)
-    if (error) throw new Error(`brief complete failed: ${error.message}`)
+export type BriefEnqueue =
+    | { ok: true; outboxId: string }
+    | { ok: false; reason: 'already_sent' | 'error'; error?: string }
+
+/**
+ * Queue the brief and mark the day done in ONE database transaction
+ * (enqueue_dinghy_brief). There is no state where the outbox row exists but
+ * the claim is still reclaimable, so a lease expiry or crash after this call
+ * can never produce a second brief. 'already_sent' means another run
+ * delivered this key first: the caller must not send.
+ */
+export async function enqueueBriefAtomic(
+    userId: string,
+    localDay: string,
+    requestKey: string,
+    chatGuid: string,
+    kind: 'brief' | 'reply',
+    text: string
+): Promise<BriefEnqueue> {
+    const { data, error } = await createServerClient().rpc('enqueue_dinghy_brief', {
+        p_user_id: userId,
+        p_local_day: localDay,
+        p_request_key: requestKey,
+        p_chat_guid: chatGuid,
+        p_kind: kind,
+        p_text: text,
+    })
+    if (error) return { ok: false, reason: 'error', error: error.message }
+    if (!data) return { ok: false, reason: 'already_sent' }
+    return { ok: true, outboxId: data as string }
 }
 
 /** Generation failed before queueing: expire the lease so a retry can claim it. */

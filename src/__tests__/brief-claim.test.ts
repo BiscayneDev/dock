@@ -68,3 +68,24 @@ describe('releaseBrief', () => {
     expect(eqCalls).toContainEqual(['status', 'claimed'])
   })
 })
+
+import { enqueueBriefAtomic } from '@/lib/spectrum/brief-claim'
+
+describe('enqueueBriefAtomic', () => {
+  it('calls the single-transaction rpc and returns the outbox id', async () => {
+    rpcMock.mockResolvedValue({ data: 'ob-1', error: null })
+    expect(await enqueueBriefAtomic('u1', '2026-10-01', 'daily', 'chat-1', 'brief', '{}')).toEqual({ ok: true, outboxId: 'ob-1' })
+    expect(rpcMock).toHaveBeenCalledWith('enqueue_dinghy_brief', {
+      p_user_id: 'u1', p_local_day: '2026-10-01', p_request_key: 'daily',
+      p_chat_guid: 'chat-1', p_kind: 'brief', p_text: '{}',
+    })
+  })
+  it('null means another run already delivered this key', async () => {
+    rpcMock.mockResolvedValue({ data: null, error: null })
+    expect(await enqueueBriefAtomic('u1', 'd', 'daily', 'c', 'reply', 't')).toEqual({ ok: false, reason: 'already_sent' })
+  })
+  it('surfaces rpc errors', async () => {
+    rpcMock.mockResolvedValue({ data: null, error: { message: 'boom' } })
+    expect(await enqueueBriefAtomic('u1', 'd', 'daily', 'c', 'reply', 't')).toEqual({ ok: false, reason: 'error', error: 'boom' })
+  })
+})

@@ -28,8 +28,8 @@ import { getAuthedClient } from '@/lib/integrations/google'
 import { getSpectrumApp, getImessage } from '@/lib/spectrum/app'
 import { IMESSAGE_READ_TOOLS, loadImessageToolContext } from '@/lib/spectrum/imessage-tools'
 import { isBriefingEnabled, briefingForceKey, clearBriefingForce, MUTE_FOOTER } from '@/lib/spectrum/briefing'
-import { briefRequestKey, claimBrief, completeBrief, releaseBrief } from '@/lib/spectrum/brief-claim'
-import { enqueueOutbox, markOutboxSent } from '@/lib/spectrum/outbox'
+import { briefRequestKey, claimBrief, enqueueBriefAtomic, releaseBrief } from '@/lib/spectrum/brief-claim'
+import { markOutboxSent } from '@/lib/spectrum/outbox'
 import { isOverDailyAllowance } from '@/lib/allowance'
 import { recordUsage, type GatewayUsage } from '@/lib/spectrum/metering'
 import { chatWithTools } from '@/lib/spectrum/dinghy'
@@ -210,24 +210,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 continue
             }
             const text = `${plain}\n\n${MUTE_FOOTER}`
-            // Outbox first: the row exists before the attempt, so a kill or
-            // a send failure is always retried by the spectrum-sweep cron.
-            const outboxId = brief
-                ? await enqueueOutbox(chatGuid, 'brief', JSON.stringify({ card: brief.card, text }), { lease: true })
-                : await enqueueOutbox(chatGuid, 'reply', text, { lease: true })
-            if (!outboxId) {
-                console.error(`briefing outbox enqueue failed (${chatGuid})`)
-                results.errors++
+            // Queue + mark the day done in one transaction. Before this call the
+            // claim is a releasable lease; after it the key is 'sent', so no
+            // later run can reclaim it. The outbox row (leased) is retried by
+            // the spectrum-sweep cron if the direct send below fails or the
+            // process dies.
+            const queued = brief
+                ? await enqueueBriefAtomic(held.userId, held.localDay, held.key, chatGuid, 'brief', JSON.stringify({ card: brief.card, text }))
+                : await enqueueBriefAtomic(held.userId, held.localDay, held.key, chatGuid, 'reply', text)
+            if (!queued.ok) {
+                if (queued.reason === 'already_sent') {
+                    // A stale run lost the race to a reclaiming run that already queued it.
+                    held = null
+                    results.skipped++
+                } else {
+                    console.error(`briefing outbox enqueue failed (${chatGuid}):`, queued.error)
+                    results.errors++ // lease released in finally; a retry can claim
+                }
                 continue
             }
-            // Queued: the day is done for this key. Drop the release guard FIRST so
-            // a failed mark can never expire the lease and trigger a second
-            // (duplicate) generation; the mark itself is best-effort.
-            const done = held
             held = null
-            await completeBrief(done.userId, done.localDay, done.key).catch((err) =>
-                console.error(`briefing complete mark failed (${chatGuid}):`, err instanceof Error ? err.message : String(err))
-            )
+            const outboxId = queued.outboxId
             if (forced) await clearBriefingForce(ctx.userId).catch(() => {})
             // Best-effort immediate send; the sweep covers any failure.
             try {

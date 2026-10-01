@@ -60,7 +60,53 @@ $$;
 revoke execute on function public.claim_dinghy_brief(uuid, date, text, integer, integer) from public, anon, authenticated;
 grant execute on function public.claim_dinghy_brief(uuid, date, text, integer, integer) to service_role;
 
+-- Atomic enqueue + completion. Inserts the outbox row and flips the claim to
+-- 'sent' in ONE transaction (one function call), so there is no window where
+-- the brief is queued but the claim still looks reclaimable. Returns the new
+-- outbox id, or NULL when the key is already 'sent' (another run delivered it:
+-- the caller must not send). Raises when no claim row exists. The row lock
+-- serialises a stale run racing a reclaiming run: exactly one gets the id.
+create or replace function public.enqueue_dinghy_brief(
+  p_user_id uuid,
+  p_local_day date,
+  p_request_key text,
+  p_chat_guid text,
+  p_kind text,
+  p_text text
+) returns uuid
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  v_status text;
+  v_outbox_id uuid;
+begin
+  select status into v_status
+    from public.dinghy_brief_delivery
+    where user_id = p_user_id and local_day = p_local_day and request_key = p_request_key
+    for update;
+  if not found then
+    raise exception 'no brief claim for % % %', p_user_id, p_local_day, p_request_key;
+  end if;
+  if v_status = 'sent' then
+    return null;
+  end if;
+  insert into public.spectrum_outbox (chat_guid, kind, text, lease_claimed_at)
+    values (p_chat_guid, p_kind, p_text, now())
+    returning id into v_outbox_id;
+  update public.dinghy_brief_delivery
+    set status = 'sent', completed_at = now()
+    where user_id = p_user_id and local_day = p_local_day and request_key = p_request_key;
+  return v_outbox_id;
+end;
+$$;
+
+revoke execute on function public.enqueue_dinghy_brief(uuid, date, text, text, text, text) from public, anon, authenticated;
+grant execute on function public.enqueue_dinghy_brief(uuid, date, text, text, text, text) to service_role;
+
 -- Rollback (manual):
+--   drop function public.enqueue_dinghy_brief(uuid, date, text, text, text, text);
 --   drop function public.claim_dinghy_brief(uuid, date, text, integer, integer);
 --   delete from public.dinghy_brief_delivery where request_key <> 'daily';
 --   alter table public.dinghy_brief_delivery drop constraint dinghy_brief_delivery_pkey;
