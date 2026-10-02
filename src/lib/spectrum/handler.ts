@@ -23,7 +23,7 @@ import {
     type HistoryMessage,
 } from '@/spectrum/store'
 import { verifiedWaitlistBackground } from './background-context'
-import { firstReplyBundleDecision, isGoogleReconnectIntent, FIRST_USE_SUGGESTIONS, GOOGLE_CONNECT_ASK } from './connect-lines'
+import { firstReplyBundleDecision, isGoogleReconnectIntent, FIRST_USE_SUGGESTIONS, FIRST_USE_SUGGESTIONS_NO_GOOGLE, GOOGLE_CONNECT_ASK } from './connect-lines'
 import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsAnotherGoogle, wantsGithub, wantsHealth, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { recordUsage, spendToolFor, type GatewayUsage } from './metering'
 import { allowanceUsedUpMessage, claimLimitNotice, isOverDailyAllowance } from '@/lib/allowance'
@@ -1017,6 +1017,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         // Files made this turn go out after the text: a file link, or an attachment.
         for (const file of fileTools?.files() ?? []) await sendFile(space, chatGuid, file)
         let firstReplyCardClaimed = false
+        let googleConnectedAtFirstReply = true
         // The card follows a delivered answer. Claim once across serverless
         // workers; release the claim if the native card itself fails.
         const bundle = firstReplyBundleDecision({ answerDelivered, reply: plainReply, hasProposal: Boolean(proposal), role })
@@ -1026,6 +1027,21 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             const { error: claimError } = await db.from('dinghy_first_reply_cards').insert({ chat_guid: chatGuid })
             if (!claimError) {
                 firstReplyCardClaimed = true
+                // The useful first answer stays first. The Google link is the very
+                // next bubble (connecting is the first onboarding step: it unlocks
+                // the morning brief, the first finding and the research pass). The
+                // contact card and tips follow.
+                googleConnectedAtFirstReply = await isGoogleConnected(chatGuid).catch(() => true)
+                if (!googleConnectedAtFirstReply) {
+                    const link = await createConnectLink(chatGuid, 'connect my gmail').catch((err) => {
+                        logErr('first reply Google link failed', err)
+                        return null
+                    })
+                    if (link) {
+                        await sendText(space, chatGuid, 'connect_link', GOOGLE_CONNECT_ASK)
+                        await sendLink(space as LinkSender, chatGuid, 'connect_link', link)
+                    }
+                }
                 try {
                     await (space as InboundSpace & { send(b: unknown): Promise<unknown> })
                         .send(dinghyContactCard(await dinghyLineFor(chatGuid)))
@@ -1040,20 +1056,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         }
         // One short nudge toward real asks, once, with the first-reply card.
         if (answerDelivered && firstReplyCardClaimed && role === 'member') {
-            await sendText(space, chatGuid, 'reply', FIRST_USE_SUGGESTIONS).catch(() => false)
-        }
-        // The useful first answer stays first. Then invite Google so the next
-        // request can use the person's own inbox and calendar. The durable
-        // first-reply-card claim prevents repeat prompts across workers.
-        if (answerDelivered && firstReplyCardClaimed && role === 'member' && !(await isGoogleConnected(chatGuid).catch(() => true))) {
-            const link = await createConnectLink(chatGuid, 'connect my gmail').catch((err) => {
-                logErr('first reply Google link failed', err)
-                return null
-            })
-            if (link) {
-                await sendText(space, chatGuid, 'connect_link', GOOGLE_CONNECT_ASK)
-                await sendLink(space as LinkSender, chatGuid, 'connect_link', link)
-            }
+            await sendText(space, chatGuid, 'reply', googleConnectedAtFirstReply ? FIRST_USE_SUGGESTIONS : FIRST_USE_SUGGESTIONS_NO_GOOGLE).catch(() => false)
         }
         // Warm-path latency ledger: read these from the function logs.
         console.log(

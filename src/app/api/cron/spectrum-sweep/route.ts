@@ -15,6 +15,7 @@ import { claimOutboxBatch, markOutboxFailed, markOutboxSent } from '@/lib/spectr
 import { chat, chatWithTools, MAX_HISTORY, wantsAnotherGoogle } from '@/lib/spectrum/dinghy'
 import { googleConnectedLine, isConnectRequest } from '@/lib/spectrum/connect-lines'
 import { readFirstFinding } from '@/lib/spectrum/first-finding'
+import { runConnectResearch } from '@/lib/spectrum/connect-research'
 import { capabilitiesFor, loadImessageToolContext, toolsFor } from '@/lib/spectrum/imessage-tools'
 import { actionToolsFor, renderProposal } from '@/lib/spectrum/actions'
 import { allowanceUsedUpMessage, claimLimitNotice, isOverDailyAllowance } from '@/lib/allowance'
@@ -136,6 +137,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                         if (finding) {
                             await space.send(toPlainText(finding))
                             await saveMessage(guid, 'assistant', finding).catch(() => {})
+                        }
+                        // Then start getting to know them: headers-only read of calendar
+                        // and mail, a short summary, a few saved notes. First connect only.
+                        if (!wantsAnotherGoogle(claimed.pendingRequest)) {
+                            await runConnectResearch({
+                                chatGuid: guid,
+                                userId: toolCtxC.userId,
+                                tokens: toolCtxC.tokens.google,
+                                tz: toolCtxC.timezone,
+                                say: async (t) => {
+                                    await space.send(toPlainText(t))
+                                    await saveMessage(guid, 'assistant', t).catch(() => {})
+                                },
+                            })
                         }
                     }
                     results.resumes++
