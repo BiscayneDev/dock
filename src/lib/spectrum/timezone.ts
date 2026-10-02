@@ -3,7 +3,10 @@ import { createServerClient } from '@/lib/supabase/server'
 import type { LatLon } from './location'
 
 export function parseTimezoneIntent(text: string): string | null {
-  const m = text.trim().match(/^(?:i(?: am|'m) (?:now |currently )?in|(?:please )?(?:set|change|switch) my (?:time ?zone|mornings) (?:to|for))\s+([\p{L}\p{N}_/,+. '-]{2,80})[.!?]?$/iu)
+  // Accept a current-location correction in its own opening sentence.
+  // Do not infer a place from quoted text, past travel or future plans.
+  const current = text.trim().replace(/^(?:nope|no|actually)[,.!]\s*/i, '').split(/[.!?](?:\s|$)/, 1)[0]
+  const m = current.match(/^(?:i(?: am|'m) (?:now |currently )?(?:back )?in|(?:please )?(?:set|change|switch) my (?:time ?zone|mornings) (?:to|for))\s+([\p{L}\p{N}_/,+. '-]{2,80})[.!?]?$/iu)
   return m ? m[1].trim().replace(/[.!?]+$/, '').trim() : null
 }
 
@@ -20,7 +23,8 @@ export type ZoneResolution = { kind: 'one'; choice: ZoneChoice } | { kind: 'ambi
 export async function resolvePlaceTimezone(place: string): Promise<ZoneResolution> {
   const direct = validIanaTimezone(place)
   if (direct) return { kind: 'one', choice: { zone: direct, label: direct.split('/').pop()!.replaceAll('_', ' ') } }
-  const [city, ...rest] = place.split(',').map(s => s.trim()).filter(Boolean)
+  const normalizedPlace = /^nyc$/i.test(place.trim()) ? 'New York, New York' : place
+  const [city, ...rest] = normalizedPlace.split(',').map(s => s.trim()).filter(Boolean)
   if (!city || city.length < 2 || !/^[\p{L} .'-]+$/u.test(city)) return { kind: 'none' }
   const countryOrRegion = rest.join(' ').toLowerCase()
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=100&language=en&format=json`

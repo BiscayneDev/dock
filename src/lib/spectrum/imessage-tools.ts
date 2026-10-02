@@ -129,24 +129,28 @@ export function guestCapabilities(): ImessageCapabilities {
 export async function loadImessageToolContext(chatGuid: string): Promise<UserContext | null> {
     const supabase = createServerClient()
 
-    const { data: identity } = await supabase
+    const { data: identity, error: identityError } = await supabase
         .from('spectrum_identities')
         .select('user_id')
         .eq('chat_guid', chatGuid)
         .maybeSingle()
     const userId = (identity?.user_id as string | null) ?? null
-    if (!userId) return null
+    if (identityError || !userId) return null
 
-    const { data: user } = await supabase
+    const { data: user, error: userError } = await supabase
         .from('users')
         .select('id, name, timezone')
         .eq('id', userId)
         .maybeSingle()
 
-    const { data: tokenRows } = await supabase
+    if (userError || !user?.id) return null
+
+    const { data: tokenRows, error: tokenError } = await supabase
         .from('oauth_tokens')
         .select('provider, provider_account_email, access_token, refresh_token, expires_at')
         .eq('user_id', userId)
+
+    if (tokenError) throw new Error(`OAuth token lookup failed: ${tokenError.message}`)
 
     const tokens: Record<string, DecryptedTokens> = {}
     for (const row of tokenRows ?? []) {
@@ -162,7 +166,8 @@ export async function loadImessageToolContext(chatGuid: string): Promise<UserCon
             // Undecryptable token row — skip rather than kill the chat.
         }
     }
-    if (!tokens.google && !tokens.paybox && !tokens.twitter && !tokens.github && !tokens.oura && !tokens.whoop) return null
+    // A verified identity is enough for the computer and files. Account
+    // tools still depend on their own tokens in capabilitiesFor/toolsFor.
 
     return {
         userId,

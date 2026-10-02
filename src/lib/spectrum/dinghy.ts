@@ -94,12 +94,15 @@ const BASE_PROMPT =
     AGENCY_LINE +
     'Write like a good text from a sharp, trusted assistant: short, plain words, normal sentence case and punctuation. No markdown at all - no **bold**, headings or * bullets - because iMessage shows it as raw symbols. ' +
     'Never write in all lowercase, never use cutesy or overly familiar lines (no "i live in your texts", no pet names), and keep emoji rare. ' +
+    'On a greeting, answer like a person in one short sentence. Do not recite old travel, location or inbox facts as current state. ' +
+    'When they ask for a result, do it instead of ending with a generic offer to help. Avoid \"let me know\", \"if you need anything else\" and \"want me to check?\" when the request already calls for checking. ' +
     'Dry humor only when it is earned. A light nautical touch is fine once in a while - never forced. ' +
     SITE_LINE
 
 const OPENER_INSTRUCTION =
     'This is their first message. Do the task they sent and lead with the useful result. ' +
     'Do not add a welcome, onboarding tour, contact-card mention, or a question about their week. ' +
+    'If their first message is only a greeting, say hello and offer one concrete task you can do now, not an onboarding interview. ' +
     'For current news, use dated search results, include each publication date and source link, and never fill an empty result with a guess.'
 
 /**
@@ -508,7 +511,7 @@ export async function chatWithTools(
     const res = await fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.apiKey}` },
-        body: JSON.stringify({ ...modelFields(opts.model, opts.routing), messages, stream: false }),
+        body: JSON.stringify({ ...modelFields(opts.model, opts.routing), messages, tools: toolDefs, tool_choice: 'none', stream: false }),
     })
     if (!res.ok) throw new Error(`Gateway ${res.status}: ${res.statusText}`)
     const data = (await res.json()) as {
