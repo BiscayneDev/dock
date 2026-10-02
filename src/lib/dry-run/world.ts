@@ -74,6 +74,10 @@ export const CAPABILITY_HANDLERS: Record<string, (input: Record<string, unknown>
     const mine = world.grants.filter((g) => g.user === world.actingUser && !g.revoked)
     return { success: true, data: { sessions: mine.map((g) => ({ site: g.site, mode: g.mode })), workflows: world.workflows.filter((w) => w.user === world.actingUser).map((w) => w.name), recipes: world.recipes.filter((r) => r.user === world.actingUser).map((r) => r.name) } }
   },
+  google_connect(_input, world) {
+    world.audit.push({ event: 'google_connect_link', user: world.actingUser })
+    return { success: true, data: { status: 'link_sent_after_your_reply', instruction: 'The one-tap Google link arrives as its own message right after your reply. Say so in one short line. Do not include the URL.' } }
+  },
   workflow_list(_input, world) {
     return { success: true, data: { workflows: world.workflows.filter((w) => w.user === world.actingUser).map((w) => ({ name: w.name, steps: w.steps, needs: w.needs })) } }
   },

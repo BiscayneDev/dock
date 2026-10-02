@@ -233,7 +233,7 @@ export function denyMessage(site: string, reason: DenyReason): string {
   if (GOOGLE_HOSTS.some((g) => h === g || h.endsWith(`.${g}`))) {
     return (
       `Google is not connected through a browser login. Gmail and Calendar use their own one-tap Google link, which keeps your password out of it. ` +
-      `Tell the user to text "connect my gmail" (the link arrives in this chat) and that it covers Gmail and Calendar. Do not call browser_connect for Google.`
+      `Call google_connect now: it sends the one-tap Google link to this chat, and it covers Gmail and Calendar. Do not call browser_connect for Google, and never ask the user to retype a phrase.`
     )
   }
   const kind: Record<DenyReason, string> = {
