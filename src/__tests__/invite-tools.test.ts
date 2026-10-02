@@ -52,4 +52,16 @@ describe('invite tools', () => {
     expect(invitesPromptLine(1)).toContain('1 invite to give out')
     expect(invitesPromptLine(3)).not.toMatch(/[*`#—]/)
   })
+
+  it('Brendan (grant 3, none used): status says 3, prompt tells the model to check before quoting', async () => {
+    grantRow.data = { granted: 3 }
+    rpc.mockResolvedValue({ data: 3, error: null })
+    const [status] = inviteToolsFor('any;-;+17193933639', 'member')
+    const r = await status.execute({}, ctx)
+    expect(r).toEqual({ success: true, data: { granted: 3, used: 0, remaining: 3 } })
+    const p = buildSystemPrompt([], false, { google: false, wallet: false, invitesLeft: 3 })
+    expect(p).toContain('You have 3 invites to give out')
+    expect(p).toContain('Call invite_status before you quote any number')
+    grantRow.data = { granted: 5 }
+  })
 })
