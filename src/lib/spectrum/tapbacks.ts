@@ -114,3 +114,43 @@ export function shouldThread(
     if (mine < 0) return false
     return recent.slice(mine + 1).some((m) => m.role === 'user')
 }
+
+
+const GOOD_NEWS = /\b(congrat|congrats|got the job|got in|accepted|approved|passed|shipped|launched|we won|closed the deal|signed|promoted|it worked|works now)\b/i
+const FUNNY = /(\bha(ha)+\b|\blol\b|\blmao\b|😂|🤣)/i
+
+/**
+ * What the working 👀 turns into once the answer lands. ❤️ for thanks, 🎉 for
+ * good news, 😂 for a joke, otherwise ✅ (done).
+ */
+export function doneTapback(userText: string): string {
+    if (THANKS.test(userText)) return '❤️'
+    if (GOOD_NEWS.test(userText)) return '🎉'
+    if (FUNNY.test(userText)) return '😂'
+    return '✅'
+}
+
+type WorkingHandle = { unsend?: () => Promise<unknown> } | null
+
+/**
+ * Swap the working 👀 for the done reaction. Only when 👀 was actually placed
+ * (short turns get no reaction). Best effort, never throws. The 👀 is lifted
+ * first so the message ends up with exactly one of our tapbacks.
+ */
+export async function settleWorkingTapback(
+    message: MessageLike,
+    eyes: Promise<WorkingHandle> | null,
+    userText: string
+): Promise<string | null> {
+    if (!eyes) return null
+    try {
+        const handle = await eyes
+        if (!handle) return null // 👀 never landed; don't add a lone ✅
+        if (handle.unsend) await handle.unsend().catch((err) => console.error('eyes unsend failed:', err instanceof Error ? err.message : String(err)))
+        const emoji = doneTapback(userText)
+        return (await tapback(message, emoji)) ? emoji : null
+    } catch (err) {
+        console.error('settle tapback failed:', err instanceof Error ? err.message : String(err))
+        return null
+    }
+}
