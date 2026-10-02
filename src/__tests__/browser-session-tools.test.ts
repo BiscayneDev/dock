@@ -4,7 +4,7 @@ const mint = vi.fn()
 vi.mock('@/lib/browser-sessions/login', () => ({ mintLoginLink: (...a: unknown[]) => mint(...a) }))
 const list = vi.fn()
 const revoke = vi.fn()
-const audit = vi.fn(async () => undefined)
+const audit = vi.fn(async (..._a: unknown[]) => undefined)
 vi.mock('@/lib/capabilities/store', () => ({ listCapabilities: (...a: unknown[]) => list(...a), revokeCapabilities: (...a: unknown[]) => revoke(...a), auditEvent: (...a: unknown[]) => audit(...a) }))
 
 import { browserConnect, browserSessions, browserDisconnect } from '@/lib/tools/browser-sessions'
