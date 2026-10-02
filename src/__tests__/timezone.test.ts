@@ -9,6 +9,8 @@ describe('explicit timezone changes', () => {
     expect(parseTimezoneIntent('I am currently in London.')).toBe('London')
     expect(parseTimezoneIntent('set my timezone to Europe/Paris')).toBe('Europe/Paris')
     expect(parseTimezoneIntent('please change my time zone to Miami, Florida')).toBe('Miami, Florida')
+    expect(parseTimezoneIntent("Nope. I'm back in nyc. Flew back yesterday.")).toBe('nyc')
+    expect(parseTimezoneIntent("I'm going to be in Paris.")).toBeNull()
     expect(parseTimezoneIntent('I was in Paris')).toBeNull()
     expect(parseTimezoneIntent('Sam said "I am in Paris"')).toBeNull()
   })
