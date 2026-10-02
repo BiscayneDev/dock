@@ -41,3 +41,30 @@ describe('capability voice', () => {
     expect(m).not.toContain("so I can't")
   })
 })
+
+describe('capability scoping lines', () => {
+  const p = buildSystemPrompt([], false, { google: true, wallet: false, computer: true, reminders: true })
+  it('checks browser_sessions before claiming nothing is saved', () => {
+    expect(p).toContain('call browser_sessions')
+  })
+  it('covers cross-user, allowance, taxes and workplace chat', () => {
+    expect(p).toContain("another person's login")
+    expect(p).toContain('used up')
+    expect(p).toContain('taxes')
+    expect(p).toContain('their own account')
+  })
+})
+
+describe('dry-run routed model', () => {
+  it('surfaces per-call routing from onUsage', async () => {
+    const { runDryRun } = await import('@/lib/dry-run/run')
+    const r = await runDryRun({ msg: 'hi' } as never, {
+      realTools: [],
+      chatWithTools: (async (_h: unknown, opts: { onUsage?: (u: unknown) => void }) => {
+        opts.onUsage?.({ model: 'routed-x', inputTokens: 3, outputTokens: 2, costUsd: 0.001, latencyMs: 5 })
+        return { reply: 'ok', toolCalls: 0, iterations: 1 }
+      }) as never,
+    })
+    expect(r.routed_models).toEqual([{ model: 'routed-x', input_tokens: 3, output_tokens: 2, cost_usd: 0.001, latency_ms: 5 }])
+  })
+})

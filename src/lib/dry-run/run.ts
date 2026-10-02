@@ -119,9 +119,11 @@ export async function runDryRun(
   const real = deps.realTools ?? [...toolsFor(ctx), ...actions.tools, ...reminderToolsFor('dry-run', world.actingUser, ctx.timezone)]
   const tools = stubTools(real, world, trace, proposeGated)
   const run = deps.chatWithTools ?? chatWithTools
+  const routed: Array<{ model: string; input_tokens: number; output_tokens: number; cost_usd: number | null; latency_ms: number }> = []
   const r = await run(
     [{ role: 'user', content: scenario.msg }],
-    { gatewayUrl: GATEWAY_URL, apiKey: SHIPYARD_API_KEY ?? '', model: SHIPYARD_MODEL, capabilities: { google: true, wallet: false, files: false, live: true, computer: true, spend: true, reminders: true } },
+    { gatewayUrl: GATEWAY_URL, apiKey: SHIPYARD_API_KEY ?? '', model: SHIPYARD_MODEL, capabilities: { google: true, wallet: false, files: false, live: true, computer: true, spend: true, reminders: true },
+      onUsage: (u) => routed.push({ model: u.model, input_tokens: u.inputTokens, output_tokens: u.outputTokens, cost_usd: u.costUsd, latency_ms: u.latencyMs }) },
     tools,
     ctx
   )
@@ -162,6 +164,8 @@ export async function runDryRun(
     action: deriveAction(trace),
     confirm_shown: confirmSeen,
     revoke_ok: mine.every((g) => !g.revoked) || trace.some((c) => c.name === 'browser_disconnect'),
+    /** What the router actually used per gateway call (we pin no model). */
+    routed_models: routed,
     turns: 1,
     iterations: r.iterations,
     tool_call_count: r.toolCalls,
