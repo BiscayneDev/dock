@@ -88,3 +88,12 @@ describe('invite idempotency', () => {
     expect(from).toHaveBeenCalledTimes(1)
   })
 })
+
+import { welcomeText, cancelStaleIntro } from '@/lib/spectrum/waitlist-invites'
+describe('instinct-style onboarding', () => {
+  it('welcome is short and plain', () => {
+    expect(welcomeText('Denny')).toBe("Hi Denny, it's Dinghy. You're in the beta. Save this number, and tell me what you need.")
+    expect(welcomeText(null)).not.toContain('undefined')
+  })
+  it('exports the stale-intro canceller', () => { expect(typeof cancelStaleIntro).toBe('function') })
+})
