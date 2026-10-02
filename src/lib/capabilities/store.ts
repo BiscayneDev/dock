@@ -211,3 +211,31 @@ export async function finishRun(runId: string, outcome: string, detail: Record<s
     .update({ ended_at: new Date().toISOString(), outcome, detail })
     .eq('id', runId)
 }
+
+/**
+ * Append a completed audit row for a lifecycle event (connect link minted,
+ * login saved, disconnect). Best effort: the event already happened, so a
+ * failed write is logged, not thrown. Runs use startRun, which is fail-closed.
+ */
+export async function auditEvent(input: {
+  userId: string
+  kind: CapabilityKind
+  label: string
+  event: 'connect_link' | 'connected' | 'disconnected' | 'connect_cancelled'
+  detail?: Record<string, unknown>
+}): Promise<void> {
+  const now = new Date().toISOString()
+  const { error } = await createServerClient().from('capability_runs').insert({
+    user_id: input.userId,
+    capability_id: null,
+    kind: input.kind,
+    label: input.label,
+    mode: 'read',
+    task: `event:${input.event}`,
+    started_at: now,
+    ended_at: now,
+    outcome: 'ok',
+    detail: input.detail ?? {},
+  })
+  if (error) console.error('capability audit event failed:', error.message)
+}

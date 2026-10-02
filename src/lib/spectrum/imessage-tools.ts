@@ -23,6 +23,7 @@ import { xFreeTools, xSearchEnabled } from '@/lib/tools/x-free'
 import { healthSleep, healthReadiness, healthActivity, healthHeartRate, healthSummary } from '@/lib/tools/health'
 import { githubListRepos, githubGetRepo, githubListIssues, githubGetIssue, githubListPrs, githubGetPr, githubListNotifications } from '@/lib/tools/github'
 import { COMPUTER_TOOLS } from '@/lib/tools/computer'
+import { BROWSER_SESSION_TOOLS } from '@/lib/tools/browser-sessions'
 import { accountsLine, multiAccount } from '@/lib/integrations/google-accounts'
 
 /**
@@ -111,7 +112,7 @@ export function toolsFor(ctx: UserContext): Tool[] {
         ...(caps.x ? IMESSAGE_X_TOOLS : []),
         ...(caps.github ? IMESSAGE_GITHUB_TOOLS : []),
         ...(caps.health ? IMESSAGE_HEALTH_TOOLS : []),
-        ...(caps.computer !== false ? COMPUTER_TOOLS : []),
+        ...(caps.computer !== false ? [...COMPUTER_TOOLS, ...BROWSER_SESSION_TOOLS] : []),
     ]
 }
 
