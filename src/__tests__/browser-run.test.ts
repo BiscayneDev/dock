@@ -9,6 +9,7 @@ const cap = vi.hoisted(() => ({
 vi.mock('@/lib/capabilities/store', () => cap)
 const recordSpend = vi.hoisted(() => vi.fn(async () => undefined))
 vi.mock('@/lib/payments/spend-caps', () => ({ recordSpend }))
+vi.mock('@/lib/spectrum/config', () => ({ GATEWAY_URL: 'https://gateway.shipyard.test' }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: () => ({}) }))
 
 import { runLoggedInSession, parseBrowserOutput, receiptLine, allowOutFor, sanitizeAnswer, SESSION_STATE_PATH, type EphemeralProvider } from '@/lib/browser-sessions/run'
@@ -39,7 +40,6 @@ beforeEach(() => {
   cap.touchCapability.mockClear()
   cap.startRun.mockImplementation(async () => 'run1')
   recordSpend.mockClear()
-  process.env.SHIPYARD_GATEWAY_URL = 'https://gateway.shipyard.test'
 })
 
 describe('runLoggedInSession', () => {
@@ -132,8 +132,10 @@ describe('helpers', () => {
     expect(parseBrowserOutput('=== BROWSER_RESULT ===\nhi').stats).toBeNull()
     expect(receiptLine('x.com', null)).toBe('used your x.com session (read-only).')
   })
-  it('allowOut omits the gateway when unset or malformed', () => {
-    expect(allowOutFor('x.com', undefined)).toEqual(['x.com', '*.x.com'])
-    expect(allowOutFor('x.com', 'not a url')).toEqual(['x.com', '*.x.com'])
+  it('allowOut uses the app-configured gateway by default', () => {
+    expect(allowOutFor('x.com')).toEqual(['x.com', '*.x.com', 'gateway.shipyard.test'])
+  })
+  it('allowOut omits the gateway when malformed', () => {
+        expect(allowOutFor('x.com', 'not a url')).toEqual(['x.com', '*.x.com'])
   })
 })

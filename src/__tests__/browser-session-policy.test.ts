@@ -80,6 +80,9 @@ describe('egressHostsFor', () => {
     expect(egressHostsFor('github.com')).toEqual(['github.com', '*.github.com'])
     expect(egressHostsFor('github.com', ['https://www.githubassets.com', 'bad host'])).toEqual(['github.com', '*.github.com', 'githubassets.com'])
   })
+  it('multi-label wildcards only come from explicit extras', () => {
+    expect(egressHostsFor('example.com', ['*.cdn.example.com', '*.com', '*.'])).toEqual(['example.com', '*.example.com', '*.cdn.example.com'])
+  })
 })
 
 describe('broadened denylist', () => {

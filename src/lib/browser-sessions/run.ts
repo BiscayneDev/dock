@@ -4,9 +4,22 @@
  * - The user's cookies are decrypted server-side and written to a RAM-backed
  *   file inside a FRESH sandbox that exists only for this run. The user's
  *   persistent computer (computer_run) never holds them.
- * - The sandbox network is pinned to the site (plus the Shipyard gateway for the
- *   model) at E2B's egress layer, and the browser itself is pinned and made
- *   GET/HEAD-only by bootstrap.py. Two independent layers.
+ * - PRIMARY containment is inside the sandbox and the browser: bootstrap.py
+ *   routes every browser request through a guard that allows only the site's
+ *   hosts and only GET/HEAD, blocks downloads and service workers, and deletes
+ *   the cookie file right after loading it. The page's own JS cannot read
+ *   HttpOnly cookies, and the only secret in the sandbox is the scoped,
+ *   short-lived Shipyard gateway key (shipyardSandboxEnvs), never a Dinghy
+ *   master key or the user's cookies on disk.
+ * - E2B's egress allowlist (allowOut/denyOut) is defense in depth, NOT a
+ *   boundary. It filters by TLS SNI / HTTP Host, not destination IP, so domain
+ *   fronting works; DNS is not filtered, so DNS tunneling is possible; arbitrary
+ *   TCP connects succeed at the socket level; and "*.site" matches ONE label
+ *   (gist.github.com yes, a.b.github.com no). It stops casual requests and
+ *   nothing more. (Observed in a live test on throwaway E2B sandboxes, Oct 2026,
+ *   reported by the template-prep run; re-verify if E2B changes its network layer.)
+ * - Anything that would let code inside the sandbox reach an attacker is
+ *   therefore treated as possible; keep the secrets inside it to the minimum.
  * - The sandbox is killed in a finally block, server-side.
  */
 
@@ -14,6 +27,7 @@ import { loadCapabilitySecret, startRun, finishRun, touchCapability } from '@/li
 import { browserRunCommand, browserTaskTemplate, scrubInjectedInstructions } from '@/lib/computer/browser'
 import { shipyardSandboxEnvs, USD_PER_SECOND } from '@/lib/computer/manager'
 import { recordSpend } from '@/lib/payments/spend-caps'
+import { GATEWAY_URL } from '@/lib/spectrum/config'
 import { egressHostsFor, isDenied, normalizeSite, type StorageState } from './policy'
 
 export const SESSION_STATE_PATH = '/dev/shm/dinghy-session.json'
@@ -32,8 +46,13 @@ export interface EphemeralProvider {
   create(opts: { allowOut: string[] }): Promise<EphemeralSandbox>
 }
 
-/** Hosts the sandbox may reach: the site, plus the model gateway (the agent loop needs it). */
-export function allowOutFor(site: string, gatewayUrl: string | undefined): string[] {
+/**
+ * Hosts the sandbox may reach at E2B's layer: the site (+ explicitly listed
+ * extras, see SITE_EXTRA_HOSTS) and the model gateway. Defense in depth only;
+ * see the file header. The gateway defaults to the same host the rest of the
+ * app uses (spectrum/config), not a hardcoded guess.
+ */
+export function allowOutFor(site: string, gatewayUrl: string | undefined = GATEWAY_URL): string[] {
   const hosts = egressHostsFor(site)
   if (gatewayUrl) {
     try {
@@ -54,7 +73,8 @@ export function e2bEphemeralProvider(): EphemeralProvider {
       const { Sandbox } = await import('e2b')
       const sbx = await Sandbox.create(template, {
         timeoutMs: EPHEMERAL_TIMEOUT_MS,
-        envs: shipyardSandboxEnvs(),
+        // The only secret in here: the scoped Shipyard key. The URL is pinned to the app's configured gateway so allowOut and the bootstrap agree.
+        envs: { ...shipyardSandboxEnvs(), SHIPYARD_GATEWAY_URL: GATEWAY_URL },
         metadata: { purpose: 'logged-in-browse' },
         network: { denyOut: ['0.0.0.0/0'], allowOut },
       })
@@ -175,7 +195,7 @@ export async function runLoggedInSession(
   let outcome = 'error'
   let detail: Record<string, unknown> = {}
   try {
-    sandbox = await provider.create({ allowOut: allowOutFor(site, process.env.SHIPYARD_GATEWAY_URL) })
+    sandbox = await provider.create({ allowOut: allowOutFor(site) })
     await sandbox.writeFile(SESSION_STATE_PATH, JSON.stringify(cap.secret))
     await sandbox.run(`chmod 600 ${SESSION_STATE_PATH}`, { timeoutMs: 10_000 })
     const command = browserRunCommand(browserTaskTemplate(input.task, urls.length ? urls : [startUrl]), urls.length ? urls : [startUrl], {
