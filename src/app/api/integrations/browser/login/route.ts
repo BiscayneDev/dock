@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { cancelLogin, finishLogin, startLogin } from '@/lib/browser-sessions/login'
-import { hitRateLimit } from '@/lib/spectrum/rate-limit'
+import { hitRateLimitStrict } from '@/lib/spectrum/rate-limit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
-const Body = z.object({ t: z.string().min(16).max(128), action: z.enum(['start', 'finish', 'cancel']) })
+const Body = z.object({ t: z.string().min(16).max(128), action: z.enum(['start', 'finish', 'cancel']), ack: z.boolean().optional() })
 
 /**
  * Drive a remote-browser login from the one-use page. POST only, never GET:
@@ -15,7 +15,7 @@ const Body = z.object({ t: z.string().min(16).max(128), action: z.enum(['start',
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
-    const rate = await hitRateLimit(`browser-login:${ip}`).catch(() => 'ok' as const)
+    const rate = await hitRateLimitStrict(`browser-login:${ip}`)
     if (rate !== 'ok') return NextResponse.json({ error: 'Too many tries. Wait a minute.' }, { status: 429 })
 
     let body: unknown
@@ -26,10 +26,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
     const parsed = Body.safeParse(body)
     if (!parsed.success) return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
-    const { t, action } = parsed.data
+    const { t, action, ack } = parsed.data
 
     if (action === 'start') {
-        const r = await startLogin(t)
+        const r = await startLogin(t, undefined, ack === true)
         if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })
         return NextResponse.json({ ok: true, viewUrl: r.viewUrl, site: r.site, resumed: r.resumed })
     }

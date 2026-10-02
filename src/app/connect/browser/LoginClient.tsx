@@ -4,12 +4,12 @@ import { useState } from 'react'
 
 type Phase = 'idle' | 'starting' | 'live' | 'saving' | 'done' | 'cancelled'
 
-async function call(token: string, action: 'start' | 'finish' | 'cancel'): Promise<{ ok: boolean; error?: string; viewUrl?: string }> {
+async function call(token: string, action: 'start' | 'finish' | 'cancel', ack = false): Promise<{ ok: boolean; error?: string; viewUrl?: string }> {
     try {
         const res = await fetch('/api/integrations/browser/login', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ t: token, action }),
+            body: JSON.stringify({ t: token, action, ack }),
         })
         const j = (await res.json().catch(() => ({}))) as { error?: string; viewUrl?: string }
         return res.ok ? { ok: true, viewUrl: j.viewUrl } : { ok: false, error: j.error ?? 'Something went wrong. Try again.' }
@@ -19,15 +19,16 @@ async function call(token: string, action: 'start' | 'finish' | 'cancel'): Promi
 }
 
 /** Starts the private browser on tap, shows the live view, saves on "I'm logged in". */
-export function LoginClient({ token, site }: { token: string; site: string }): React.JSX.Element {
+export function LoginClient({ token, site, needsConfirm = false }: { token: string; site: string; needsConfirm?: boolean }): React.JSX.Element {
     const [phase, setPhase] = useState<Phase>('idle')
     const [viewUrl, setViewUrl] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [acked, setAcked] = useState(false)
 
     async function start(): Promise<void> {
         setPhase('starting')
         setError(null)
-        const r = await call(token, 'start')
+        const r = await call(token, 'start', acked)
         if (!r.ok || !r.viewUrl) {
             setError(r.error ?? 'Could not open the browser.')
             setPhase('idle')
@@ -61,8 +62,16 @@ export function LoginClient({ token, site }: { token: string; site: string }): R
 
     return (
         <div>
+            {(phase === 'idle' || phase === 'starting') && needsConfirm ? (
+                <p>
+                    <label>
+                        <input type="checkbox" checked={acked} onChange={(e) => setAcked(e.target.checked)} /> I understand Dinghy will keep a read-only login for {site}, and I
+                        only want to connect a low-stakes site (not email, money or an identity account).
+                    </label>
+                </p>
+            ) : null}
             {phase === 'idle' || phase === 'starting' ? (
-                <button type="button" onClick={start} disabled={phase === 'starting'}>
+                <button type="button" onClick={start} disabled={phase === 'starting' || (needsConfirm && !acked)}>
                     {phase === 'starting' ? 'opening a private browser…' : `open ${site}`}
                 </button>
             ) : (

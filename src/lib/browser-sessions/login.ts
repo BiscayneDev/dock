@@ -19,9 +19,10 @@ import {
   saveCapability,
   updateConnectAttempt,
   CONNECT_LINK_TTL_SECONDS,
+  auditEvent,
 } from '@/lib/capabilities/store'
 import { enqueueOutbox } from '@/lib/spectrum/outbox'
-import { filterStateToSite, isDenied, normalizeSite, type StorageState } from './policy'
+import { filterStateToSite, isDenied, normalizeSite, siteTier, type SiteTier, type StorageState } from './policy'
 import { CAPTURE_OUTPUT_PATH, CAPTURE_SCRIPT, CAPTURE_SCRIPT_PATH, NOVNC_PORT, loginStartCommands } from './login-scripts'
 
 /** Login sandbox lifetime: matches the link TTL. E2B kills it on timeout even if we never get to. */
@@ -102,7 +103,7 @@ export function vncPassword(): string {
   return Array.from(bytes, (b) => PW_CHARS[b % PW_CHARS.length]).join('')
 }
 
-export type MintResult = { ok: true; url: string; site: string; minutes: number } | { ok: false; error: string }
+export type MintResult = { ok: true; url: string; site: string; minutes: number; tier: SiteTier } | { ok: false; error: string }
 
 /** Validate the site and mint the texted link. Refuses denylisted sites. */
 export async function mintLoginLink(userId: string, chatGuid: string | null, siteInput: string): Promise<MintResult> {
@@ -111,15 +112,21 @@ export async function mintLoginLink(userId: string, chatGuid: string | null, sit
   const denied = isDenied(site)
   if (denied) {
     const why: Record<string, string> = {
-      financial: 'banks, brokers and crypto accounts',
-      identity: 'Google, Apple and Microsoft account pages',
+      financial: 'banks, brokers, payroll, tax and crypto accounts',
+      identity: 'Google, Apple, Microsoft and other sign-in providers',
       passwords: 'password managers',
       payments: 'payment accounts',
+      mail: 'email accounts',
+      commerce: 'shopping, travel and entertainment accounts',
+      social: 'social accounts',
+      work: 'cloud consoles and workplace accounts',
+      government: 'government accounts',
     }
     return { ok: false, error: `I don't hold logins for ${why[denied]} yet, so I can't connect ${site}.` }
   }
   const token = await mintConnectToken(userId, chatGuid, 'browser_session', { site })
-  return { ok: true, url: `${appUrl()}/connect/browser?t=${token}`, site, minutes: Math.round(CONNECT_LINK_TTL_SECONDS / 60) }
+  await auditEvent({ userId, kind: 'browser_session', label: site, event: 'connect_link', detail: { tier: siteTier(site) } })
+  return { ok: true, url: `${appUrl()}/connect/browser?t=${token}`, site, minutes: Math.round(CONNECT_LINK_TTL_SECONDS / 60), tier: siteTier(site) }
 }
 
 export type StartResult = { ok: true; viewUrl: string; site: string; resumed: boolean } | { ok: false; error: string; status: number }
@@ -127,11 +134,15 @@ export type StartResult = { ok: true; viewUrl: string; site: string; resumed: bo
 const GONE = 'This link expired or was already used. Ask Dinghy for a fresh one.'
 
 /** Bring up the live view for a live link. Idempotent: a reload resumes the same session. */
-export async function startLogin(token: string, provider: LoginProvider = e2bLoginProvider()): Promise<StartResult> {
+export async function startLogin(token: string, provider: LoginProvider = e2bLoginProvider(), ack = false): Promise<StartResult> {
   const attempt = await peekConnectAttempt(token)
   if (!attempt || attempt.kind !== 'browser_session') return { ok: false, error: GONE, status: 410 }
   const site = String(attempt.params.site ?? '')
   if (!normalizeSite(site) || isDenied(site)) return { ok: false, error: GONE, status: 410 }
+  // Sites outside the vetted low-stakes list need an explicit tick on the page.
+  if (siteTier(site) === 'confirm' && !ack) {
+    return { ok: false, error: `Tick the box to confirm you want Dinghy to hold a read-only login for ${site}.`, status: 412 }
+  }
 
   const existing = typeof attempt.params.view_enc === 'string' ? attempt.params.view_enc : null
   if (existing) {
@@ -150,6 +161,9 @@ export async function startLogin(token: string, provider: LoginProvider = e2bLog
       const r = await sandbox.run(step.cmd, { background: step.background, timeoutMs: 60_000 })
       if (r.exitCode !== 0) throw new Error(`login sandbox step failed (exit ${r.exitCode})`)
     }
+    // Known limit: this URL is a bearer credential. Anyone who has it (host + password)
+    // can drive the login browser until the sandbox dies at the link TTL. It is shown only
+    // on the one-use page, stored encrypted, and never texted. Do not log or proxy it.
     const viewUrl = `https://${sandbox.host(NOVNC_PORT)}/vnc.html?autoconnect=true&resize=scale&password=${encodeURIComponent(password)}`
     const saved = await updateConnectAttempt(token, { sandbox_id: sandbox.id, view_enc: encryptTokenForDb(viewUrl) })
     if (!saved) throw new Error('link no longer live')
@@ -200,6 +214,7 @@ export async function finishLogin(token: string, provider: LoginProvider = e2bLo
         `connected ${site}, read-only, for 30 days. i only use it when you say yes to a task, and only on ${site}. text "disconnect ${site}" any time to delete it.`
       ).catch(() => null)
     }
+    await auditEvent({ userId: used.user_id, kind: 'browser_session', label: site, event: 'connected', detail: { cookies: state.cookies.length } })
     await sandbox.kill().catch(() => null)
     return { ok: true, site, cookies: state.cookies.length }
   } catch (err) {

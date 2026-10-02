@@ -4,7 +4,8 @@ const mint = vi.fn()
 vi.mock('@/lib/browser-sessions/login', () => ({ mintLoginLink: (...a: unknown[]) => mint(...a) }))
 const list = vi.fn()
 const revoke = vi.fn()
-vi.mock('@/lib/capabilities/store', () => ({ listCapabilities: (...a: unknown[]) => list(...a), revokeCapabilities: (...a: unknown[]) => revoke(...a) }))
+const audit = vi.fn(async () => undefined)
+vi.mock('@/lib/capabilities/store', () => ({ listCapabilities: (...a: unknown[]) => list(...a), revokeCapabilities: (...a: unknown[]) => revoke(...a), auditEvent: (...a: unknown[]) => audit(...a) }))
 
 import { browserConnect, browserSessions, browserDisconnect } from '@/lib/tools/browser-sessions'
 import type { UserContext } from '@/lib/llm/types'
@@ -40,5 +41,7 @@ describe('browser tools', () => {
     expect(revoke).toHaveBeenLastCalledWith('u1', 'browser_session')
     const bad = await browserDisconnect.execute({}, ctx)
     expect(bad.success).toBe(false)
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ event: 'disconnected', label: 'github.com' }))
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ event: 'disconnected', label: '*' }))
   })
 })

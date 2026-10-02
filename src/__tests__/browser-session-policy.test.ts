@@ -116,3 +116,20 @@ describe('siteTier', () => {
     expect(siteTier('smallshop.example.com')).toBe('confirm')
   })
 })
+
+describe('subdomain sites keep parent-domain cookies', () => {
+  it('app.example.com keeps .example.com and its own cookies, drops other registrable domains', () => {
+    const r = filterStateToSite(
+      { cookies: [
+        { name: 'a', value: '1', domain: '.example.com' },
+        { name: 'b', value: '2', domain: 'app.example.com' },
+        { name: 'c', value: '3', domain: 'api.app.example.com' },
+        { name: 'd', value: '4', domain: '.other.com' },
+      ], origins: [{ origin: 'https://app.example.com', localStorage: [] }, { origin: 'https://example.com', localStorage: [] }] },
+      'app.example.com'
+    )
+    expect(r.state.cookies.map((c) => c.name)).toEqual(['a', 'b', 'c'])
+    expect(r.state.origins).toHaveLength(2)
+    expect(r.dropped).toBe(1)
+  })
+})

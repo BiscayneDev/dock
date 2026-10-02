@@ -17,3 +17,18 @@ export async function hitRateLimit(chatGuid: string): Promise<RateResult> {
     }
     return (data as RateResult) ?? 'ok'
 }
+
+/** Same limiter, but an unavailable limiter means "limited" (for routes that can boot paid sandboxes). */
+export async function hitRateLimitStrict(key: string): Promise<RateResult> {
+    try {
+        const { data, error } = await createServerClient().rpc('hit_rate_limit', { p_chat_guid: key })
+        if (error) {
+            console.error('rate limit check failed (blocking):', error.message)
+            return 'limited'
+        }
+        return (data as RateResult) ?? 'limited'
+    } catch (err) {
+        console.error('rate limit check threw (blocking):', err instanceof Error ? err.message : String(err))
+        return 'limited'
+    }
+}

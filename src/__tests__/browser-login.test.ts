@@ -6,6 +6,7 @@ const store = vi.hoisted(() => ({
   updateConnectAttempt: vi.fn(async () => true),
   consumeConnectAttempt: vi.fn(),
   saveCapability: vi.fn(async () => 'cap1'),
+  auditEvent: vi.fn(async () => undefined),
   CONNECT_LINK_TTL_SECONDS: 900,
 }))
 vi.mock('@/lib/capabilities/store', () => store)
@@ -166,5 +167,31 @@ describe('cancelLogin', () => {
     await cancelLogin('tok', f.provider)
     expect(store.consumeConnectAttempt).toHaveBeenCalled()
     expect(f.killed.v).toBe(true)
+  })
+})
+
+describe('site tiers at connect', () => {
+  it('refuses newly denied families at mint', async () => {
+    for (const s of ['mail.google.com', 'outlook.office.com', 'icloud.com', 'amazon.com', 'x.com', 'irs.gov'])
+      expect((await mintLoginLink('u1', 'c', s)).ok, s).toBe(false)
+  })
+  it('marks vetted sites allowed and unvetted ones confirm', async () => {
+    const a = await mintLoginLink('u1', 'c', 'github.com')
+    const b = await mintLoginLink('u1', 'c', 'smallshop.example.com')
+    expect(a.ok && a.tier).toBe('allowed')
+    expect(b.ok && b.tier).toBe('confirm')
+  })
+  it('does not start a browser for an unvetted site until the user ticks the box', async () => {
+    store.peekConnectAttempt.mockResolvedValue({ user_id: 'u1', chat_guid: 'c', kind: 'browser_session', params: { site: 'smallshop.example.com' } })
+    const { provider } = fakeSandbox(good)
+    const no = await startLogin('tok', provider)
+    expect(no.ok).toBe(false)
+    expect(provider.create).not.toHaveBeenCalled()
+    const yes = await startLogin('tok', provider, true)
+    expect(yes.ok).toBe(true)
+  })
+  it('audits the connect link and the saved login', async () => {
+    await mintLoginLink('u1', 'c', 'github.com')
+    expect(store.auditEvent).toHaveBeenCalledWith(expect.objectContaining({ event: 'connect_link', label: 'github.com' }))
   })
 })

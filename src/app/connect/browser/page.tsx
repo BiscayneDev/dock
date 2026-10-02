@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { PaperPage } from '@/components/brand/PaperPage'
 import { peekConnectAttempt } from '@/lib/capabilities/store'
+import { siteTier } from '@/lib/browser-sessions/policy'
 import { LoginClient } from './LoginClient'
 
 export const dynamic = 'force-dynamic'
@@ -30,9 +31,9 @@ export default async function ConnectBrowserPage({
       accent={live ? site : 'a site'}
       body="You log in yourself in a private browser. Dinghy never sees your password. It keeps only the login for this one site, encrypted, read-only, for 30 days."
       missing={live ? undefined : 'This link expired or was already used. Ask Dinghy for a fresh one.'}
-      fine="Text 'disconnect' and the site name any time to delete it. Banks, exchanges and account pages for Google or Apple can't be connected."
+      fine="Text 'disconnect' and the site name any time to delete it. Banks, brokers, payroll, email and sign-in accounts (Google, Apple, Microsoft), social, shopping and government sites can't be connected."
     >
-      {live && t ? <LoginClient token={t} site={site} /> : null}
+      {live && t ? <LoginClient token={t} site={site} needsConfirm={siteTier(site) === 'confirm'} /> : null}
     </PaperPage>
   )
 }

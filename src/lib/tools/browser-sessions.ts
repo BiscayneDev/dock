@@ -1,5 +1,5 @@
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
-import { listCapabilities, revokeCapabilities } from '@/lib/capabilities/store'
+import { auditEvent, listCapabilities, revokeCapabilities } from '@/lib/capabilities/store'
 import { mintLoginLink } from '@/lib/browser-sessions/login'
 import { normalizeSite } from '@/lib/browser-sessions/policy'
 
@@ -12,7 +12,7 @@ import { normalizeSite } from '@/lib/browser-sessions/policy'
 export const browserConnect: Tool = {
   name: 'browser_connect',
   description:
-    "Let the user connect a website so you can use their logged-in account there (read-only for now). Returns a one-use link that opens a private browser where THEY log in. Use when they ask to connect/log in/give you access to a site. Never ask them to text a password, cookie or code. Banks, brokers, crypto exchanges, Google/Apple account pages and password managers are refused.",
+    "Let the user connect a website so you can use their logged-in account there (read-only for now). Returns a one-use link that opens a private browser where THEY log in. Use when they ask to connect/log in/give you access to a site. Never ask them to text a password, cookie or code. Refused: banks, brokers, payroll/tax, crypto, payment apps, email and sign-in providers (Google, Apple, Microsoft, Yahoo), social, shopping and travel accounts, cloud consoles, password managers and government sites. Best for low-stakes sites (code hosts, docs, news subscriptions); for other sites the user must tick a confirm box on the page.",
   inputSchema: {
     type: 'object',
     properties: { site: { type: 'string', description: 'Site name or URL, e.g. github.com' } },
@@ -73,11 +73,13 @@ export const browserDisconnect: Tool = {
     const i = (input ?? {}) as { site?: unknown; all?: unknown }
     if (i.all === true) {
       const n = await revokeCapabilities(ctx.userId, 'browser_session')
+      await auditEvent({ userId: ctx.userId, kind: 'browser_session', label: '*', event: 'disconnected', detail: { removed: n } })
       return { success: true, data: { removed: n } }
     }
     const site = normalizeSite(String(i.site ?? ''))
     if (!site) return { success: false, error: 'tell me which site, or say all' }
     const n = await revokeCapabilities(ctx.userId, 'browser_session', site)
+    await auditEvent({ userId: ctx.userId, kind: 'browser_session', label: site, event: 'disconnected', detail: { removed: n } })
     return { success: true, data: { site, removed: n } }
   },
 }
