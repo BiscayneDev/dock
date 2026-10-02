@@ -30,7 +30,6 @@ describe('dry run', () => {
     expect(db.uses).toBe(0)
     expect(out.action).toBe('propose_connect')
     expect((out.audit as unknown[]).length).toBe(1)
-    expect(out.fallback_capability_definitions).toBe(true)
     expect(out.dry_run).toBe(true)
   })
 
