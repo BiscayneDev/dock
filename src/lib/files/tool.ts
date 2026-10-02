@@ -36,6 +36,7 @@ export type HostedFile = PublishedSite
 export interface MadeFile extends RenderedFile {
     format: FileFormat
     title: string
+    kind?: 'file' | 'itinerary'
     subtitle?: string
     /** Signed Storage link, or null when the upload failed. */
     link: string | null
@@ -50,6 +51,7 @@ async function remember(ctx: UserContext, f: MadeFile): Promise<void> {
     if (!ctx.userId) return
     await rememberFile(ctx.userId, null, {
         title: f.title,
+        kind: f.kind,
         format: f.hosted ? 'page' : f.format,
         url: f.hosted?.url ?? f.link,
         markdown: f.markdown ?? '',
@@ -131,6 +133,7 @@ export function fileToolsFor(): FileToolset {
             type: 'object',
             properties: {
                 title: { type: 'string', description: 'Document title, e.g. "Weekend in Key Biscayne"' },
+                kind: { type: 'string', enum: ['file', 'itinerary'], description: 'Use itinerary only for an actual trip itinerary. Otherwise file.' },
                 subtitle: { type: 'string', description: 'Optional one-line subtitle: who, when, where' },
                 body: { type: 'string', description: 'The document body in Markdown' },
                 format: { type: 'string', enum: FORMATS, description: 'pdf (default), docx, html, csv or md' },
@@ -142,13 +145,14 @@ export function fileToolsFor(): FileToolset {
             const parsed = parseFileInput(input)
             if ('error' in parsed) return { success: false, error: parsed.error }
             if (made.length >= 3) return { success: false, error: 'at most 3 files per reply' }
+            const kind = (input as Record<string, unknown>).kind === 'itinerary' ? 'itinerary' : 'file'
             const wantsPage = !parsed.attach && HOSTABLE.includes(parsed.format)
             let hostError: string | undefined
             if (wantsPage && shareEnabled()) {
                 try {
                     const { hosted, pdf } = await host(parsed.doc, parsed.format, ctx.userId)
                     const file = pdf ?? (await renderFile(parsed.doc, 'html'))
-                    const entry: MadeFile = { ...file, format: parsed.format, title: parsed.doc.title, subtitle: parsed.doc.subtitle, link: null, hosted, markdown: parsed.doc.body }
+                    const entry: MadeFile = { ...file, format: parsed.format, kind, title: parsed.doc.title, subtitle: parsed.doc.subtitle, link: null, hosted, markdown: parsed.doc.body }
                     made.push(entry)
                     await remember(ctx, entry)
                     return {
@@ -178,7 +182,7 @@ export function fileToolsFor(): FileToolset {
             } catch (err) {
                 console.error('[dinghy] file upload failed', err instanceof Error ? err.message : err)
             }
-            const entry: MadeFile = { ...file, format, title: parsed.doc.title, subtitle: parsed.doc.subtitle, link, markdown: parsed.doc.body }
+            const entry: MadeFile = { ...file, format, kind, title: parsed.doc.title, subtitle: parsed.doc.subtitle, link, markdown: parsed.doc.body }
             made.push(entry)
             await remember(ctx, entry)
             return {
@@ -236,6 +240,10 @@ export function fileToolsFor(): FileToolset {
             if (!link) return { success: false, error: 'link is required' }
             try {
                 const r = await revokeSite(link, ctx.userId)
+                const { error } = await createServerClient().from('dinghy_files')
+                    .update({ revoked_at: new Date().toISOString() })
+                    .eq('user_id', ctx.userId).eq('url', r.url)
+                if (error) return { success: false, error: 'The hosted link is revoked, but the library state could not be updated. Try again to sync it.' }
                 return { success: true, data: { status: 'revoked', url: r.url, note: 'That link no longer opens for anyone.' } }
             } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err)

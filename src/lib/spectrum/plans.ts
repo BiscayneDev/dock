@@ -191,6 +191,7 @@ export async function forgetPlans(userId: string, match: string): Promise<number
 
 export interface FileRecord {
     title: string
+    kind?: 'file' | 'itinerary'
     format: string
     url: string | null
     markdown: string
@@ -201,7 +202,7 @@ export interface FileRecord {
 export async function rememberFile(userId: string, chatGuid: string | null, f: FileRecord): Promise<void> {
     const { error } = await createServerClient()
         .from('dinghy_files')
-        .insert({ user_id: userId, chat_guid: chatGuid, title: f.title.slice(0, 140), format: f.format, url: f.url, markdown: f.markdown.slice(0, 60_000), expires_at: f.expires_at })
+        .insert({ user_id: userId, chat_guid: chatGuid, title: f.title.slice(0, 140), kind: f.kind ?? 'file', format: f.format, url: f.url, markdown: f.markdown.slice(0, 60_000), expires_at: f.expires_at })
     if (error) throw new Error(`remember file failed: ${error.message}`)
 }
 
@@ -211,6 +212,7 @@ export async function recentFiles(userId: string, limit = 5): Promise<FileRecord
         .select('title, format, url, expires_at, created_at, markdown')
         .eq('user_id', userId)
         .is('deleted_at', null)
+        .is('revoked_at', null)
         .order('created_at', { ascending: false })
         .limit(limit)
     if (error) throw new Error(`files load failed: ${error.message}`)

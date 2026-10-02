@@ -64,3 +64,5 @@
   .main { padding-top: 4vh; }
   .card { padding: 30px 22px 24px; border-radius: 20px; }
 }
+
+.home { max-width: 820px; }

@@ -1,11 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
+const dbCalls: unknown[][] = []
+const db = {
+  select: (...args: unknown[]) => { dbCalls.push(['select', ...args]); return db },
+  eq: (...args: unknown[]) => { dbCalls.push(['eq', ...args]); return db },
+  is: (...args: unknown[]) => { dbCalls.push(['is', ...args]); return db },
+  limit: () => db,
+  maybeSingle: async () => ({ data: { id: 'owned-row' }, error: null }),
+  update: (...args: unknown[]) => { dbCalls.push(['update', ...args]); return db },
+  then: (resolve: (v: unknown) => unknown) => Promise.resolve(resolve({ error: null })),
+}
 const upload = vi.fn()
 const createSignedUrl = vi.fn()
 const { rememberFile, findFile } = vi.hoisted(() => ({ rememberFile: vi.fn(async (...args: unknown[]) => void args), findFile: vi.fn() }))
 vi.mock('@/lib/spectrum/plans', () => ({ rememberFile, findFile }))
 vi.mock('@/lib/supabase/server', () => ({
-  createServerClient: () => ({ storage: { from: () => ({ upload, createSignedUrl }) } }),
+  createServerClient: () => ({ from: () => db, storage: { from: () => ({ upload, createSignedUrl }) } }),
 }))
 
 import { renderFile } from '@/lib/files/render'
@@ -21,6 +31,7 @@ const doc = {
 }
 
 beforeEach(() => {
+  dbCalls.length = 0
   upload.mockReset().mockResolvedValue({ data: { path: 'p' }, error: null })
   createSignedUrl.mockReset().mockResolvedValue({ data: { signedUrl: 'https://sb.example/signed' }, error: null })
 })
@@ -207,6 +218,15 @@ describe('revoke_file', () => {
     const r = await revoke().execute({ link: 'https://calm-boat-1a2b.here.now/' }, ctx)
     expect(r.success).toBe(true)
     expect(writes).toEqual(['DELETE https://here.now/api/v1/publish/calm-boat-1a2b'])
+    expect(dbCalls).toContainEqual(['eq', 'user_id', 'u1'])
+    expect(dbCalls.some(c => c[0] === 'update' && (c[1] as Record<string, unknown>).revoked_at)).toBe(true)
+  })
+
+  it('syncs an already-deleted hosted page only with DB ownership', async () => {
+    process.env.HERENOW_API_KEY = 'test-key'
+    globalThis.fetch = vi.fn(async () => new Response('', { status: 404 })) as unknown as typeof fetch
+    expect((await revoke().execute({ link: 'https://calm-boat-1a2b.here.now/' }, ctx)).success).toBe(true)
+    expect(dbCalls.some(c => c[0] === 'update')).toBe(true)
   })
 
   it("refuses someone else's file and non-here.now links", async () => {

@@ -44,3 +44,5 @@
   background: #0E1A33; color: #FBF6EE; text-decoration: none; font-weight: 500; font-size: 15px;
 }
 .cta:hover { background: #1B2A4A; }
+.back { display: inline-block; margin-bottom: 20px; color: #0e1a33; font-size: 14px; }
+.savedBody { white-space: pre-wrap; overflow-wrap: anywhere; font: 15px/1.8 var(--font-schibsted), sans-serif; margin-top: 28px; }

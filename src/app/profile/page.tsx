@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth/session'
 import { createServerClient } from '@/lib/supabase/server'
 import { CoastShell, shellStyles } from '@/components/brand/CoastShell'
 import styles from './profile.module.css'
+import ProfilePanels from '@/components/profile/ProfilePanels'
 
 export const metadata: Metadata = {
   title: 'Your profile · Dinghy',
@@ -62,25 +63,27 @@ export default async function ProfilePage({
   }
 
   const rawName = (user?.name as string | undefined) ?? ''
-  const firstName = rawName && rawName !== 'iMessage user' ? rawName.split(' ')[0].toLowerCase() : null
+  const firstName = rawName && rawName !== 'iMessage user' ? rawName.split(' ')[0] : null
   const connectedName = connected ? ACCOUNTS.find((a) => a.provider === connected)?.name : null
 
   return (
     <CoastShell
-      wide
+      home
       right={
         <form action="/api/auth/dinghy/logout" method="post">
-          <button type="submit" className={shellStyles.navlink}>sign out</button>
+          <button type="submit" className={shellStyles.navlink}>Sign out</button>
         </form>
       }
     >
-      <div className={styles.label}>your dinghy</div>
-      <h1 className={styles.title}>{firstName ? <>ahoy, <em>{firstName}</em></> : <>welcome <em>aboard</em></>}</h1>
+      <div className={styles.label}>Your Dinghy</div>
+      <h1 className={styles.title}>{firstName ? <>Hello, <em>{firstName}</em></> : <>Welcome <em>aboard</em></>}</h1>
       <p className={styles.meta}>{phone ? `Signed in as ${phone}` : 'Signed in'}</p>
       {connectedName && <p className={styles.flash}>{connectedName} is connected.</p>}
 
+      <ProfilePanels />
+
       <section className={styles.section}>
-        <h2 className={styles.h2}>connected accounts</h2>
+        <h2 className={styles.h2}>Connected accounts</h2>
         <ul className={styles.list}>
           {ACCOUNTS.map((a) => (
             <li key={a.provider} className={styles.item}>
@@ -88,7 +91,7 @@ export default async function ProfilePage({
                 <div className={styles.name}>{a.name}</div>
                 <div className={styles.desc}>{a.desc}</div>
               </div>
-              {have.has(a.provider) ? <span className={styles.on}>connected</span> : <a className={styles.connect} href={a.auth}>connect</a>}
+              {have.has(a.provider) ? <span className={styles.on}>Connected</span> : <a className={styles.connect} href={a.auth}>Connect</a>}
             </li>
           ))}
           <li className={styles.item}>
@@ -96,13 +99,13 @@ export default async function ProfilePage({
               <div className={styles.name}>X</div>
               <div className={styles.desc}>Read posts and accounts. No account needed.</div>
             </div>
-            <span className={styles.on}>on</span>
+            <span className={styles.on}>On</span>
           </li>
         </ul>
       </section>
 
       <section className={styles.section}>
-        <h2 className={styles.h2}>upcoming reminders</h2>
+        <h2 className={styles.h2}>Upcoming reminders</h2>
         <ul className={styles.list}>
           {reminders.length === 0 ? (
             <li><p className={styles.empty}>Nothing scheduled. Text Dinghy &ldquo;remind me&hellip;&rdquo; to set one.</p></li>
