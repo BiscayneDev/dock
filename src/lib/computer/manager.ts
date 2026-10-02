@@ -115,6 +115,21 @@ export class MockManager implements ComputerProvider {
 }
 
 /**
+ * The only env a sandbox ever gets: the sandbox-scoped Shipyard gateway key
+ * (never a Dinghy master key). Shared with logged-in ephemeral sandboxes.
+ */
+export function shipyardSandboxEnvs(): Record<string, string> {
+  const envs: Record<string, string> = {}
+  const url = process.env.SHIPYARD_GATEWAY_URL
+  const key = process.env.SHIPYARD_SANDBOX_KEY
+  const model = process.env.SHIPYARD_MODEL
+  if (url) envs.SHIPYARD_GATEWAY_URL = url
+  if (key) envs.SHIPYARD_SANDBOX_KEY = key
+  if (model) envs.SHIPYARD_MODEL = model
+  return envs
+}
+
+/**
  * Real E2B provider. Small and honest: direct SDK calls only. The SDK is
  * imported dynamically so test runs (which use the mock) never load it.
  */
@@ -131,14 +146,7 @@ export class E2BManager implements ComputerProvider {
    * the sandbox-scoped Shipyard key minted for this purpose.
    */
   private sandboxEnvs(): Record<string, string> {
-    const envs: Record<string, string> = {}
-    const url = process.env.SHIPYARD_GATEWAY_URL
-    const key = process.env.SHIPYARD_SANDBOX_KEY
-    const model = process.env.SHIPYARD_MODEL
-    if (url) envs.SHIPYARD_GATEWAY_URL = url
-    if (key) envs.SHIPYARD_SANDBOX_KEY = key
-    if (model) envs.SHIPYARD_MODEL = model
-    return envs
+    return shipyardSandboxEnvs()
   }
 
   async start(): Promise<{ sandboxId: string }> {
