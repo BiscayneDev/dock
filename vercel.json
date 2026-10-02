@@ -29,6 +29,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/waitlist-admit",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/keep-warm",
       "schedule": "*/5 * * * *"
     },
