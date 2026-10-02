@@ -68,7 +68,7 @@ import {
     WIPE_PROMPT,
 } from './memory-commands'
 import { buildIcs } from './ics'
-import { markWaitlistFirstInbound, parseWaitlistInviteCommand, runWaitlistInvites, verifiedWaitlistFirstName } from './waitlist-invites'
+import { senderAddress, markWaitlistFirstInbound, parseWaitlistInviteCommand, runWaitlistInvites, verifiedWaitlistFirstName } from './waitlist-invites'
 import { balanceText, inviteBalance, isInviteStatusCommand, mintMemberInvite } from './user-invites'
 import { interviewDirective, markOpenerAsked } from './interview'
 import { attachment } from 'spectrum-ts'
@@ -394,7 +394,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         if (!isNew) return
     }
 
-    await ensureIdentity(chatGuid, message.sender?.handle ?? message.sender?.id ?? null).catch((err) =>
+    await ensureIdentity(chatGuid, senderAddress(message.sender)).catch((err) =>
         logErr('identity ensure failed', err)
     )
 
@@ -411,7 +411,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     if (role) {
         // The signed sender and bound identity must agree. Mark the first
         // allowed inbound before rate limits and intent-specific early returns.
-        await markWaitlistFirstInbound(message.sender?.handle, chatGuid).catch((err) =>
+        await markWaitlistFirstInbound(senderAddress(message.sender), chatGuid).catch((err) =>
             logErr('waitlist activation failed', err)
         )
     }
@@ -595,11 +595,11 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     // so they no longer suppress it.
     const includeOpener = history.length === 0 && !memory.profile
     const knownFirstName = includeOpener
-        ? await verifiedWaitlistFirstName(message.sender?.handle, chatGuid).catch(() => null)
+        ? await verifiedWaitlistFirstName(senderAddress(message.sender), chatGuid).catch(() => null)
         : null
     // Public-profile background from the X handle they gave us, new chats only.
     const background = includeOpener
-        ? await verifiedWaitlistBackground(message.sender?.handle, chatGuid).catch(() => null)
+        ? await verifiedWaitlistBackground(senderAddress(message.sender), chatGuid).catch(() => null)
         : null
     // Day-1 interview (F2): when the opener's answer arrives, at most two
     // short follow-ups go out over separate turns (skipped if already
@@ -610,7 +610,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     }
     const interviewLine =
         history.length > 0 && role === 'owner'
-            ? await interviewDirective(chatGuid, history[0]?.content ?? '', text, await verifiedWaitlistFirstName(message.sender?.handle, chatGuid)).catch((err) => {
+            ? await interviewDirective(chatGuid, history[0]?.content ?? '', text, await verifiedWaitlistFirstName(senderAddress(message.sender), chatGuid)).catch((err) => {
                   logErr('interview step failed', err)
                   return null
               })
