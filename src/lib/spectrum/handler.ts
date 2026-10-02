@@ -75,7 +75,7 @@ import { interviewDirective, markOpenerAsked } from './interview'
 import { attachment } from 'spectrum-ts'
 import { ackTapback, normalizeInbound, reactionDecision, settleWorkingTapback, shouldThread, tapback, withReplyContext, type Inbound, type MessageLike } from './tapbacks'
 import { toPlainText } from '@/lib/spectrum/plain-text'
-import { routingFor } from './routing'
+import { PrivateRouteUnavailable, routingFor } from './routing'
 
 export interface InboundSpace {
     /** Webhook SDK space objects carry the chat identifier as `id`. */
@@ -1087,7 +1087,10 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     } catch (err) {
         if (photoHistory) await photoHistory
         logErr('gateway call failed', err)
-        await sendText(space, chatGuid, 'error_notice', 'Something went wrong on my end. Try again in a moment.')
+        // Fail closed: Google data never falls back to the normal route.
+        await sendText(space, chatGuid, 'error_notice', err instanceof PrivateRouteUnavailable
+            ? 'That one needs a minute on my side. Ask me again shortly.'
+            : 'Something went wrong on my end. Try again in a moment.')
     } finally {
         clearTimeout(eyesTimer)
         stopTypingReTap(space, typingHandle)

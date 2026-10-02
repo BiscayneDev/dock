@@ -59,6 +59,11 @@ export function privateRouteEnforced(): boolean {
     return (process.env.DINGHY_PRIVATE_ROUTE ?? 'off').toLowerCase() === 'on'
 }
 
+/** shadow: count tainted turns that WOULD go private, change nothing. Use it to size the UX and cost impact first. */
+export function privateRouteShadow(): boolean {
+    return (process.env.DINGHY_PRIVATE_ROUTE ?? 'off').toLowerCase() === 'shadow'
+}
+
 export function privateProviders(): string[] {
     return (process.env.DINGHY_PRIVATE_PROVIDERS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
 }

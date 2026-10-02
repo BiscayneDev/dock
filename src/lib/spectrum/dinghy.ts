@@ -386,7 +386,7 @@ export async function chat(
             'Content-Type': 'application/json',
             Authorization: `Bearer ${opts.apiKey}`,
         },
-        body: JSON.stringify({ ...modelFields(opts.model, opts.routing), messages, stream: false }),
+        body: JSON.stringify({ ...modelFields(opts.model, (opts.startTainted || history.some((m) => m.googleDerived)) && privateRouteEnforced() ? privateRouting() : opts.routing), messages, stream: false }),
     })
 
     if (!res.ok) {
@@ -410,7 +410,8 @@ export async function chat(
 
 import type { Tool, UserContext } from '@/lib/llm/types'
 import { readGatewayUsage, type GatewayUsage } from './metering'
-import { isGoogleTool, modelFields, type RoutingPrefs } from './routing'
+import { isGoogleTool, modelFields, privateRouteEnforced, privateRouteShadow, privateRouting, type RoutingPrefs } from './routing'
+import { addToCorpus, egressPolicy, EGRESS_BLOCK_MESSAGE, EGRESS_REJECT_MESSAGE, emptyCorpus, findLeak, isEgressTool, isHardBlockTool } from './egress-guard'
 
 function reportUsage(
     onUsage: ((u: GatewayUsage) => void) | undefined,
@@ -452,6 +453,23 @@ export interface ToolChatResult {
  * locally against the bound user's tokens and loop until a text answer.
  * The typing indicator (fired by the caller) covers the extra round trips.
  */
+/**
+ * Egress policy for a tool call in a turn that holds Google data. Returns the
+ * message to hand the model when the call must not run. Shadow mode only logs.
+ */
+function egressRejection(name: string, args: string, tainted: boolean, corpus: ReturnType<typeof emptyCorpus>): string | null {
+    if (!tainted || !isEgressTool(name)) return null
+    const policy = egressPolicy()
+    if (policy === 'off') return null
+    const enforced = privateRouteEnforced()
+    if (!enforced && !privateRouteShadow()) return null
+    const verdict = policy === 'block' && isHardBlockTool(name) ? EGRESS_BLOCK_MESSAGE : findLeak(args, corpus) ? EGRESS_REJECT_MESSAGE : null
+    if (!verdict) return null
+    if (enforced) return verdict
+    console.info(`[private-route shadow] egress policy would stop ${name}`)
+    return null
+}
+
 export async function chatWithTools(
     history: Message[],
     opts: {
@@ -495,8 +513,19 @@ export async function chatWithTools(
 
     let toolCallCount = 0
     let tainted = Boolean(opts.startTainted) || history.some((m) => m.googleDerived)
-    // Stage A only tracks the flag (saved on the reply as google_derived). Stage B routes on it.
-    const routingNow = (): RoutingPrefs | undefined => opts.routing
+    // Enforced + tainted: private allowlist only, fail closed (throws, never falls back).
+    // Shadow: log once per turn what would have gone private, route as before.
+    const corpus = emptyCorpus()
+    let shadowLogged = false
+    const routingNow = (): RoutingPrefs | undefined => {
+        if (!tainted) return opts.routing
+        if (privateRouteEnforced()) return privateRouting()
+        if (privateRouteShadow() && !shadowLogged) {
+            shadowLogged = true
+            console.info('[private-route shadow] tainted turn would route private')
+        }
+        return opts.routing
+    }
     for (let iteration = 1; iteration <= MAX_TOOL_ITERATIONS; iteration++) {
         const t0 = Date.now()
         const res = await fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
@@ -532,6 +561,8 @@ export async function chatWithTools(
             let content: string
             if (!tool) {
                 content = JSON.stringify({ error: `unknown tool ${call.function.name}` })
+            } else if (egressRejection(call.function.name, call.function.arguments || '', tainted, corpus)) {
+                content = JSON.stringify({ error: egressRejection(call.function.name, call.function.arguments || '', tainted, corpus) })
             } else {
                 try {
                     const input = JSON.parse(call.function.arguments || '{}') as unknown
@@ -542,7 +573,10 @@ export async function chatWithTools(
                         ),
                     ])
                     content = JSON.stringify(result.success ? result.data ?? {} : { error: result.error ?? 'tool failed' })
-                    if (isGoogleTool(call.function.name)) tainted = true
+                    if (isGoogleTool(call.function.name)) {
+                        tainted = true
+                        addToCorpus(corpus, content)
+                    }
                 } catch (err) {
                     content = JSON.stringify({ error: err instanceof Error ? err.message : String(err) })
                 }
