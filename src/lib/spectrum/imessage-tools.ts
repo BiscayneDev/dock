@@ -9,6 +9,7 @@
  * another user's accounts.
  */
 
+import { provisionSpectrumIdentity } from './provision'
 import { createServerClient } from '@/lib/supabase/server'
 import { decryptTokenFromDb } from '@/lib/crypto'
 import type { DecryptedTokens, Tool, UserContext } from '@/lib/llm/types'
@@ -134,8 +135,12 @@ export async function loadImessageToolContext(chatGuid: string): Promise<UserCon
         .select('user_id')
         .eq('chat_guid', chatGuid)
         .maybeSingle()
-    const userId = (identity?.user_id as string | null) ?? null
-    if (identityError || !userId) return null
+    let userId = (identity?.user_id as string | null) ?? null
+    if (identityError) return null
+    // Allowlisted but never bound (invited, no Google yet): bind now, atomically.
+    // Strangers stay null: the database function refuses chats off the allowlist.
+    if (!userId) userId = await provisionSpectrumIdentity(chatGuid)
+    if (!userId) return null
 
     const { data: user, error: userError } = await supabase
         .from('users')

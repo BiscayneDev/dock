@@ -25,6 +25,7 @@ import {
 import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsAnotherGoogle, wantsGithub, wantsHealth, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { recordUsage, spendToolFor, type GatewayUsage } from './metering'
 import { allowanceUsedUpMessage, claimLimitNotice, isOverDailyAllowance } from '@/lib/allowance'
+import { provisionSpectrumIdentity } from './provision'
 import { capabilitiesFor, guestCapabilities, guestToolContext, liveInfoTools, loadImessageToolContext, toolsFor } from './imessage-tools'
 import { reminderToolsFor } from './reminders'
 import { payboxSigningToolsFor } from '@/lib/tools/paybox-signing'
@@ -237,6 +238,8 @@ async function handleGatedMessage(space: InboundSpace, chatGuid: string, text: s
         if (code) {
             const result = await redeemInvite(chatGuid, code)
             if (result === 'ok' || result === 'already') {
+                // Bind the new member to a user now so tools work before Google.
+                await provisionSpectrumIdentity(chatGuid)
                 await sendText(space, chatGuid, 'reply', GATE_WELCOME)
                 await (space as InboundSpace & { send(b: unknown): Promise<unknown> })
                     .send(dinghyContactCard(await dinghyLineFor(chatGuid)))
