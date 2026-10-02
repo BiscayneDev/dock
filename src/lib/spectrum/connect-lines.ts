@@ -38,15 +38,14 @@ export function googleConnectedLine(ctx: Parameters<typeof googleAccountsOf>[0] 
  * so Dinghy stops reading. It does not claim anything is erased.
  */
 export const GOOGLE_CONNECT_ASK =
-    "Next, connect Google - it's the first step. I'll see your calendar and inbox, take a first look right away, and learn who matters so I can brief you every morning at 8 your time. One tap, you approve it on Google, and you can disconnect any time and I stop reading:"
+    "Next, connect Google - it's the first step. For my first look I read headers only, never message bodies: who is in your inbox and what is on your calendar. I'll take a first look right away and learn who matters so I can brief you every morning at 8 your time. One tap, you approve it on Google, and you can disconnect any time and I stop reading:"
 
-/** Three first-use asks, sent once after the first answer. */
-/** Tips that only promise what works before Google is connected. */
-export const FIRST_USE_SUGGESTIONS_NO_GOOGLE =
-    'Things you can ask me right now: "find three useful AI stories today", "draft a text to get out of dinner", or "remind me to call mom at 5". Calendar and inbox questions start working once Google is connected.'
+/** The one question that starts real work. Replaces the tip list. */
+export const FIRST_USE_QUESTION = "Send me one real thing you'd like off your plate. A reply you owe, a plan to sort, something to look up. I'll take it from there."
 
-export const FIRST_USE_SUGGESTIONS =
-    'Things you can ask me: "what\'s on my calendar tomorrow", "anything I need to reply to", or "remind me to call mom at 5".'
+/** Kept as aliases so callers do not change; the tip list is gone. */
+export const FIRST_USE_SUGGESTIONS_NO_GOOGLE = FIRST_USE_QUESTION
+export const FIRST_USE_SUGGESTIONS = FIRST_USE_QUESTION
 
 /**
  * Whether the welcome bundle (contact card, tips, Google link) goes out after

@@ -12,6 +12,7 @@ import type { DecryptedTokens } from '@/lib/llm/types'
 import { createServerClient } from '@/lib/supabase/server'
 import { senderName } from './first-finding'
 import { storeFacts } from './memory'
+import { FIRST_USE_QUESTION } from './connect-lines'
 
 export const RESEARCH_MARKER = 'Dinghy read their recent calendar and mail headers when Google was connected.'
 
@@ -20,7 +21,7 @@ export function researchEnabled(): boolean {
 }
 
 export const RESEARCH_START_LINE =
-    "Reading your last month of calendar and inbox now - sender names and subjects only, not message bodies - to learn who and what matters. Back in a minute."
+    "Reading your last month of calendar and inbox now - who you write to and when, never message bodies - to learn who and what matters. Back in a minute."
 
 export interface Signals {
     /** Display names of people they received mail from (non-bulk), one entry per message. */
@@ -72,7 +73,7 @@ export function formatDigest(d: Digest): string | null {
         parts.push(`You have ${d.eventCount} event${d.eventCount === 1 ? '' : 's'} in the next two weeks.${busy}${rec}`)
     }
     if (!parts.length) return null
-    return `Done reading. ${parts.join(' ')} I saved a few notes so I know who matters. Say "forget <name>" to remove any, and ask me to dig into anything.`
+    return `Done reading. ${parts.join(' ')} I saved a few notes so I know who matters. Say "forget <name>" to remove any. ${FIRST_USE_QUESTION}`
 }
 
 /** Short memory notes from the digest (no bodies, nothing guessed). */

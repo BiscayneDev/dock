@@ -12,3 +12,12 @@ export function startSmsLink(line: string, text: string = START_TASKS[0].text): 
 export function startLink(token: string): string {
   return `https://www.getdinghy.sh/start/${encodeURIComponent(token)}`
 }
+
+/** A start token may open Google connect only for a live waitlist row with a real phone. */
+export function startGoogleEligible(row: { phone?: string | null; status?: string | null } | null | undefined): boolean {
+  return !!row && ['joined', 'invited', 'active'].includes(row.status ?? '') && /^\+[1-9]\d{7,14}$/.test(row.phone ?? '')
+}
+
+export function startGooglePath(token: string): string {
+  return `/start/${encodeURIComponent(token)}/google`
+}

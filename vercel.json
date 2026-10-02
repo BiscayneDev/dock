@@ -37,6 +37,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/waitlist-nudge",
+      "schedule": "20 * * * *"
+    },
+    {
       "path": "/api/cron/dinghy-briefing",
       "schedule": "0 * * * *"
     }
