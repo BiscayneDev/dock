@@ -12,6 +12,7 @@
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 import { chatWithTools } from '@/lib/spectrum/dinghy'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from '@/lib/spectrum/config'
+import { routingFor } from '@/lib/spectrum/routing'
 import { toolsFor } from '@/lib/spectrum/imessage-tools'
 import { actionToolsFor } from '@/lib/spectrum/actions'
 import { reminderToolsFor } from '@/lib/spectrum/reminders'
@@ -122,7 +123,7 @@ export async function runDryRun(
   const routed: Array<{ model: string; input_tokens: number; output_tokens: number; cost_usd: number | null; latency_ms: number }> = []
   const r = await run(
     [{ role: 'user', content: scenario.msg }],
-    { gatewayUrl: GATEWAY_URL, apiKey: SHIPYARD_API_KEY ?? '', model: SHIPYARD_MODEL, capabilities: { google: true, wallet: false, files: false, live: true, computer: true, spend: true, reminders: true },
+    { gatewayUrl: GATEWAY_URL, apiKey: SHIPYARD_API_KEY ?? '', model: SHIPYARD_MODEL, routing: routingFor(), capabilities: { google: true, wallet: false, files: false, live: true, computer: true, spend: true, reminders: true },
       onUsage: (u) => routed.push({ model: u.model, input_tokens: u.inputTokens, output_tokens: u.outputTokens, cost_usd: u.costUsd, latency_ms: u.latencyMs }) },
     tools,
     ctx

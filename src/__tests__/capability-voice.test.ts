@@ -68,3 +68,18 @@ describe('dry-run routed model', () => {
     expect(r.routed_models).toEqual([{ model: 'routed-x', input_tokens: 3, output_tokens: 2, cost_usd: 0.001, latency_ms: 5 }])
   })
 })
+
+describe('dry-run routing', () => {
+  it('passes routing prefs so the router, not a pin, picks the model', async () => {
+    const { runDryRun } = await import('@/lib/dry-run/run')
+    let seen: { routing?: unknown } = {}
+    await runDryRun({ msg: 'hi' } as never, {
+      realTools: [],
+      chatWithTools: (async (_h: unknown, opts: { routing?: unknown }) => {
+        seen = opts
+        return { reply: 'ok', toolCalls: 0, iterations: 1 }
+      }) as never,
+    })
+    expect(seen.routing).toEqual({ providers: ['hopscotch'] })
+  })
+})
