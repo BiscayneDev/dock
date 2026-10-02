@@ -31,3 +31,20 @@ export const GOOGLE_CONNECT_ASK =
 /** Three first-use asks, sent once after the first answer. */
 export const FIRST_USE_SUGGESTIONS =
     'Things you can ask me: "what\'s on my calendar tomorrow", "anything I need to reply to", or "remind me to call mom at 5".'
+
+/**
+ * Whether the welcome bundle (contact card, tips, Google link) goes out after
+ * this reply. It rides on the first delivered answer for a member, whatever the
+ * answer says, so it never waits for a second message. Only a short error-style
+ * reply or a pending draft holds it back. Returns a reason when skipped so the
+ * handler can log why.
+ */
+export function firstReplyBundleDecision(input: { answerDelivered: boolean; reply: string; hasProposal: boolean; role: string | null }): { send: true } | { send: false; reason: string } {
+  if (input.role !== 'member') return { send: false, reason: 'role' }
+  if (!input.answerDelivered) return { send: false, reason: 'answer_not_delivered' }
+  if (!input.reply.trim()) return { send: false, reason: 'empty_reply' }
+  if (input.hasProposal) return { send: false, reason: 'draft_pending' }
+  const r = input.reply.trim()
+  if (r.length < 120 && /^(?:I couldn't|Couldn't|Sorry|Something went wrong)/i.test(r)) return { send: false, reason: 'error_reply' }
+  return { send: true }
+}

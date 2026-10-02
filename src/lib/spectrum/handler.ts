@@ -23,7 +23,7 @@ import {
     type HistoryMessage,
 } from '@/spectrum/store'
 import { verifiedWaitlistBackground } from './background-context'
-import { FIRST_USE_SUGGESTIONS, GOOGLE_CONNECT_ASK } from './connect-lines'
+import { firstReplyBundleDecision, FIRST_USE_SUGGESTIONS, GOOGLE_CONNECT_ASK } from './connect-lines'
 import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsAnotherGoogle, wantsGithub, wantsHealth, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { recordUsage, spendToolFor, type GatewayUsage } from './metering'
 import { allowanceUsedUpMessage, claimLimitNotice, isOverDailyAllowance } from '@/lib/allowance'
@@ -996,7 +996,9 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         let firstReplyCardClaimed = false
         // The card follows a delivered answer. Claim once across serverless
         // workers; release the claim if the native card itself fails.
-        if (answerDelivered && plainReply.trim() && role === 'member' && !proposal && !/^(?:I couldn't|Couldn't|I can't|Sorry|Something went wrong)/i.test(plainReply.trim())) {
+        const bundle = firstReplyBundleDecision({ answerDelivered, reply: plainReply, hasProposal: Boolean(proposal), role })
+        if (!bundle.send && role === 'member') console.log(`first-reply bundle skipped: ${bundle.reason} chat=${chatGuid}`)
+        if (bundle.send) {
             const db = createServerClient()
             const { error: claimError } = await db.from('dinghy_first_reply_cards').insert({ chat_guid: chatGuid })
             if (!claimError) {
