@@ -2,10 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const rpc = vi.fn()
 const grantRow = { data: { granted: 5 } }
+const inviteRows = [
+  { max_uses: 5, uses: 2, expires_at: '2999-01-01T00:00:00Z' },
+  { max_uses: 1, uses: 0, expires_at: '2000-01-01T00:00:00Z' },
+]
 vi.mock('@/lib/supabase/server', () => ({
   createServerClient: () => ({
     rpc: (...a: unknown[]) => rpc(...a),
-    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => grantRow }) }) }),
+    from: (t: string) => ({ select: () => ({ eq: () => (t === 'beta_invites' ? Promise.resolve({ data: inviteRows, error: null }) : { maybeSingle: async () => grantRow }) }) }),
   }),
 }))
 
@@ -63,5 +67,12 @@ describe('invite tools', () => {
     expect(p).toContain('You have 3 invites to give out')
     expect(p).toContain('Call invite_status before you quote any number')
     grantRow.data = { granted: 5 }
+  })
+
+  it('owner: unlimited, with real counts of links made and used (expired spots do not count as open)', async () => {
+    const [status] = inviteToolsFor('any;-;+12035168398', 'owner')
+    const r = await status.execute({}, ctx)
+    expect(r).toMatchObject({ success: true, data: { remaining: 'unlimited', links_made: 2, spots_made: 6, redeemed: 2, open_spots: 3 } })
+    expect(rpc).not.toHaveBeenCalled()
   })
 })
