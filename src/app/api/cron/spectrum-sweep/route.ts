@@ -23,6 +23,7 @@ import { recordUsage, type GatewayUsage } from '@/lib/spectrum/metering'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from '@/lib/spectrum/config'
 import { typing } from 'spectrum-ts'
 import { sendFileWithPreview } from '@/lib/files/send'
+import { demoSpace, isDemoGuid } from '@/lib/spectrum/demo-chat'
 import { sendBrief, type BriefPayload } from '@/lib/spectrum/brief-card-send'
 import { renderFile } from '@/lib/files/render'
 import { parseFileInput } from '@/lib/files/tool'
@@ -62,7 +63,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     for (const row of await claimOutboxBatch()) {
         try {
-            const space = await im.space.get(row.chat_guid)
+            const space = isDemoGuid(row.chat_guid) ? demoSpace(row.chat_guid, { persist: true }) : await im.space.get(row.chat_guid)
             if (row.kind === 'file') {
                 // text is the JSON document; render and send as an attachment.
                 const parsed = parseFileInput(JSON.parse(row.text))
@@ -115,7 +116,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                     return [] as HistoryMessage[]
                 })
                 history.push({ role: 'user', content: claimed.pendingRequest })
-                const space = await im.space.get(guid)
+                const space = isDemoGuid(guid) ? demoSpace(guid, { persist: true }) : await im.space.get(guid)
                 // A pending request that was itself "connect my gmail" is done once the
                 // connect lands: confirm only. Replaying it re-answers a finished request
                 // (and races the user's own next message).
