@@ -20,6 +20,14 @@ export function googleConnectedLine(ctx: Parameters<typeof googleAccountsOf>[0] 
     return `connected ✓ i can see gmail + calendar for ${accounts.map((a) => a.email).join(' and ')} now (${accounts[0].email} is primary)`
 }
 
-/** The early Google ask: what it unlocks, one tap, approval stays on Google's screen. */
+/**
+ * The early Google ask: what it unlocks, one tap, and what is true about
+ * access. Disconnecting deletes the stored Google tokens (disconnectGoogleAccount),
+ * so Dinghy stops reading. It does not claim anything is erased.
+ */
 export const GOOGLE_CONNECT_ASK =
-    "Next, connect Google. I'll see your calendar and inbox, so I can brief you every morning at 8 your time and handle real tasks. One tap, and you approve the access on Google:"
+    "Next, connect Google. I'll see your calendar and inbox, so I can brief you every morning at 8 your time and handle real tasks. One tap, you approve it on Google, and you can disconnect any time and I stop reading:"
+
+/** Three first-use asks, sent once after the first answer. */
+export const FIRST_USE_SUGGESTIONS =
+    'Things you can ask me: "what\'s on my calendar tomorrow", "anything I need to reply to", or "remind me to call mom at 5".'
