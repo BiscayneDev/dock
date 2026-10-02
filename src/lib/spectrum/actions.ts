@@ -102,12 +102,17 @@ async function storeProposal(chatGuid: string, ctx: UserContext, kind: PendingKi
 
 /**
  * Proposal tracking for tools that live outside the actionToolsFor closure
- * (e.g. computer_browse). The last proposal made anywhere this turn wins;
- * the handler renders it as the confirmation bubble.
+ * (e.g. computer_browse). Keyed by chat so a warm server instance handling
+ * two chats can never show one chat's draft in another. The handler takes
+ * (and clears) the entry for its own chat; unclaimed entries expire.
  */
-let looseProposal: Proposal | null = null
-export function lastLooseProposal(): Proposal | null {
-    return looseProposal
+const LOOSE_TTL_MS = 2 * 60 * 1000
+const looseProposals = new Map<string, { proposal: Proposal; at: number }>()
+export function takeLooseProposal(chatGuid: string): Proposal | null {
+    const entry = looseProposals.get(chatGuid)
+    looseProposals.delete(chatGuid)
+    if (!entry || Date.now() - entry.at > LOOSE_TTL_MS) return null
+    return entry.proposal
 }
 
 /**
@@ -122,7 +127,9 @@ export async function proposeLoose(
 ): Promise<ToolResult> {
     try {
         const id = await storeProposal(chatGuid, ctx, kind, payload)
-        looseProposal = { id, kind, payload }
+        const now = Date.now()
+        for (const [k, v] of looseProposals) if (now - v.at > LOOSE_TTL_MS) looseProposals.delete(k)
+        looseProposals.set(chatGuid, { proposal: { id, kind, payload }, at: now })
         return PROPOSED
     } catch (err) {
         return { success: false, error: err instanceof Error ? err.message : String(err) }

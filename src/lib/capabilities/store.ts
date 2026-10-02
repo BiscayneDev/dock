@@ -137,7 +137,8 @@ export async function listCapabilities(userId: string, kind?: CapabilityKind): P
 
 /**
  * Load one live capability and decrypt its secret. Null if missing, revoked
- * or expired. Marks last_used_at. Callers must not log or return the secret.
+ * or expired. Does not touch last_used_at (call touchCapability when a run
+ * actually completes). Callers must not log or return the secret.
  */
 export async function loadCapabilitySecret<T>(
   userId: string,
@@ -162,7 +163,6 @@ export async function loadCapabilitySecret<T>(
   } catch {
     return null
   }
-  await supabase.from('user_capabilities').update({ last_used_at: new Date().toISOString() }).eq('id', row.id)
   const { secret_enc: _omit, ...pub } = row
   void _omit
   return { row: pub, secret }
@@ -181,7 +181,16 @@ export async function revokeCapabilities(userId: string, kind: CapabilityKind, l
   return Array.isArray(data) ? data.length : 0
 }
 
-/** Append an audit row for a capability run. Never put secrets or page content in detail. */
+/** Stamp last_used_at once a run has actually completed. Best effort; the audit row is the record. */
+export async function touchCapability(capabilityId: string): Promise<void> {
+  await createServerClient().from('user_capabilities').update({ last_used_at: new Date().toISOString() }).eq('id', capabilityId)
+}
+
+/**
+ * Open an audit row for a capability run. Fail-closed: if the row cannot be
+ * written this throws, and the caller must not start the run. Never put
+ * secrets or page content in the task text.
+ */
 export async function startRun(input: {
   userId: string
   capabilityId: string | null
@@ -189,8 +198,8 @@ export async function startRun(input: {
   label: string
   mode: CapabilityMode
   task: string
-}): Promise<string | null> {
-  const { data } = await createServerClient()
+}): Promise<string> {
+  const { data, error } = await createServerClient()
     .from('capability_runs')
     .insert({
       user_id: input.userId,
@@ -202,14 +211,17 @@ export async function startRun(input: {
     })
     .select('id')
     .single()
-  return (data as { id: string } | null)?.id ?? null
+  const id = (data as { id: string } | null)?.id
+  if (error || !id) throw new Error(`audit row could not be written${error ? `: ${error.message}` : ''}`)
+  return id
 }
 
 export async function finishRun(runId: string, outcome: string, detail: Record<string, unknown>): Promise<void> {
-  await createServerClient()
+  const { error } = await createServerClient()
     .from('capability_runs')
     .update({ ended_at: new Date().toISOString(), outcome, detail })
     .eq('id', runId)
+  if (error) throw new Error(`audit row could not be closed: ${error.message}`)
 }
 
 /**

@@ -10,7 +10,7 @@
  * - The sandbox is killed in a finally block, server-side.
  */
 
-import { loadCapabilitySecret, startRun, finishRun } from '@/lib/capabilities/store'
+import { loadCapabilitySecret, startRun, finishRun, touchCapability } from '@/lib/capabilities/store'
 import { browserRunCommand, browserTaskTemplate, scrubInjectedInstructions } from '@/lib/computer/browser'
 import { shipyardSandboxEnvs, USD_PER_SECOND } from '@/lib/computer/manager'
 import { recordSpend } from '@/lib/payments/spend-caps'
@@ -98,6 +98,30 @@ export function parseBrowserOutput(stdout: string): { answer: string; stats: Run
   return { answer, stats }
 }
 
+/**
+ * Last pass over text that came out of a logged-in page before it reaches the
+ * user. Page content is untrusted: it can tell the model to put things in the
+ * answer. The browser can only reach the connected site, so nothing leaves the
+ * sandbox, but an answer that renders an image or link to another host is the
+ * one channel left, so images are dropped and off-site URLs are defanged.
+ *
+ * Residual risks that stay in v1 and are why only low-stakes sites should be
+ * connected: (1) page text can still steer what the answer says; (2) GET
+ * requests on the connected site can have side effects (e.g. "/logout",
+ * "/unsubscribe?x"), because read-only here means no non-GET requests, not
+ * "no state change". Both are bounded by the per-run approval and the
+ * site's own low stakes.
+ */
+export function sanitizeAnswer(text: string, site: string): string {
+  const onSite = (host: string) => {
+    const h = host.toLowerCase().replace(/^www\./, '')
+    return h === site || h.endsWith(`.${site}`)
+  }
+  return text
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '[image removed]')
+    .replace(/https?:\/\/([^\s/)>\]]+)[^\s)>\]]*/gi, (m, host: string) => (onSite(host.split(':')[0]) ? m : '[off-site link removed]'))
+}
+
 /** One short line for the user: what was touched and what the guard stopped. */
 export function receiptLine(site: string, stats: RunStats | null): string {
   if (!stats) return `used your ${site} session (read-only).`
@@ -138,7 +162,14 @@ export async function runLoggedInSession(
     }
   })
 
-  const runId = await startRun({ userId, capabilityId: cap.row.id, kind: 'browser_session', label: site, mode: 'read', task: input.task })
+  // Fail-closed: no audit row, no run. Nothing has been started yet at this point.
+  let runId: string
+  try {
+    runId = await startRun({ userId, capabilityId: cap.row.id, kind: 'browser_session', label: site, mode: 'read', task: input.task })
+  } catch (err) {
+    console.error('logged-in run refused, audit unavailable:', err instanceof Error ? err.message : String(err))
+    return { ok: false, error: "I couldn't record this run, so I didn't start it. Try again in a minute." }
+  }
   const started = Date.now()
   let sandbox: EphemeralSandbox | null = null
   let outcome = 'error'
@@ -160,7 +191,7 @@ export async function runLoggedInSession(
       return { ok: false, error: `the browser task failed (exit ${r.exitCode})` }
     }
     outcome = 'ok'
-    let output = scrubInjectedInstructions(answer)
+    let output = sanitizeAnswer(scrubInjectedInstructions(answer), site)
     if (output.length > OUTPUT_CAP) output = output.slice(0, OUTPUT_CAP) + '…'
     return { ok: true, output, receipt: receiptLine(site, stats), billedSeconds: Math.round((Date.now() - started) / 1000) }
   } catch (err) {
@@ -173,6 +204,7 @@ export async function runLoggedInSession(
     } catch (err) {
       console.error('logged-in run metering failed:', err instanceof Error ? err.message : String(err))
     }
-    if (runId) await finishRun(runId, outcome, detail).catch(() => null)
+    if (outcome === 'ok') await touchCapability(cap.row.id).catch(() => null)
+    await finishRun(runId, outcome, detail).catch((err) => console.error('audit close failed:', err instanceof Error ? err.message : String(err)))
   }
 }
