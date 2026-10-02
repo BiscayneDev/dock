@@ -69,7 +69,10 @@ export function browserSetupCommand(): string {
  */
 export function browserRunCommand(task: string, urls: string[]): string {
   const payload = JSON.stringify({ task, urls })
-  return `$HOME/.browser-use-venv/bin/python $HOME/.dinghy-bootstrap.py --run '${payload.replace(/'/g, `'\\''`)}'`
+  // The script is re-written on every run so a fix to bootstrap.py reaches
+  // sandboxes whose template (or earlier setup) baked in an older copy.
+  const refresh = `cat > "$HOME/.dinghy-bootstrap.py" <<'DINGHY_BOOTSTRAP_EOF'\n${BROWSER_BOOTSTRAP}DINGHY_BOOTSTRAP_EOF\n`
+  return `${refresh}$HOME/.browser-use-venv/bin/python $HOME/.dinghy-bootstrap.py --run '${payload.replace(/'/g, `'\\''`)}'`
 }
 
 /**

@@ -90,7 +90,10 @@ describe('injection hygiene', () => {
   it('the run command passes the framed prompt and never embeds secrets', () => {
     const cmd = browserRunCommand(browserTaskTemplate('do a thing', []), [])
     expect(cmd).toContain(INJECTION_GUARD)
-    expect(cmd).not.toMatch(/SUPABASE_SERVICE_ROLE|PAYBOX|master/i)
+    // Only the run invocation carries the payload; the uploaded script's own
+    // comments legitimately mention these words ("must never contain PAYBOX...").
+    const invocation = cmd.split('DINGHY_BOOTSTRAP_EOF\n').pop() as string
+    expect(invocation).not.toMatch(/SUPABASE_SERVICE_ROLE|PAYBOX|master/i)
   })
 })
 
@@ -231,5 +234,47 @@ describe('ensureBrowserUse', () => {
     const res = await ensureBrowserUse(fakeRun)
     expect(res.ready).toBe(true)
     expect(runs).toHaveLength(1)
+  })
+})
+
+// ---- browser result extraction (bootstrap.py) ---------------------------------
+
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+
+function hasPython(): boolean {
+  try {
+    execFileSync('python3', ['--version'], { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+describe('bootstrap final_text', () => {
+  it.skipIf(!hasPython())('calls final_result (a method in browser-use) instead of printing the bound method', () => {
+    const dir = fileURLToPath(new URL('../lib/computer', import.meta.url))
+    const script = [
+      'import sys; sys.path.insert(0, ".")',
+      'import importlib.util',
+      'spec = importlib.util.spec_from_file_location("bootstrap", "bootstrap.py")',
+      'm = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)',
+      'class H:',
+      '    def final_result(self): return "Example Domain"',
+      'class N:',
+      '    def final_result(self): return None',
+      'class Plain:',
+      '    final_result = "plain"',
+      'print(m.final_text(H()), "|", repr(m.final_text(N())), "|", m.final_text(Plain()))',
+    ].join('\n')
+    const out = execFileSync('python3', ['-c', script], { cwd: dir }).toString().trim()
+    expect(out).toBe("Example Domain | '' | plain")
+  })
+
+  it('the run command re-uploads bootstrap.py so template copies cannot go stale', () => {
+    const cmd = browserRunCommand('t', [])
+    expect(cmd).toContain('cat > "$HOME/.dinghy-bootstrap.py" <<\'DINGHY_BOOTSTRAP_EOF\'')
+    expect(cmd).toContain('final_text')
+    expect(cmd.indexOf('DINGHY_BOOTSTRAP_EOF\n$HOME/.browser-use-venv')).toBeGreaterThan(0)
   })
 })
