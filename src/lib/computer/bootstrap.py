@@ -71,6 +71,14 @@ def make_llm():
     return ChatOpenAI(base_url=base_url, api_key=key, model=model)
 
 
+def final_text(result):
+    """The agent's final answer. final_result is a METHOD on AgentHistoryList,
+    so it must be called; the bound method itself is truthy and prints as junk."""
+    fr = getattr(result, "final_result", None)
+    value = fr() if callable(fr) else fr
+    return value or ""
+
+
 def run_task(payload_json: str) -> int:
     payload = json.loads(payload_json)
     task = str(payload.get("task", "")).strip()
@@ -94,7 +102,7 @@ def run_task(payload_json: str) -> int:
 
     agent = Agent(task=prompt, llm=make_llm(), starting_urls=urls or None)
     result = agent.run_sync()
-    answer = getattr(result, "final_result", None) or ""
+    answer = final_text(result)
 
     # Compact result: the final answer plus key page text. Anything that
     # looks like embedded instructions is already neutralised by the
