@@ -9,6 +9,7 @@ const embedMock = vi.fn(async (t: string): Promise<number[] | null> => (t ? null
 vi.mock('@/lib/memory/embeddings', () => ({
   embedText: (t: string) => embedMock(t),
   currentEmbeddingModel: () => 'test-model',
+  googleEmbeddingAllowed: () => true,
 }))
 
 // spectrum_identities lookup: by default resolves to NO bound user (guest chat).

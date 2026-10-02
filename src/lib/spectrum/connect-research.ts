@@ -133,7 +133,7 @@ export async function runConnectResearch(args: { chatGuid: string; userId: strin
         const digest = buildDigest(await readSignals(args.tokens, args.userId), args.tz)
         const text = formatDigest(digest)
         if (!text) return 'empty'
-        await storeFacts(args.chatGuid, args.userId, 'google_onboarding', digestFacts(digest))
+        await storeFacts(args.chatGuid, args.userId, 'google_onboarding', digestFacts(digest), true)
         await args.say(text)
         return 'ran'
     } catch (err) {

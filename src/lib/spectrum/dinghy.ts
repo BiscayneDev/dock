@@ -9,6 +9,8 @@ export interface Message {
     content: string
     /** Image data URIs sent with this turn only (never persisted to history). */
     images?: string[]
+    /** Row came from a turn that held Gmail/Calendar data (spectrum_messages.google_derived). */
+    googleDerived?: boolean
 }
 
 /** Gateway wire shape: a turn with images becomes OpenAI content parts. */
@@ -366,6 +368,7 @@ export async function chat(
         onUsage?: (u: GatewayUsage) => void
         /** Task-aware Shipyard routing for this turn (routing.ts); unset = pinned model. */
         routing?: RoutingPrefs
+        startTainted?: boolean
     }
 ): Promise<string> {
     const messages = [
@@ -407,7 +410,7 @@ export async function chat(
 
 import type { Tool, UserContext } from '@/lib/llm/types'
 import { readGatewayUsage, type GatewayUsage } from './metering'
-import { modelFields, type RoutingPrefs } from './routing'
+import { isGoogleTool, modelFields, type RoutingPrefs } from './routing'
 
 function reportUsage(
     onUsage: ((u: GatewayUsage) => void) | undefined,
@@ -440,6 +443,8 @@ export interface ToolChatResult {
     reply: string
     toolCalls: number
     iterations: number
+    /** The turn read Google data (or started with it): save its reply tagged google_derived. */
+    tainted?: boolean
 }
 
 /**
@@ -465,6 +470,8 @@ export async function chatWithTools(
         onUsage?: (u: GatewayUsage) => void
         /** Task-aware Shipyard routing for this turn (routing.ts); unset = pinned model. */
         routing?: RoutingPrefs
+        /** The turn already holds Google data (tagged history, cron that reads Google): private route from the first call. */
+        startTainted?: boolean
     },
     tools: Tool[],
     ctx: UserContext
@@ -487,6 +494,9 @@ export async function chatWithTools(
     ]
 
     let toolCallCount = 0
+    let tainted = Boolean(opts.startTainted) || history.some((m) => m.googleDerived)
+    // Stage A only tracks the flag (saved on the reply as google_derived). Stage B routes on it.
+    const routingNow = (): RoutingPrefs | undefined => opts.routing
     for (let iteration = 1; iteration <= MAX_TOOL_ITERATIONS; iteration++) {
         const t0 = Date.now()
         const res = await fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
@@ -495,7 +505,7 @@ export async function chatWithTools(
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${opts.apiKey}`,
             },
-            body: JSON.stringify({ ...modelFields(opts.model, opts.routing), messages, tools: toolDefs, stream: false }),
+            body: JSON.stringify({ ...modelFields(opts.model, routingNow()), messages, tools: toolDefs, stream: false }),
         })
         if (!res.ok) {
             const body = await res.text().catch(() => '')
@@ -512,7 +522,7 @@ export async function chatWithTools(
         const calls = msg?.tool_calls ?? []
 
         if (choice?.finish_reason !== 'tool_calls' || calls.length === 0) {
-            return { reply: msg?.content ?? '(no response)', toolCalls: toolCallCount, iterations: iteration }
+            return { reply: msg?.content ?? '(no response)', toolCalls: toolCallCount, iterations: iteration, tainted }
         }
 
         messages.push({ role: 'assistant', content: msg?.content ?? null, tool_calls: calls })
@@ -532,6 +542,7 @@ export async function chatWithTools(
                         ),
                     ])
                     content = JSON.stringify(result.success ? result.data ?? {} : { error: result.error ?? 'tool failed' })
+                    if (isGoogleTool(call.function.name)) tainted = true
                 } catch (err) {
                     content = JSON.stringify({ error: err instanceof Error ? err.message : String(err) })
                 }
@@ -545,7 +556,7 @@ export async function chatWithTools(
     const res = await fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.apiKey}` },
-        body: JSON.stringify({ ...modelFields(opts.model, opts.routing), messages, tools: toolDefs, tool_choice: 'none', stream: false }),
+        body: JSON.stringify({ ...modelFields(opts.model, routingNow()), messages, tools: toolDefs, tool_choice: 'none', stream: false }),
     })
     if (!res.ok) throw new Error(`Gateway ${res.status}: ${res.statusText}`)
     const data = (await res.json()) as {
@@ -558,5 +569,6 @@ export async function chatWithTools(
         reply: data.choices?.[0]?.message?.content ?? '(no response)',
         toolCalls: toolCallCount,
         iterations: MAX_TOOL_ITERATIONS + 1,
+        tainted,
     }
 }

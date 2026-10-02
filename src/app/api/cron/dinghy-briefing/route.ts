@@ -193,6 +193,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                     apiKey: SHIPYARD_API_KEY,
                     model: SHIPYARD_MODEL,
                     facts,
+                    // The briefing is Google data by definition: private route from the first call.
+                    startTainted: true,
                     onUsage: (u: GatewayUsage) => usage.push(u),
                 },
                 IMESSAGE_READ_TOOLS,
@@ -244,7 +246,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                     sendErr instanceof Error ? sendErr.message : String(sendErr)
                 )
             }
-            await saveMessage(chatGuid, 'assistant', text).catch(() => {})
+            await saveMessage(chatGuid, 'assistant', text, true).catch(() => {})
             results.briefings++
         } catch (err) {
             console.error(`briefing failed (${chatGuid}):`, err instanceof Error ? err.message : String(err))

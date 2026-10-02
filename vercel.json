@@ -41,6 +41,10 @@
       "schedule": "20 * * * *"
     },
     {
+      "path": "/api/cron/google-expiry",
+      "schedule": "40 7 * * *"
+    },
+    {
       "path": "/api/cron/dinghy-briefing",
       "schedule": "0 * * * *"
     }

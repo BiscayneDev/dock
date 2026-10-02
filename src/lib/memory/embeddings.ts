@@ -26,7 +26,18 @@ function getClient(): OpenAI {
   return client
 }
 
-export async function embedText(text: string): Promise<number[] | null> {
+/**
+ * Text derived from Gmail/Calendar (googleDerived) is only embedded through a
+ * gateway confirmed private: EMBEDDINGS_BASE_URL set AND EMBEDDINGS_GOOGLE_OK=1.
+ * Otherwise no vector is made (the row stays keyword-searchable). Never goes
+ * direct to OpenAI.
+ */
+export function googleEmbeddingAllowed(env: Record<string, string | undefined> = process.env): boolean {
+  return Boolean(env.EMBEDDINGS_BASE_URL) && env.EMBEDDINGS_GOOGLE_OK === '1'
+}
+
+export async function embedText(text: string, opts?: { googleDerived?: boolean }): Promise<number[] | null> {
+  if (opts?.googleDerived && !googleEmbeddingAllowed()) return null
   if (!EMBEDDINGS_API_KEY) {
     logger.warn('No embeddings key configured (EMBEDDINGS_API_KEY / OPENAI_API_KEY)')
     return null

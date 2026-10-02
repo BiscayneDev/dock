@@ -136,7 +136,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                         })
                         if (finding) {
                             await space.send(toPlainText(finding))
-                            await saveMessage(guid, 'assistant', finding).catch(() => {})
+                            await saveMessage(guid, 'assistant', finding, true).catch(() => {})
                         }
                         // Then start getting to know them: headers-only read of calendar
                         // and mail, a short summary, a few saved notes. First connect only.
@@ -148,7 +148,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                                 tz: toolCtxC.timezone,
                                 say: async (t) => {
                                     await space.send(toPlainText(t))
-                                    await saveMessage(guid, 'assistant', t).catch(() => {})
+                                    await saveMessage(guid, 'assistant', t, true).catch(() => {})
                                 },
                             })
                         }
@@ -227,7 +227,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 await saveMessage(guid, 'user', claimed.pendingRequest).catch((err) =>
                     console.error('resume message save failed:', err instanceof Error ? err.message : String(err))
                 )
-                await saveMessage(guid, 'assistant', reply).catch((err) =>
+                await saveMessage(guid, 'assistant', reply, Boolean(toolCtx && tools.length > 0)).catch((err) =>
                     console.error('resume message save failed:', err instanceof Error ? err.message : String(err))
                 )
                 results.resumes++
