@@ -101,6 +101,8 @@ export async function isHealthConnected(chatGuid: string): Promise<boolean> {
 export interface HistoryMessage {
   role: 'user' | 'assistant'
   content: string
+  /** Written from a turn that held Gmail/Calendar data; routes later calls private. */
+  googleDerived?: boolean
 }
 
 /** History row recording a file delivery (not shown to the model). */
@@ -109,25 +111,31 @@ export const isFileMarker = (content: string): boolean => /^\[sent file: [^\]]*\
 
 export async function loadHistory(chatGuid: string, limit = 20): Promise<HistoryMessage[]> {
   const supabase = db()
-  const { data } = await supabase
-    .from('spectrum_messages')
-    .select('role, content, created_at')
-    .eq('chat_guid', chatGuid)
-    .in('role', ['user', 'assistant'])
-    .order('created_at', { ascending: false })
-    .limit(limit)
-  const rows = ((data ?? []) as { role: string; content: string }[]).reverse()
+  const query = (cols: string) =>
+    supabase
+      .from('spectrum_messages')
+      .select(cols)
+      .eq('chat_guid', chatGuid)
+      .in('role', ['user', 'assistant'])
+      .order('created_at', { ascending: false })
+      .limit(limit)
+  // google_derived arrives with migration 062. Until it is applied, read without it
+  // rather than lose history.
+  let res = await query('role, content, created_at, google_derived')
+  if (res.error) res = await query('role, content, created_at')
+  const rows = ((res.data ?? []) as unknown as { role: string; content: string; google_derived?: boolean | null }[]).reverse()
   return rows
     .filter((r) => r.role === 'user' || r.role === 'assistant')
     // "[sent file: x.pdf]" rows record deliveries for us; the model must not
     // see them, or it copies the marker as text instead of calling create_file.
     .filter((r) => !isFileMarker(r.content))
-    .map((r) => ({ role: r.role as 'user' | 'assistant', content: r.content }))
+    .map((r) => ({ role: r.role as 'user' | 'assistant', content: r.content, ...(r.google_derived ? { googleDerived: true } : {}) }))
 }
 
-export async function saveMessage(chatGuid: string, role: 'user' | 'assistant', content: string): Promise<void> {
+export async function saveMessage(chatGuid: string, role: 'user' | 'assistant', content: string, googleDerived = false): Promise<void> {
   const supabase = db()
-  await supabase.from('spectrum_messages').insert({ chat_guid: chatGuid, role, content })
+  // The column is only sent when true, so untagged saves work before migration 062.
+  await supabase.from('spectrum_messages').insert({ chat_guid: chatGuid, role, content, ...(googleDerived ? { google_derived: true } : {}) })
 }
 
 /** saveMessage, returning the row id so the content can be filled in later. */

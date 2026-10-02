@@ -22,7 +22,7 @@ export function routingEnabled(): boolean {
     return (process.env.DINGHY_MODEL_ROUTING ?? 'on').toLowerCase() !== 'off'
 }
 
-function providers(): string[] {
+export function providers(): string[] {
     const raw = process.env.DINGHY_PROVIDERS ?? 'hopscotch'
     return raw.split(',').map((s) => s.trim()).filter(Boolean)
 }
@@ -36,4 +36,52 @@ export function routingFor(): RoutingPrefs | undefined {
 /** Request model + body extension for a gateway call. */
 export function modelFields(pinned: string, routing: RoutingPrefs | undefined): { model: string; shipyard?: RoutingPrefs } {
     return routing ? { model: 'auto', shipyard: routing } : { model: pinned }
+}
+
+/**
+ * Private route for Gmail/Calendar-derived content (Google API Limited Use).
+ * Dinghy pins only the PROVIDER allowlist; the model stays Shipyard's call.
+ *
+ * DINGHY_PRIVATE_ROUTE=on enforces it (default off, so nothing changes until
+ * Shipyard serves a private provider). DINGHY_PRIVATE_PROVIDERS is the
+ * comma-separated allowlist of providers with a contractual no-train, no-retain
+ * route. There is deliberately NO default: unset means unavailable, and an
+ * enforced call then fails closed instead of falling back to the normal route.
+ */
+export class PrivateRouteUnavailable extends Error {
+    constructor() {
+        super('private route unavailable: DINGHY_PRIVATE_PROVIDERS is empty')
+        this.name = 'PrivateRouteUnavailable'
+    }
+}
+
+export function privateRouteEnforced(): boolean {
+    return (process.env.DINGHY_PRIVATE_ROUTE ?? 'off').toLowerCase() === 'on'
+}
+
+export function privateProviders(): string[] {
+    return (process.env.DINGHY_PRIVATE_PROVIDERS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+}
+
+/** Routing prefs for a call that carries Google data. Throws (fail closed) when enforced and no private provider is set. */
+export function privateRouting(): RoutingPrefs {
+    const p = privateProviders()
+    if (p.length === 0) throw new PrivateRouteUnavailable()
+    return { providers: p }
+}
+
+/**
+ * Body extension for any gateway call that can carry Google user data, pinned
+ * model or not. Enforced: model auto on the private allowlist only. Not
+ * enforced: the normal provider allowlist (no change in provider, but the
+ * restriction now applies to calls that used to send none).
+ */
+export function googleSafeBody(): { model?: string; shipyard: RoutingPrefs } {
+    if (privateRouteEnforced()) return { model: 'auto', shipyard: privateRouting() }
+    return { shipyard: { providers: providers() } }
+}
+
+/** Tools whose results are Gmail/Calendar data, or that can run them (workflows, recipes). */
+export function isGoogleTool(name: string): boolean {
+    return /^(gmail_|gcal_)/.test(name) || name === 'workflow_run' || name === 'recipe_run'
 }

@@ -23,8 +23,9 @@
  */
 
 import { createServerClient } from '@/lib/supabase/server'
-import { embedText, currentEmbeddingModel } from '@/lib/memory/embeddings'
+import { embedText, currentEmbeddingModel, googleEmbeddingAllowed } from '@/lib/memory/embeddings'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
+import { googleSafeBody } from './routing'
 import { cleanPlans, isAbsence, loadUpcomingPlans, recentFiles, renderFileLine, renderPlan, savePlans } from './plans'
 
 /**
@@ -197,9 +198,10 @@ interface Row {
     role: string
     content: string
     created_at: string
+    google_derived?: boolean | null
 }
 
-async function gatewayJson(system: string, user: string, maxTokens: number): Promise<Record<string, unknown> | null> {
+async function gatewayJson(system: string, user: string, maxTokens: number, googleDerived = false): Promise<Record<string, unknown> | null> {
     if (!SHIPYARD_API_KEY) return null
     const res = await fetch(`${GATEWAY_URL}/v1/chat/completions`, {
         method: 'POST',
@@ -212,6 +214,8 @@ async function gatewayJson(system: string, user: string, maxTokens: number): Pro
             ],
             max_tokens: maxTokens,
             stream: false,
+            // Windows that include a Google-derived message go to the private route only (fail closed when enforced).
+            ...(googleDerived ? googleSafeBody() : {}),
         }),
     })
     if (!res.ok) throw new Error(`gateway ${res.status}`)
@@ -276,11 +280,16 @@ Never include passwords, codes, keys, card or account numbers, or anything secre
 
 const SUMMARY_SYSTEM = `Summarize this stretch of a text conversation between a person and their assistant Dinghy in 2-4 plain sentences: what they talked about, decisions, and anything left open. Include dates when mentioned. Never include secrets, codes, or account numbers. Return ONLY JSON: {"summary": "..."}`
 
-export async function storeFacts(chatGuid: string, userId: string | null, sourceChannel: string, facts: { content: string; type: string }[]): Promise<number> {
+/** embedding_model sentinel on summaries whose text came from Google and was not embedded. */
+export const GOOGLE_WITHHELD = 'google-withheld'
+
+export async function storeFacts(chatGuid: string, userId: string | null, sourceChannel: string, facts: { content: string; type: string }[], googleDerived = false): Promise<number> {
     const supabase = createServerClient()
     let n = 0
+    // Tagged by channel so the retention job can find it (source_channel is 32 chars).
+    const channel = googleDerived ? `${sourceChannel.replace(/\+google$/, '').slice(0, 25)}+google` : sourceChannel
     for (const f of facts) {
-        const embedding = await embedText(f.content)
+        const embedding = await embedText(f.content, { googleDerived })
         if (embedding) {
             const [matchRpc, matchArgs] = userId
                 ? ['match_user_memories', { p_user_id: userId, p_embedding: JSON.stringify(embedding), p_model: currentEmbeddingModel(), p_limit: 1 }]
@@ -290,10 +299,13 @@ export async function storeFacts(chatGuid: string, userId: string | null, source
             if (top && top.similarity > DUPLICATE_SIMILARITY) continue
         }
         const [addRpc, addArgs] = userId
-            ? ['add_user_memory', { p_user_id: userId, p_chat_guid: chatGuid, p_channel: sourceChannel, p_type: f.type, p_content: f.content, p_embedding: embedding ? JSON.stringify(embedding) : null, p_model: embedding ? currentEmbeddingModel() : null }]
-            : ['add_chat_memory', { p_chat_guid: chatGuid, p_channel: sourceChannel, p_type: f.type, p_content: f.content, p_embedding: embedding ? JSON.stringify(embedding) : null, p_model: embedding ? currentEmbeddingModel() : null }]
-        const { error } = await supabase.rpc(addRpc as string, addArgs)
+            ? ['add_user_memory', { p_user_id: userId, p_chat_guid: chatGuid, p_channel: channel, p_type: f.type, p_content: f.content, p_embedding: embedding ? JSON.stringify(embedding) : null, p_model: embedding ? currentEmbeddingModel() : null }]
+            : ['add_chat_memory', { p_chat_guid: chatGuid, p_channel: channel, p_type: f.type, p_content: f.content, p_embedding: embedding ? JSON.stringify(embedding) : null, p_model: embedding ? currentEmbeddingModel() : null }]
+        const { data: memId, error } = await supabase.rpc(addRpc as string, addArgs)
         if (!error) n++
+        if (!error && googleDerived && typeof memId === 'string') {
+            await supabase.from('memories').update({ google_derived: true }).eq('id', memId)
+        }
     }
     return n
 }
@@ -314,17 +326,21 @@ export async function updateMemory(chatGuid: string, sourceChannel = 'imessage')
     const c = (Array.isArray(claim) ? claim[0] : null) as { total: number; previously_seen: number; last_summary_at: string | null } | null
     if (!c) return
 
-    const { data: rowsData } = await supabase
+    const rowsQuery = (cols: string) => supabase
         .from('spectrum_messages')
-        .select('role, content, created_at')
+        .select(cols)
         .eq('chat_guid', chatGuid)
         .order('created_at', { ascending: false })
         .limit(SUMMARIZE_MAX + HISTORY_WINDOW)
-    const rows = ((rowsData ?? []) as Row[]).filter((r) => r.role === 'user' || r.role === 'assistant').reverse()
+    // google_derived arrives with migration 062; read without it until then.
+    let rowsRes = await rowsQuery('role, content, created_at, google_derived')
+    if (rowsRes.error) rowsRes = await rowsQuery('role, content, created_at')
+    const rows = ((rowsRes.data ?? []) as unknown as Row[]).filter((r) => r.role === 'user' || r.role === 'assistant').reverse()
     if (!rows.length) return
 
     // 1. Profile + facts from the messages since the last update.
     const fresh = rows.slice(-Math.min(Math.max(c.total - c.previously_seen, UPDATE_EVERY), 30))
+    const freshTainted = fresh.some((r) => r.google_derived)
     const [ctxRpc, ctxArgs] = userId
         ? ['dinghy_user_memory_context', { p_user_id: userId }]
         : ['dinghy_memory_context', { p_chat_guid: chatGuid }]
@@ -341,7 +357,8 @@ export async function updateMemory(chatGuid: string, sourceChannel = 'imessage')
     const out = await gatewayJson(
         PROFILE_SYSTEM.replace('{TODAY}', new Date().toISOString().slice(0, 10)),
         `current profile:\n${profile || '(empty)'}\n\nknown facts:\n${known.map((k) => `- ${k}`).join('\n') || '(none)'}\n\nknown plans:\n${knownPlans.map((p) => `- ${renderPlan(p)}`).join('\n') || '(none)'}\n\nrecent messages:\n${transcript(fresh, 6000)}`,
-        1100
+        1100,
+        freshTainted
     )
     if (out) {
         const nextProfile = cleanProfile(out.profile)
@@ -351,7 +368,7 @@ export async function updateMemory(chatGuid: string, sourceChannel = 'imessage')
                 : ['save_dinghy_profile', { p_chat_guid: chatGuid, p_profile: nextProfile }]
             await supabase.rpc(saveRpc as string, saveArgs)
         }
-        await storeFacts(chatGuid, userId, sourceChannel, cleanFacts(out.facts, known))
+        await storeFacts(chatGuid, userId, sourceChannel, cleanFacts(out.facts, known), freshTainted)
         if (userId) await savePlans(userId, chatGuid, cleanPlans(out.plans)).catch((err) => console.error('[dinghy] plans save failed', err instanceof Error ? err.message : err))
     }
 
@@ -360,19 +377,25 @@ export async function updateMemory(chatGuid: string, sourceChannel = 'imessage')
     const outOfWindow = rows.slice(0, Math.max(0, rows.length - HISTORY_WINDOW)).filter((r) => Date.parse(r.created_at) > since)
     if (outOfWindow.length >= SUMMARIZE_MIN) {
         const chunk = outOfWindow.slice(0, SUMMARIZE_MAX)
-        const s = await gatewayJson(SUMMARY_SYSTEM, transcript(chunk, 8000), 300)
+        const chunkTainted = chunk.some((r) => r.google_derived)
+        const s = await gatewayJson(SUMMARY_SYSTEM, transcript(chunk, 8000), 300, chunkTainted)
         const summary = typeof s?.summary === 'string' ? s.summary.trim() : ''
         if (summary && !looksSecret(summary)) {
-            const vec = await embedText(summary)
-            await supabase.rpc('add_conversation_summary_v2', {
+            const vec = await embedText(summary, { googleDerived: chunkTainted })
+            const { data: summaryId } = await supabase.rpc('add_conversation_summary_v2', {
                 p_chat_guid: chatGuid,
                 p_summary: summary,
                 p_message_count: chunk.length,
                 p_first_at: chunk[0].created_at,
                 p_last_at: chunk[chunk.length - 1].created_at,
                 p_embedding: vec ? JSON.stringify(vec) : null,
-                p_model: vec ? currentEmbeddingModel() : null,
+                // No vector for Google-derived text: mark it so backfill never embeds it later.
+                p_model: vec ? currentEmbeddingModel() : chunkTainted ? GOOGLE_WITHHELD : null,
             })
+            // Column arrives with migration 062; the sentinel above covers the gap.
+            if (chunkTainted && typeof summaryId === 'string') {
+                await supabase.from('conversation_summaries').update({ google_derived: true }).eq('id', summaryId)
+            }
         }
     }
 
@@ -394,7 +417,24 @@ export async function backfillEmbeddings(chatGuid: string, limit = 20): Promise<
     const { data, error } = await supabase.rpc(rpc as string, args)
     if (error || !Array.isArray(data)) return 0
     let n = 0
-    for (const r of data as { kind: string; id: string; content: string }[]) {
+    // Google-derived rows are never backfilled to an unconfirmed endpoint, even if migration 062's
+    // RPC filter is not applied yet: facts by channel tag, summaries by the withheld sentinel.
+    let rowsToEmbed = data as { kind: string; id: string; content: string }[]
+    if (!googleEmbeddingAllowed() && rowsToEmbed.length) {
+        const factIds = rowsToEmbed.filter((r) => r.kind === 'fact').map((r) => r.id)
+        const sumIds = rowsToEmbed.filter((r) => r.kind === 'summary').map((r) => r.id)
+        const skip = new Set<string>()
+        if (factIds.length) {
+            const { data: t } = await supabase.from('memories').select('id').in('id', factIds).like('source_channel', '%+google')
+            for (const x of (t ?? []) as { id: string }[]) skip.add(x.id)
+        }
+        if (sumIds.length) {
+            const { data: t } = await supabase.from('conversation_summaries').select('id').in('id', sumIds).eq('embedding_model', GOOGLE_WITHHELD)
+            for (const x of (t ?? []) as { id: string }[]) skip.add(x.id)
+        }
+        rowsToEmbed = rowsToEmbed.filter((r) => !skip.has(r.id))
+    }
+    for (const r of rowsToEmbed) {
         const vec = await embedText(r.content)
         if (!vec) break // embeddings unavailable; try again next pass
         const { error: e } = await supabase.rpc('set_chat_embedding', {

@@ -911,6 +911,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         // (routing.ts). Dinghy only pins the provider allowlist.
         const routing = routingFor()
         let reply: string
+        let replyTainted = false
         let toolCalls = 0
         let iterations = 0
         const actions = toolCtx && capabilitiesFor(toolCtx).google ? actionToolsFor(chatGuid) : null
@@ -943,6 +944,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             }
             const r = await chatWithTools(full, toolOpts, tools, runCtx)
             reply = r.reply
+            replyTainted = Boolean(r.tainted)
             toolCalls = r.toolCalls
             iterations = r.iterations
             // The model sometimes writes a "[sent file: x]" marker instead of
@@ -955,6 +957,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                     runCtx
                 )
                 reply = retry.reply
+                replyTainted = replyTainted || Boolean(retry.tainted)
                 toolCalls += retry.toolCalls
                 iterations += retry.iterations
             }
@@ -963,6 +966,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             reply = cleaned.text || (made > 0 ? 'here you go.' : "I couldn't make that file just now. Ask me again in a moment.")
             if (cleaned.hadMarker && made === 0) reply = "I couldn't make that file just now. Ask me again in a moment."
         } else {
+            replyTainted = full.some((m) => m.googleDerived)
             reply = await chat(full, {
                 gatewayUrl: GATEWAY_URL,
                 apiKey: SHIPYARD_API_KEY,
@@ -999,7 +1003,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             answerDelivered = await sendText(space, chatGuid, 'reply', plainReply)
         }
         await settleWorkingTapback(message, eyes, text)
-        await saveMessage(chatGuid, 'assistant', plainReply).catch((err) => logErr('message save failed', err))
+        await saveMessage(chatGuid, 'assistant', plainReply, replyTainted).catch((err) => logErr('message save failed', err))
         // The exact draft, rendered by the server, as its own bubble.
         const loose = takeLooseProposal(chatGuid)
         const proposal = actions?.proposal() ?? loose
