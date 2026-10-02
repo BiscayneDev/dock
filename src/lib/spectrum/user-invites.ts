@@ -68,6 +68,30 @@ export async function mintMemberInvite(chatGuid: string, uses: number, note = 'm
     return { ok: true, remaining, code, link: inviteLink(code) }
 }
 
+export interface OwnerInviteStats {
+    links_made: number
+    spots_made: number
+    redeemed: number
+    open_spots: number
+}
+
+/** The owner has no cap, but "how many have I given out and used" is a real answer. */
+export async function ownerInviteStats(chatGuid: string): Promise<OwnerInviteStats | Record<string, never>> {
+    const { data, error } = await createServerClient()
+        .from('beta_invites')
+        .select('max_uses, uses, expires_at')
+        .eq('created_by_chat', chatGuid)
+    if (error || !data) return {}
+    const now = Date.now()
+    const rows = data as { max_uses: number; uses: number; expires_at: string }[]
+    return {
+        links_made: rows.length,
+        spots_made: rows.reduce((n, r) => n + r.max_uses, 0),
+        redeemed: rows.reduce((n, r) => n + r.uses, 0),
+        open_spots: rows.reduce((n, r) => (new Date(r.expires_at).getTime() > now ? n + Math.max(0, r.max_uses - r.uses) : n), 0),
+    }
+}
+
 export function balanceText(balance: InviteBalance): string {
     if (balance.granted === 0) {
         return "You don't have any invites yet. Text INVITE MORE and I'll pass the request along."
@@ -100,7 +124,8 @@ export function invitesPromptLine(left: number | 'unlimited'): string {
         'Mention it at most once on your own, at a natural moment: they say Dinghy is great or useful, or ask about sharing or bringing someone in. ' +
         'Do not bring it up again if it is already in this chat, and never push it. ' +
         'When they ask for the link or want to invite someone, call invite_link and put the returned link alone on the last line. ' +
-        'Only call invite_link when they ask for it, because each link reserves invites from their allowance.'
+        'Only call invite_link when they ask for it, because each link reserves invites from their allowance.' +
+        (left === 'unlimited' ? ' This person has no cap: when they ask how many invites they have, say unlimited and give the real links made, redeemed and open spots from invite_status.' : '')
     )
 }
 
@@ -111,7 +136,7 @@ export function inviteToolsFor(chatGuid: string, role: InviteRole): Tool[] {
         inputSchema: { type: 'object', properties: {} },
         async execute(): Promise<ToolResult> {
             try {
-                if (role === 'owner') return { success: true, data: { remaining: 'unlimited', note: 'owner: no allowance limit' } }
+                if (role === 'owner') return { success: true, data: { remaining: 'unlimited', note: 'owner: no allowance limit', ...(await ownerInviteStats(chatGuid)) } }
                 const b = await inviteBalance(chatGuid)
                 return { success: true, data: { granted: b.granted, used: b.used, remaining: b.remaining } }
             } catch (err) {
