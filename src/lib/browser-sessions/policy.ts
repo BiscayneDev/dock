@@ -202,9 +202,21 @@ export function filterStateToSite(state: StorageState, site: string): { state: S
   return { state: { cookies, origins }, dropped }
 }
 
-/** Egress allowlist for the site: its host and subdomains. Extra hosts are opt-in per site. */
-export function egressHostsFor(site: string, extra: string[] = []): string[] {
+/**
+ * Extra hosts a site genuinely needs (CDN or asset hosts, deeper subdomains).
+ * Empty on purpose: "*.site" matches one label at E2B and the browser guard
+ * allows the site and its subdomains, so add an entry here, by exact host or
+ * "*.parent", only when a connected site breaks without it. Wildcards in
+ * extras are kept; everything else is normalized as a site.
+ */
+export const SITE_EXTRA_HOSTS: Record<string, string[]> = {}
+
+/** Egress allowlist for the site: its host, one-label subdomains, and any explicitly listed extras. */
+export function egressHostsFor(site: string, extra: string[] = SITE_EXTRA_HOSTS[site] ?? []): string[] {
   const hosts = new Set<string>([site, `*.${site}`])
-  for (const e of extra) if (normalizeSite(e)) hosts.add(normalizeSite(e) as string)
+  for (const e of extra) {
+    if (/^\*\.[a-z0-9.-]+$/.test(e) && normalizeSite(e.slice(2))) hosts.add(e)
+    else if (normalizeSite(e)) hosts.add(normalizeSite(e) as string)
+  }
   return [...hosts]
 }

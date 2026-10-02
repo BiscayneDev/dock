@@ -79,6 +79,9 @@ export function renderProposal(p: Proposal): string {
         return `Disconnect ${str(x.account)} from Dinghy?\n\nI'll stop reading its email and calendar. You can connect it again any time.\n\nReply Y to disconnect, N to cancel.`
     }
     const attendees = Array.isArray(x.attendees) ? (x.attendees as string[]).join(', ') : ''
+    if (p.kind === 'computer_browse' && x.site) {
+        return `Use your logged-in ${str(x.site)} session for this?\n\n${str(x.task)}\n\nRead-only: I can look at pages but not change anything, and I can only reach ${str(x.site)}.\n\nReply Y to run it, N to cancel.`
+    }
     if (p.kind === 'computer_browse') {
         const domains = (Array.isArray(x.urls) ? (x.urls as string[]) : []).join(', ')
         return `Browse${domains ? ` ${domains}` : ''} for you while logged in?\n\n${str(x.task)}\n\nReply Y to run it, N to cancel.`
@@ -99,12 +102,17 @@ async function storeProposal(chatGuid: string, ctx: UserContext, kind: PendingKi
 
 /**
  * Proposal tracking for tools that live outside the actionToolsFor closure
- * (e.g. computer_browse). The last proposal made anywhere this turn wins;
- * the handler renders it as the confirmation bubble.
+ * (e.g. computer_browse). Keyed by chat so a warm server instance handling
+ * two chats can never show one chat's draft in another. The handler takes
+ * (and clears) the entry for its own chat; unclaimed entries expire.
  */
-let looseProposal: Proposal | null = null
-export function lastLooseProposal(): Proposal | null {
-    return looseProposal
+const LOOSE_TTL_MS = 2 * 60 * 1000
+const looseProposals = new Map<string, { proposal: Proposal; at: number }>()
+export function takeLooseProposal(chatGuid: string): Proposal | null {
+    const entry = looseProposals.get(chatGuid)
+    looseProposals.delete(chatGuid)
+    if (!entry || Date.now() - entry.at > LOOSE_TTL_MS) return null
+    return entry.proposal
 }
 
 /**
@@ -119,7 +127,9 @@ export async function proposeLoose(
 ): Promise<ToolResult> {
     try {
         const id = await storeProposal(chatGuid, ctx, kind, payload)
-        looseProposal = { id, kind, payload }
+        const now = Date.now()
+        for (const [k, v] of looseProposals) if (now - v.at > LOOSE_TTL_MS) looseProposals.delete(k)
+        looseProposals.set(chatGuid, { proposal: { id, kind, payload }, at: now })
         return PROPOSED
     } catch (err) {
         return { success: false, error: err instanceof Error ? err.message : String(err) }
@@ -303,16 +313,14 @@ export async function executePendingActionDetailed(
     // Logged-in browsing runs through the sandbox browser, not a Google
     // tool — dispatched lazily to avoid a circular import with the tools.
     if (row.kind === 'computer_browse') {
-        const { runApprovedBrowse } = await import('@/lib/tools/computer')
+        const { runApprovedBrowse, runApprovedLoggedInBrowse } = await import('@/lib/tools/computer')
         let result: ToolResult
+        const rowSite = str(row.payload.site)
+        const rowUrls = Array.isArray(row.payload.urls) ? (row.payload.urls as string[]) : []
         try {
-            result = await runApprovedBrowse(
-                {
-                    task: str(row.payload.task),
-                    urls: Array.isArray(row.payload.urls) ? (row.payload.urls as string[]) : [],
-                },
-                ctx
-            )
+            result = rowSite
+                ? await runApprovedLoggedInBrowse({ task: str(row.payload.task), site: rowSite, urls: rowUrls }, ctx)
+                : await runApprovedBrowse({ task: str(row.payload.task), urls: rowUrls }, ctx)
         } catch (err) {
             result = { success: false, error: err instanceof Error ? err.message : String(err) }
         }
@@ -321,7 +329,9 @@ export async function executePendingActionDetailed(
             return { ok: false, text: `That didn't go through: ${result.error ?? 'unknown error'}`, kind: row.kind, payload: row.payload }
         }
         const answer = str((result.data as { output?: string } | undefined)?.output).trim()
-        return { ok: true, text: answer ? `Browsing done:\n\n${answer}` : 'Browsing done.', kind: row.kind, payload: row.payload }
+        const receipt = str((result.data as { receipt?: string } | undefined)?.receipt).trim()
+        const body = answer ? `Browsing done:\n\n${answer}` : 'Browsing done.'
+        return { ok: true, text: receipt ? `${body}\n\n(${receipt})` : body, kind: row.kind, payload: row.payload }
     }
 
     if (row.kind === 'google_disconnect') {

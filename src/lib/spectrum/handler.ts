@@ -31,7 +31,7 @@ import { payboxSigningToolsFor } from '@/lib/tools/paybox-signing'
 import { EMPTY_MEMORY, loadMemoryContext, renderMemoryBlock, updateMemory } from './memory'
 import { FILE_NUDGE, fileToolsFor, stripFileMarkers, type MadeFile } from '@/lib/files/tool'
 import { hostedHistoryLine, sendFileWithPreview, sendHostedFile } from '@/lib/files/send'
-import { actionToolsFor, cancelPendingActions, executePendingActionDetailed, hasPendingAction, lastLooseProposal, parseConfirmation, renderProposal, sendConfirmedReaction } from './actions'
+import { actionToolsFor, cancelPendingActions, executePendingActionDetailed, hasPendingAction, takeLooseProposal, parseConfirmation, renderProposal, sendConfirmedReaction } from './actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { dinghyContactCard } from './contact-card'
 import { dinghyLineFor } from './line-for-chat'
@@ -965,7 +965,8 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         }
         await saveMessage(chatGuid, 'assistant', plainReply).catch((err) => logErr('message save failed', err))
         // The exact draft, rendered by the server, as its own bubble.
-        const proposal = actions?.proposal() ?? lastLooseProposal()
+        const loose = takeLooseProposal(chatGuid)
+        const proposal = actions?.proposal() ?? loose
         if (proposal) {
             const preview = renderProposal(proposal)
             await sendText(space, chatGuid, 'reply', preview)
@@ -976,7 +977,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         let firstReplyCardClaimed = false
         // The card follows a delivered answer. Claim once across serverless
         // workers; release the claim if the native card itself fails.
-        if (answerDelivered && plainReply.trim() && role === 'member' && !(actions?.proposal() ?? lastLooseProposal()) && !/^(?:I couldn't|Couldn't|I can't|Sorry|Something went wrong)/i.test(plainReply.trim())) {
+        if (answerDelivered && plainReply.trim() && role === 'member' && !proposal && !/^(?:I couldn't|Couldn't|I can't|Sorry|Something went wrong)/i.test(plainReply.trim())) {
             const db = createServerClient()
             const { error: claimError } = await db.from('dinghy_first_reply_cards').insert({ chat_guid: chatGuid })
             if (!claimError) {

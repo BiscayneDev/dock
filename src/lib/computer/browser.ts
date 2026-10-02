@@ -67,8 +67,15 @@ export function browserSetupCommand(): string {
  * passed as a single JSON argument; the sandbox-scoped Shipyard key and
  * gateway URL come from the sandbox env at run time — never from Dinghy.
  */
-export function browserRunCommand(task: string, urls: string[]): string {
-  const payload = JSON.stringify({ task, urls })
+export interface BrowserSessionSpec {
+  /** File (in a RAM-backed dir) holding the storage state; bootstrap.py deletes it after loading. */
+  state_path: string
+  allowed_hosts: string[]
+  read_only: boolean
+}
+
+export function browserRunCommand(task: string, urls: string[], session?: BrowserSessionSpec): string {
+  const payload = JSON.stringify(session ? { task, urls, session } : { task, urls })
   // The script is re-written on every run so a fix to bootstrap.py reaches
   // sandboxes whose template (or earlier setup) baked in an older copy.
   const refresh = `cat > "$HOME/.dinghy-bootstrap.py" <<'DINGHY_BOOTSTRAP_EOF'\n${BROWSER_BOOTSTRAP}DINGHY_BOOTSTRAP_EOF\n`

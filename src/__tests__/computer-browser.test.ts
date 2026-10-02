@@ -7,6 +7,12 @@ const rpcMock = vi.fn()
 vi.mock('@/lib/supabase/server', () => ({
   createServerClient: () => ({ from: fromMock, rpc: rpcMock }),
 }))
+// Connected sites for the logged-in flow (the capability table is covered in capabilities-store.test.ts).
+const liveSessions = vi.hoisted(() => ({ labels: ['github.com'] as string[] }))
+vi.mock('@/lib/capabilities/store', async (orig) => ({
+  ...(await orig<typeof import('@/lib/capabilities/store')>()),
+  listCapabilities: vi.fn(async () => liveSessions.labels.map((label) => ({ label }))),
+}))
 
 import { browserTaskTemplate, INJECTION_GUARD, scrubInjectedInstructions, ensureBrowserUse, browserRunCommand } from '@/lib/computer/browser'
 import { computerBrowse, runApprovedBrowse } from '@/lib/tools/computer'
@@ -111,21 +117,43 @@ describe('computer_browse loggedIn flow', () => {
       return Promise.resolve(null)
     })
 
-    const res = await computerBrowse.execute({ task: 'check my orders', urls: ['https://amazon.com'], loggedIn: true }, ctx())
+    const res = await computerBrowse.execute({ task: 'check my open PRs', site: 'https://www.GitHub.com/x', loggedIn: true }, ctx())
 
     expect(res.success).toBe(true)
     expect((res.data as { status?: string }).status).toBe('awaiting_user_confirmation')
     expect(stored!.kind).toBe('computer_browse')
-    expect(stored!.payload!.task).toBe('check my orders')
-    expect(stored!.payload!.urls).toEqual(['https://amazon.com'])
+    expect(stored!.payload!.task).toBe('check my open PRs')
+    expect(stored!.payload!.site).toBe('github.com')
+    expect(stored!.payload!.mode).toBe('read')
     // nothing ran, nothing metered
     expect(db.inserts.some((i) => i.table === 'spend_events')).toBe(false)
 
-    // The exact draft the server texts: task text + target domains.
+    // The exact draft the server texts: the site, the task and the read-only limit.
     const preview = renderProposal({ id: 'prop-1', kind: 'computer_browse', payload: stored!.payload! })
-    expect(preview).toContain('check my orders')
-    expect(preview).toContain('amazon.com')
+    expect(preview).toContain('check my open PRs')
+    expect(preview).toContain('github.com')
+    expect(preview).toMatch(/Read-only/)
     expect(preview).toContain('Reply Y to run it')
+  })
+
+  it('refuses when the site is not connected, without proposing anything', async () => {
+    setDb({ computer_sessions: [], spend_events: [] })
+    liveSessions.labels = []
+    const res = await computerBrowse.execute({ task: 'x', site: 'github.com', loggedIn: true }, ctx())
+    liveSessions.labels = ['github.com']
+    expect(res.success).toBe(false)
+    expect(String(res.error)).toMatch(/browser_connect/)
+    expect(rpcMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses denylisted sites and a missing site', async () => {
+    setDb({ computer_sessions: [], spend_events: [] })
+    const bank = await computerBrowse.execute({ task: 'x', site: 'chase.com', loggedIn: true }, ctx())
+    expect(bank.success).toBe(false)
+    const none = await computerBrowse.execute({ task: 'x', loggedIn: true }, ctx())
+    expect(none.success).toBe(false)
+    expect(String(none.error)).toMatch(/which site/)
+    expect(rpcMock).not.toHaveBeenCalled()
   })
 
   it('refuses loggedIn browsing without a chat to confirm in', async () => {
@@ -148,7 +176,7 @@ describe('computer_browse loggedIn flow', () => {
     })
     rpcMock.mockResolvedValue('prop-2')
 
-    const res = await computerBrowse.execute({ task: 'order more coffee', urls: [], loggedIn: true }, ctx())
+    const res = await computerBrowse.execute({ task: 'order more coffee', site: 'github.com', urls: [], loggedIn: true }, ctx())
     // Approval comes first — the allowance surfaces after the yes, when the
     // confirmed run hits the same guard.
     expect((res.data as { status?: string }).status).toBe('awaiting_user_confirmation')
