@@ -10,7 +10,7 @@ import { createHash, randomBytes } from 'crypto'
 import { createServerClient } from '@/lib/supabase/server'
 import { decryptTokenFromDb, encryptTokenForDb } from '@/lib/crypto'
 
-export type CapabilityKind = 'browser_session'
+export type CapabilityKind = 'browser_session' | 'workflow'
 export type CapabilityMode = 'read' | 'write'
 
 export const CONNECT_LINK_TTL_SECONDS = 15 * 60
@@ -233,7 +233,7 @@ export async function auditEvent(input: {
   userId: string
   kind: CapabilityKind
   label: string
-  event: 'connect_link' | 'connected' | 'disconnected' | 'connect_cancelled'
+  event: 'connect_link' | 'connected' | 'disconnected' | 'connect_cancelled' | 'saved' | 'deleted' | 'run_proposed' | 'run_blocked'
   detail?: Record<string, unknown>
 }): Promise<void> {
   const now = new Date().toISOString()

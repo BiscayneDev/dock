@@ -63,6 +63,7 @@ export function stubTools(real: Tool[], world: DryWorld, trace: TraceCall[], pro
       if (handler) {
         result = handler(inp, world)
         if (!result.success) status = 'error'
+        else if ((result.data as { status?: string } | undefined)?.status === 'awaiting_user_confirmation') status = 'proposed'
       } else if (t.name === 'computer_browse' && inp.loggedIn === true) {
         const site = normalizeSite(String(inp.site ?? ''))
         if (!site) result = { success: false, error: 'which site should I use your login on? (it has to be one you connected)' }
@@ -93,7 +94,11 @@ export function deriveAction(trace: TraceCall[]): string {
   switch (first.name) {
     case 'browser_connect': return 'propose_connect'
     case 'browser_disconnect': return 'revoke'
-    case 'browser_sessions': case 'reminder_list': return 'list_grants_and_workflows'
+    case 'browser_sessions': case 'reminder_list': case 'workflow_list': case 'recipe_list': return 'list_grants_and_workflows'
+    case 'workflow_run': return 'run_workflow'
+    case 'workflow_save': return 'propose_workflow'
+    case 'workflow_update': return 'update_workflow_readback'
+    case 'workflow_delete': case 'recipe_delete': return 'delete_recipe'
     case 'reminder_set': return 'propose_recipe'
     case 'reminder_cancel': return 'delete_recipe'
     case 'computer_browse': return 'run_workflow'
