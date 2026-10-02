@@ -162,8 +162,15 @@ export class E2BManager implements ComputerProvider {
   }
 
   async pause(sandboxId: string): Promise<void> {
-    const Sandbox = await this.sdk()
-    await Sandbox.pause(sandboxId)
+    const sdk = await import('e2b')
+    try {
+      await sdk.Sandbox.pause(sandboxId)
+    } catch (err) {
+      // The sandbox can expire before the sweeper gets to it; that's a dead
+      // id (same as run/connect), not a pause failure.
+      if (err instanceof sdk.NotFoundError) throw new SandboxGoneError(sandboxId)
+      throw err
+    }
   }
 
   async run(sandboxId: string, command: string, opts: RunOpts = {}): Promise<{ stdout: string; stderr: string; exitCode: number }> {
