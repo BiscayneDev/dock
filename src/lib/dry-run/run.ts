@@ -93,6 +93,7 @@ export function deriveAction(trace: TraceCall[]): string {
   if (!first || (errored && trace.every((c) => c.status === 'error'))) return errored?.name === 'browser_connect' ? 'refuse_or_narrow' : 'tool_error'
   switch (first.name) {
     case 'browser_connect': return 'propose_connect'
+    case 'google_connect': return 'propose_connect'
     case 'browser_disconnect': return 'revoke'
     case 'browser_sessions': case 'reminder_list': case 'workflow_list': case 'recipe_list': return 'list_grants_and_workflows'
     case 'workflow_run': return 'run_workflow'

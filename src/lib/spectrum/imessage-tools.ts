@@ -26,6 +26,7 @@ import { githubListRepos, githubGetRepo, githubListIssues, githubGetIssue, githu
 import { COMPUTER_TOOLS } from '@/lib/tools/computer'
 import { BROWSER_SESSION_TOOLS } from '@/lib/tools/browser-sessions'
 import { WORKFLOW_TOOLS } from '@/lib/tools/workflows'
+import { googleConnect } from '@/lib/tools/google-connect'
 import { recipeDelete, recipeList } from '@/lib/tools/recipes'
 import { accountsLine, multiAccount } from '@/lib/integrations/google-accounts'
 
@@ -109,6 +110,7 @@ export function toolsFor(ctx: UserContext): Tool[] {
     const caps = capabilitiesFor(ctx)
     return [
         ...liveInfoTools(),
+        googleConnect,
         ...(caps.google ? IMESSAGE_READ_TOOLS : []),
         ...(caps.wallet ? WALLET_READ_TOOLS : []),
         ...(caps.wallet ? [payboxOnramp] : []),

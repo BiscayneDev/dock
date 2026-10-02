@@ -23,7 +23,7 @@ import {
     type HistoryMessage,
 } from '@/spectrum/store'
 import { verifiedWaitlistBackground } from './background-context'
-import { firstReplyBundleDecision, FIRST_USE_SUGGESTIONS, GOOGLE_CONNECT_ASK } from './connect-lines'
+import { firstReplyBundleDecision, isGoogleReconnectIntent, FIRST_USE_SUGGESTIONS, GOOGLE_CONNECT_ASK } from './connect-lines'
 import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsAnotherGoogle, wantsGithub, wantsHealth, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { recordUsage, spendToolFor, type GatewayUsage } from './metering'
 import { allowanceUsedUpMessage, claimLimitNotice, isOverDailyAllowance } from '@/lib/allowance'
@@ -37,6 +37,7 @@ import { hostedHistoryLine, sendFileWithPreview, sendHostedFile } from '@/lib/fi
 import { actionToolsFor, cancelPendingActions, executePendingActionDetailed, hasPendingAction, takeLooseProposal, parseConfirmation, renderProposal, sendConfirmedReaction } from './actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { dinghyContactCard } from './contact-card'
+import { takeLooseConnectLink } from '@/lib/tools/google-connect'
 import { dinghyLineFor } from './line-for-chat'
 import { createServerClient } from '@/lib/supabase/server'
 import { hitRateLimit, RATE_NOTICE } from './rate-limit'
@@ -638,6 +639,22 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         return
     }
 
+    // Connect or reconnect asked while Google looks connected (stale or wrong
+    // account): send a fresh link now. A new connect replaces the stored tokens,
+    // so there is nothing to disconnect first and nothing to retype.
+    if (textIntents && !wantsAnotherGoogle(text) && isGoogleReconnectIntent(text) && (await isGoogleConnected(chatGuid).catch(() => false))) {
+        try {
+            const link = await createConnectLink(chatGuid, 'connect my gmail')
+            await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+            await sendText(space, chatGuid, 'connect_link', 'sending a fresh Google link. Tap it and approve on Google, and that replaces the old connection:')
+            await sendLink(space as LinkSender, chatGuid, 'connect_link', link)
+        } catch (err) {
+            logErr('connect link failed', err)
+            await sendText(space, chatGuid, 'error_notice', "Couldn't start the connection. Try again in a moment.")
+        }
+        return
+    }
+
     // Another Gmail while one is already connected: same one-use link; the
     // auth route always shows Google's account chooser.
     if (textIntents && wantsAnotherGoogle(text) && (await isGoogleConnected(chatGuid).catch(() => false))) {
@@ -990,6 +1007,12 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             const preview = renderProposal(proposal)
             await sendText(space, chatGuid, 'reply', preview)
             await saveMessage(chatGuid, 'assistant', preview).catch((err) => logErr('message save failed', err))
+        }
+        // google_connect queued a link this turn: send it as its own bubble so the
+        // rich preview shows, unless the reply already carries it.
+        const queuedLink = takeLooseConnectLink(chatGuid)
+        if (queuedLink && !plainReply.includes(queuedLink)) {
+            await sendLink(space as LinkSender, chatGuid, 'connect_link', queuedLink).catch((err) => logErr('queued connect link failed', err))
         }
         // Files made this turn go out after the text: a file link, or an attachment.
         for (const file of fileTools?.files() ?? []) await sendFile(space, chatGuid, file)

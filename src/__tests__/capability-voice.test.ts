@@ -11,7 +11,7 @@ describe('capability voice', () => {
   })
 
   it('routes Google to the connect link, not browser_connect', () => {
-    expect(full).toContain('connect my gmail')
+    expect(full).toContain('call google_connect')
     expect(full).toContain('never goes through browser_connect')
   })
 
@@ -31,7 +31,7 @@ describe('capability voice', () => {
 
   it('denial for Google points at the Google connect link', () => {
     const m = denyMessage('google.com', 'identity')
-    expect(m).toContain('connect my gmail')
+    expect(m).toContain('google_connect')
     expect(m).not.toMatch(/I can't/)
   })
 

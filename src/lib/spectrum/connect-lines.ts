@@ -7,6 +7,18 @@ export function isConnectRequest(text: string): boolean {
     return /\b(connect|link|hook up|set up|add)\b/i.test(text) && wantsGoogle(text) && text.trim().split(/\s+/).length <= 10
 }
 
+/**
+ * A reconnect or "where's the link" ask while Google already looks connected
+ * (stale or wrong account). Any wording with a Google noun plus a connect verb or
+ * a missing-link complaint. Task-bearing asks ("summarize my inbox") do not match.
+ */
+export function isGoogleReconnectIntent(text: string): boolean {
+    if (!wantsGoogle(text) && !/\bgoogle\b/i.test(text)) return false
+    const verb = /\b(re-?connect(ing)?|re-?link|re-?authori[sz]e|re-?auth|re-?login|re-?sign|connect|link (my|it|up)|hook up|set up|sign in|log in|fix|switch)\b/i
+    const noLink = /\b(not seeing|don'?t see|didn'?t (get|see|receive)|no|where'?s|where is|send( me)?|resend)\b.{0,25}\blink\b/i
+    return noLink.test(text) || (verb.test(text) && text.trim().split(/\s+/).length <= 25)
+}
+
 /** Always name the account(s), and say so when an "add another" re-connected the same one. */
 export function googleConnectedLine(ctx: Parameters<typeof googleAccountsOf>[0] | null, wantedAnother = false): string {
     const accounts = ctx ? googleAccountsOf(ctx) : []
