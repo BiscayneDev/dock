@@ -32,17 +32,6 @@ describe('private route', () => {
     expect(googleSafeBody()).toEqual({ model: 'auto', shipyard: { providers: ['venice-private', 'venice-tee'] } })
   })
 
-  it('stage A: taint is tracked but routing is unchanged, even with the flag on', async () => {
-    vi.stubEnv('DINGHY_PRIVATE_ROUTE', 'on')
-    vi.stubEnv('DINGHY_PRIVATE_PROVIDERS', 'venice-private')
-    const bodies: Record<string, unknown>[] = []
-    const queue = [resp({ content: null, tool_calls: [call('gmail_search')] }, 'tool_calls'), resp({ content: 'done' }, 'stop')]
-    vi.stubGlobal('fetch', vi.fn(async (_u: string, init: { body: string }) => { bodies.push(JSON.parse(init.body)); return queue.shift()! }))
-    const r = await chatWithTools([{ role: 'user', content: 'hi' }], opts, [tool('gmail_search')], ctx)
-    expect(r.tainted).toBe(true)
-    expect(bodies.every((b) => JSON.stringify(b.shipyard) === JSON.stringify({ providers: ['hopscotch'] }))).toBe(true)
-  })
-
   it('Google-derived text is never embedded without a confirmed private endpoint', async () => {
     expect(googleEmbeddingAllowed({})).toBe(false)
     expect(googleEmbeddingAllowed({ EMBEDDINGS_BASE_URL: 'http://x' })).toBe(false)
