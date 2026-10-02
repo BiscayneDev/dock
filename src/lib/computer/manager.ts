@@ -24,6 +24,20 @@ export const USD_PER_SECOND = E2B_USD_PER_HOUR / 3600
 /** Sandbox pauses after this many idle minutes (enforced by the sweeper). */
 export const SLEEP_AFTER_IDLE_MINUTES = 10
 
+/** E2B lifetime of a running sandbox; refreshed on every connect. */
+export const SANDBOX_TIMEOUT_MS = 15 * 60_000
+
+/** Default per-command timeout (the calling Vercel function caps at 120s). */
+export const DEFAULT_COMMAND_TIMEOUT_MS = 90_000
+
+/** Thrown by a provider when the sandbox id no longer exists (killed/expired). */
+export class SandboxGoneError extends Error {
+  constructor(sandboxId: string) {
+    super(`sandbox ${sandboxId} is gone`)
+    this.name = 'SandboxGoneError'
+  }
+}
+
 export type SessionStatus = 'running' | 'sleeping' | 'killed' | 'error'
 
 export interface ComputerSessionRow {
@@ -40,8 +54,15 @@ export interface ComputerSessionRow {
 export interface ComputerProvider {
   start(): Promise<{ sandboxId: string }>
   stop(sandboxId: string): Promise<void>
-  run(sandboxId: string, command: string): Promise<{ stdout: string; stderr: string; exitCode: number }>
+  /** Pause (keeps files, processes and memory). Throws if it cannot. */
+  pause(sandboxId: string): Promise<void>
+  /** Runs resume a paused sandbox transparently. Throws SandboxGoneError if the id is dead. */
+  run(sandboxId: string, command: string, opts?: RunOpts): Promise<{ stdout: string; stderr: string; exitCode: number }>
   status(sandboxId: string): Promise<'running' | 'stopped'>
+}
+
+export interface RunOpts {
+  timeoutMs?: number
 }
 
 /**
@@ -51,6 +72,22 @@ export interface ComputerProvider {
  */
 export class MockManager implements ComputerProvider {
   private sandboxes = new Map<string, boolean>()
+  private paused = new Set<string>()
+  /** Test hook: ids that behave as expired/killed on the provider side. */
+  private gone = new Set<string>()
+
+  expire(sandboxId: string): void {
+    this.gone.add(sandboxId)
+  }
+
+  isPaused(sandboxId: string): boolean {
+    return this.paused.has(sandboxId)
+  }
+
+  async pause(sandboxId: string): Promise<void> {
+    if (this.gone.has(sandboxId)) throw new SandboxGoneError(sandboxId)
+    this.paused.add(sandboxId)
+  }
 
   async start(): Promise<{ sandboxId: string }> {
     const sandboxId = `mock-${Math.random().toString(36).slice(2, 10)}`
@@ -62,7 +99,10 @@ export class MockManager implements ComputerProvider {
     this.sandboxes.set(sandboxId, false)
   }
 
-  async run(sandboxId: string, command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  async run(sandboxId: string, command: string, _opts?: RunOpts): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    if (this.gone.has(sandboxId)) throw new SandboxGoneError(sandboxId)
+    // Like E2B connect: running a paused sandbox resumes it.
+    this.paused.delete(sandboxId)
     if (this.sandboxes.get(sandboxId) !== true) {
       return { stdout: '', stderr: `sandbox ${sandboxId} is not running`, exitCode: 1 }
     }
@@ -103,7 +143,11 @@ export class E2BManager implements ComputerProvider {
 
   async start(): Promise<{ sandboxId: string }> {
     const Sandbox = await this.sdk()
-    const sandbox = await Sandbox.create({ timeoutMs: 15 * 60_000, envs: this.sandboxEnvs() })
+    const opts = { timeoutMs: SANDBOX_TIMEOUT_MS, envs: this.sandboxEnvs() }
+    // E2B_TEMPLATE: prebuilt template with Chromium + browser-use baked in
+    // (scripts/build-e2b-template.mjs). Unset = E2B's default base image.
+    const template = process.env.E2B_TEMPLATE
+    const sandbox = template ? await Sandbox.create(template, opts) : await Sandbox.create(opts)
     return { sandboxId: sandbox.sandboxId }
   }
 
@@ -117,11 +161,35 @@ export class E2BManager implements ComputerProvider {
     }
   }
 
-  async run(sandboxId: string, command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  async pause(sandboxId: string): Promise<void> {
     const Sandbox = await this.sdk()
-    const sandbox = await Sandbox.connect(sandboxId)
-    const result = await sandbox.commands.run(command, { envs: this.sandboxEnvs() })
-    return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode }
+    await Sandbox.pause(sandboxId)
+  }
+
+  async run(sandboxId: string, command: string, opts: RunOpts = {}): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    const sdk = await import('e2b')
+    const Sandbox = sdk.Sandbox
+    let sandbox
+    try {
+      // connect() resumes a paused sandbox and extends a running one's lifetime.
+      sandbox = await Sandbox.connect(sandboxId, { timeoutMs: SANDBOX_TIMEOUT_MS })
+    } catch (err) {
+      if (err instanceof sdk.NotFoundError) throw new SandboxGoneError(sandboxId)
+      throw err
+    }
+    try {
+      const result = await sandbox.commands.run(command, {
+        envs: this.sandboxEnvs(),
+        timeoutMs: opts.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS,
+      })
+      return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode }
+    } catch (err) {
+      // A non-zero exit throws CommandExitError in the SDK; surface it as a result.
+      if (err instanceof sdk.CommandExitError) {
+        return { stdout: err.stdout, stderr: err.stderr, exitCode: err.exitCode }
+      }
+      throw err
+    }
   }
 
   async status(sandboxId: string): Promise<'running' | 'stopped'> {
@@ -200,6 +268,21 @@ export async function getOrStart(
   return { session: created as ComputerSessionRow, resumed: false }
 }
 
+/** Start a fresh sandbox for a session whose stored sandbox id is dead. */
+export async function replaceDeadSandbox(
+  session: ComputerSessionRow,
+  supabase: Supabase = createServerClient(),
+  provider: ComputerProvider = getProvider()
+): Promise<string> {
+  const { sandboxId } = await provider.start()
+  const { error } = await supabase
+    .from('computer_sessions')
+    .update({ sandbox_id: sandboxId, status: 'running' })
+    .eq('id', session.id)
+  if (error) throw new Error(`Failed to replace dead sandbox: ${error.message}`)
+  return sandboxId
+}
+
 /** Server-side stop: kills the sandbox and marks the session killed. */
 export async function stopSession(
   session: ComputerSessionRow,
@@ -225,9 +308,11 @@ export async function runInSandbox(
   command: string,
   supabase: Supabase = createServerClient(),
   provider: ComputerProvider = getProvider(),
-  memoTag = ''
+  memoTag = '',
+  runOpts: RunOpts = {}
 ): Promise<{ output: { stdout: string; stderr: string; exitCode: number }; sessionId: string; billedSeconds: number } | { error: string }> {
-  const { session } = await getOrStart(userId, supabase)
+  const { session: started } = await getOrStart(userId, supabase)
+  let session = started
   if (!session.sandbox_id) return { error: 'sandbox has no id' }
 
   const now = Date.now()
@@ -236,7 +321,16 @@ export async function runInSandbox(
 
   let result: { stdout: string; stderr: string; exitCode: number }
   try {
-    result = await provider.run(session.sandbox_id, command)
+    try {
+      result = await provider.run(session.sandbox_id, command, runOpts)
+    } catch (err) {
+      if (!(err instanceof SandboxGoneError)) throw err
+      // The stored sandbox expired or was killed: start a fresh one, point
+      // the session at it, and retry once. State in the old VM is gone.
+      const sandboxId = await replaceDeadSandbox(session, supabase, provider)
+      session = { ...session, sandbox_id: sandboxId }
+      result = await provider.run(sandboxId, command, runOpts)
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     await supabase

@@ -55,9 +55,9 @@ export function scrubInjectedInstructions(text: string): string {
 
 /** The command that installs browser-use once per sandbox. */
 export function browserSetupCommand(): string {
-  const script = '/root/.dinghy-bootstrap.py'
+  const script = '$HOME/.dinghy-bootstrap.py'
   return (
-    `mkdir -p /root && cat > ${script} <<'DINGHY_BOOTSTRAP_EOF'\n${BROWSER_BOOTSTRAP}DINGHY_BOOTSTRAP_EOF\n` +
+    `mkdir -p "$HOME" && cat > ${script} <<'DINGHY_BOOTSTRAP_EOF'\n${BROWSER_BOOTSTRAP}DINGHY_BOOTSTRAP_EOF\n` +
     `python3 ${script} --setup`
   )
 }
@@ -69,20 +69,26 @@ export function browserSetupCommand(): string {
  */
 export function browserRunCommand(task: string, urls: string[]): string {
   const payload = JSON.stringify({ task, urls })
-  return `/root/.browser-use-venv/bin/python /root/.dinghy-bootstrap.py --run '${payload.replace(/'/g, `'\\''`)}'`
+  return `$HOME/.browser-use-venv/bin/python $HOME/.dinghy-bootstrap.py --run '${payload.replace(/'/g, `'\\''`)}'`
 }
 
 /**
  * True when the sandbox already has browser-use installed (marker file).
  * On the mock this echoes like any other run, keeping tests mock-based.
  */
+/** Per-command timeouts, kept under the 120s Vercel function limit. */
+export const BROWSER_SETUP_TIMEOUT_MS = 110_000
+export const BROWSER_RUN_TIMEOUT_MS = 100_000
+
 export async function ensureBrowserUse(
-  run: (command: string) => Promise<{ stdout: string; stderr: string; exitCode: number }>
+  run: (command: string, opts?: { timeoutMs?: number }) => Promise<{ stdout: string; stderr: string; exitCode: number }>
 ): Promise<{ ready: boolean; error?: string }> {
-  const check = await run('test -f /root/.browser-use-ready && echo ready || echo missing')
+  const check = await run('test -f "$HOME/.browser-use-ready" && echo ready || echo missing')
   if (check.exitCode !== 0) return { ready: false, error: check.stderr || 'browser setup check failed' }
   if (check.stdout.includes('ready')) return { ready: true }
-  const setup = await run(browserSetupCommand())
+  // Fresh default-image sandboxes install here (slow). Sandboxes from the
+  // prebuilt template (E2B_TEMPLATE) already have the marker and skip this.
+  const setup = await run(browserSetupCommand(), { timeoutMs: BROWSER_SETUP_TIMEOUT_MS })
   if (setup.exitCode !== 0) return { ready: false, error: setup.stderr || 'browser-use setup failed' }
   return { ready: true }
 }

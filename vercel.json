@@ -33,6 +33,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/computer-sweeper",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/dinghy-briefing",
       "schedule": "0 * * * *"
     }

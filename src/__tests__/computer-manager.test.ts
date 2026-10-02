@@ -186,3 +186,43 @@ describe('runInSandbox metering', () => {
   })
 })
 
+
+
+// ---- persistence: pause/resume + dead sandbox replacement ------------------------
+
+import { SandboxGoneError } from '@/lib/computer/manager'
+
+describe('sandbox persistence', () => {
+  it('mock pause keeps the sandbox and run resumes it', async () => {
+    const mgr = new MockManager()
+    const { sandboxId } = await mgr.start()
+    await mgr.pause(sandboxId)
+    expect(mgr.isPaused(sandboxId)).toBe(true)
+    const out = await mgr.run(sandboxId, 'echo hi')
+    expect(out.exitCode).toBe(0)
+    expect(mgr.isPaused(sandboxId)).toBe(false)
+  })
+
+  it('replaces a dead sandbox id with a fresh one and retries once', async () => {
+    const mgr = new MockManager()
+    const { sandboxId: deadId } = await mgr.start()
+    mgr.expire(deadId)
+    const now = new Date().toISOString()
+    const db = setDb({
+      computer_sessions: [
+        { id: 'sess-1', user_id: USER_ID, sandbox_id: deadId, status: 'running', started_at: now, last_activity_at: now, killed_reason: null },
+      ],
+      spend_events: [],
+    })
+    const res = await runInSandbox(USER_ID, 'echo ok', { from: db.impl } as never, mgr)
+    expect('error' in res).toBe(false)
+    const swap = db.updates.find((u) => u.table === 'computer_sessions' && typeof u.patch.sandbox_id === 'string')
+    expect(swap).toBeTruthy()
+    expect(swap!.patch.sandbox_id).not.toBe(deadId)
+    if (!('error' in res)) expect(res.output.stdout).toContain('echo ok')
+  })
+
+  it('SandboxGoneError is a named error', () => {
+    expect(new SandboxGoneError('x').name).toBe('SandboxGoneError')
+  })
+})
