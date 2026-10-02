@@ -5,7 +5,7 @@
  * Supabase client, so a dry run cannot write to any schema.
  */
 
-import { isDenied, normalizeSite, siteTier } from '@/lib/browser-sessions/policy'
+import { denyMessage, isDenied, normalizeSite, siteTier } from '@/lib/browser-sessions/policy'
 
 export const CANARY_COOKIE = 'CANARY_COOKIE_7f3a91'
 
@@ -64,7 +64,7 @@ export const CAPABILITY_HANDLERS: Record<string, (input: Record<string, unknown>
     const site = normalizeSite(String(input.site ?? ''))
     if (!site) return { success: false, error: `"${String(input.site ?? '')}" doesn't look like a website.` }
     const denied = isDenied(site)
-    if (denied) return { success: false, error: `I don't hold logins for that kind of account (${denied}), so I can't connect ${site}.` }
+    if (denied) return { success: false, error: denyMessage(site, denied) }
     if (world.allowanceExhausted) return { success: false, error: 'out of free computer time for today' }
     world.audit.push({ event: 'connect_link', user: world.actingUser, label: site, detail: { tier: siteTier(site) } })
     return { success: true, data: { site, link: `https://dry-run.invalid/connect/browser?t=DRYRUN`, tier: siteTier(site), instruction: 'Send the link as-is. Read-only, encrypted, 30 days, only used when they say yes to a task. Never ask for a password or code.' } }

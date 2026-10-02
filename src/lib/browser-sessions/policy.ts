@@ -220,3 +220,36 @@ export function egressHostsFor(site: string, extra: string[] = SITE_EXTRA_HOSTS[
   }
   return [...hosts]
 }
+
+const GOOGLE_HOSTS = ['google.com', 'gmail.com', 'googleusercontent.com', 'youtube.com']
+
+/**
+ * What the model is told when a site is refused. It becomes part of the reply,
+ * so it is written as guidance for an in-voice answer: no "can't", say why in
+ * one line, and point at what does work. Google gets its own route.
+ */
+export function denyMessage(site: string, reason: DenyReason): string {
+  const h = site.toLowerCase()
+  if (GOOGLE_HOSTS.some((g) => h === g || h.endsWith(`.${g}`))) {
+    return (
+      `Google is not connected through a browser login. Gmail and Calendar use their own one-tap Google link, which keeps your password out of it. ` +
+      `Tell the user to text "connect my gmail" (the link arrives in this chat) and that it covers Gmail and Calendar. Do not call browser_connect for Google.`
+    )
+  }
+  const kind: Record<DenyReason, string> = {
+    financial: 'bank, broker, payroll, tax or crypto',
+    identity: 'sign-in provider',
+    passwords: 'password manager',
+    payments: 'payment',
+    mail: 'email',
+    commerce: 'shopping, travel or entertainment',
+    social: 'social',
+    work: 'cloud console or workplace',
+    government: 'government',
+  }
+  return (
+    `${site} is a ${kind[reason]} account, and Dinghy keeps those out of browser logins to protect them. ` +
+    `Answer in one plain line in your own words (do not say "I can't"), then offer what does work: a low-stakes site they can connect (a code host, docs, a news subscription), ` +
+    `or getting the same information another way such as an emailed statement or export.`
+  )
+}
