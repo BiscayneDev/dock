@@ -77,3 +77,77 @@ export function balanceText(balance: InviteBalance): string {
     }
     return `You have ${balance.remaining} invite${balance.remaining === 1 ? '' : 's'} left. Text "invite" and I'll make you a shareable link.`
 }
+
+// ── Model-facing invite tools ───────────────────────────────────────────────
+// So "can I bring a friend?", "do I have invites?" and "give me my invite link"
+// work in any wording, not just the exact "invite" command. Numbers always come
+// from the database; the link is only minted when the user asks for it, because
+// minting reserves invites from their allowance.
+
+import type { Tool, ToolResult } from '@/lib/llm/types'
+import { mintInvite } from './beta-gate'
+
+const RECENT_MS = 2 * 60 * 1000
+const recent = new Map<string, { link: string; remaining: number | null; uses: number; at: number }>()
+
+export type InviteRole = 'owner' | 'member'
+
+/** One line of prompt knowledge, only when there is something to give. */
+export function invitesPromptLine(left: number | 'unlimited'): string {
+    const have = left === 'unlimited' ? 'You can give out invites to Dinghy' : `You have ${left} invite${left === 1 ? '' : 's'} to give out`
+    return (
+        `${have}. Call invite_status before you quote any number about invites and never guess one. ` +
+        'Mention it at most once on your own, at a natural moment: they say Dinghy is great or useful, or ask about sharing or bringing someone in. ' +
+        'Do not bring it up again if it is already in this chat, and never push it. ' +
+        'When they ask for the link or want to invite someone, call invite_link and put the returned link alone on the last line. ' +
+        'Only call invite_link when they ask for it, because each link reserves invites from their allowance.'
+    )
+}
+
+export function inviteToolsFor(chatGuid: string, role: InviteRole): Tool[] {
+    const status: Tool = {
+        name: 'invite_status',
+        description: "Read how many Dinghy invites this person has left to give out. Read-only; does not make a link. Use it before quoting any invite number.",
+        inputSchema: { type: 'object', properties: {} },
+        async execute(): Promise<ToolResult> {
+            try {
+                if (role === 'owner') return { success: true, data: { remaining: 'unlimited', note: 'owner: no allowance limit' } }
+                const b = await inviteBalance(chatGuid)
+                return { success: true, data: { granted: b.granted, used: b.used, remaining: b.remaining } }
+            } catch (err) {
+                return { success: false, error: err instanceof Error ? err.message : String(err) }
+            }
+        },
+    }
+    const link: Tool = {
+        name: 'invite_link',
+        description:
+            'Make a shareable Dinghy invite link for this person. Only call it when they ask for the link or say they want to invite someone. Default 1 person; pass people for more. It reserves that many invites from their allowance. Put the returned link alone on the last line of your reply. Never invent or retype a link.',
+        inputSchema: { type: 'object', properties: { people: { type: 'integer', minimum: 1, maximum: 10, description: 'How many people this link admits (default 1).' } } },
+        async execute(input: unknown): Promise<ToolResult> {
+            try {
+                const raw = (input as { people?: unknown } | null)?.people
+                const uses = Number.isInteger(raw) ? Math.max(1, Math.min(raw as number, 10)) : 1
+                // A model retry inside one turn must not burn a second invite.
+                const prev = recent.get(chatGuid)
+                if (prev && prev.uses === uses && Date.now() - prev.at < RECENT_MS) {
+                    return { success: true, data: { link: prev.link, people: uses, remaining_after: prev.remaining, note: 'same link as a moment ago' } }
+                }
+                if (role === 'owner') {
+                    const code = await mintInvite(chatGuid, uses)
+                    if (!code) return { success: false, error: 'could not make an invite code' }
+                    const l = inviteLink(code)
+                    recent.set(chatGuid, { link: l, remaining: null, uses, at: Date.now() })
+                    return { success: true, data: { link: l, people: uses, remaining_after: 'unlimited', expires: '30 days' } }
+                }
+                const mint = await mintMemberInvite(chatGuid, uses)
+                if (!mint.ok) return { success: false, error: `not enough invites left for ${uses}; call invite_status for the real number` }
+                recent.set(chatGuid, { link: mint.link as string, remaining: mint.remaining, uses, at: Date.now() })
+                return { success: true, data: { link: mint.link, people: uses, remaining_after: mint.remaining, expires: '30 days' } }
+            } catch (err) {
+                return { success: false, error: err instanceof Error ? err.message : String(err) }
+            }
+        },
+    }
+    return [status, link]
+}

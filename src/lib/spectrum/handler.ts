@@ -70,7 +70,7 @@ import {
 } from './memory-commands'
 import { buildIcs } from './ics'
 import { senderAddress, markWaitlistFirstInbound, parseWaitlistInviteCommand, runWaitlistInvites, verifiedWaitlistFirstName } from './waitlist-invites'
-import { balanceText, inviteBalance, isInviteStatusCommand, mintMemberInvite } from './user-invites'
+import { balanceText, inviteBalance, inviteToolsFor, isInviteStatusCommand, mintMemberInvite } from './user-invites'
 import { interviewDirective, markOpenerAsked } from './interview'
 import { attachment } from 'spectrum-ts'
 import { ackTapback, normalizeInbound, reactionDecision, settleWorkingTapback, shouldThread, tapback, withReplyContext, type Inbound, type MessageLike } from './tapbacks'
@@ -922,9 +922,16 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         const spendTool = spendToolFor(chatGuid, role === 'owner')
         // Reminders for every chat; they only ever text this chat back.
         const reminderTools = reminderToolsFor(chatGuid, toolCtx?.userId ?? null, toolCtx?.timezone)
+        // Invites to give: only offered when there is a real allowance (members) or the owner.
+        const invitesLeft: number | 'unlimited' | null = role === 'owner'
+            ? 'unlimited'
+            : role === 'member'
+              ? await inviteBalance(chatGuid).then((b) => (b.remaining > 0 ? b.remaining : null)).catch(() => null)
+              : null
+        const inviteTools = invitesLeft !== null && (role === 'owner' || role === 'member') ? inviteToolsFor(chatGuid, role) : []
         const tools = toolCtx
-            ? [...toolsFor(toolCtx), ...(actions?.tools ?? []), ...(fileTools?.tools ?? []), spendTool, ...reminderTools, ...(toolCtx.tokens.paybox ? payboxSigningToolsFor(chatGuid) : [])]
-            : [...liveInfoTools(), spendTool, ...reminderTools]
+            ? [...toolsFor(toolCtx), ...(actions?.tools ?? []), ...(fileTools?.tools ?? []), spendTool, ...reminderTools, ...inviteTools, ...(toolCtx.tokens.paybox ? payboxSigningToolsFor(chatGuid) : [])]
+            : [...liveInfoTools(), spendTool, ...reminderTools, ...inviteTools]
         const usage: GatewayUsage[] = []
         const onUsage = (u: GatewayUsage) => usage.push(u)
         const runCtx = toolCtx ?? guestToolContext()
@@ -937,7 +944,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 facts,
                 includeOpener,
                 knownFirstName: knownFirstName ?? undefined,
-                capabilities: { ...(toolCtx ? capabilitiesFor(toolCtx) : guestCapabilities()), spend: true, reminders: true },
+                capabilities: { ...(toolCtx ? capabilitiesFor(toolCtx) : guestCapabilities()), spend: true, reminders: true, ...(invitesLeft !== null ? { invitesLeft } : {}) },
                 memory: memoryBlock + (background ?? ''),
                 interviewLine: interviewLine ?? undefined,
                 onUsage,

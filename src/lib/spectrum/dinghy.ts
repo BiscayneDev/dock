@@ -142,6 +142,8 @@ export interface PromptCapabilities {
     spend?: boolean
     /** reminder_set / list / cancel are offered. */
     reminders?: boolean
+    /** invite_status / invite_link are offered; the person has this many invites to give (or no limit for the owner). */
+    invitesLeft?: number | 'unlimited'
     /** X (Twitter) read tools are offered. */
     x?: boolean
     xFree?: boolean
@@ -280,6 +282,7 @@ export function buildSystemPrompt(
     if (caps.files) prompt += ' ' + FILES_LINE
     if (caps.spend) prompt += ' ' + SPEND_LINE
     if (caps.reminders) prompt += ' ' + REMINDERS_LINE
+    if (caps.invitesLeft === 'unlimited' || (typeof caps.invitesLeft === 'number' && caps.invitesLeft > 0)) prompt += ' ' + invitesPromptLine(caps.invitesLeft)
     if (caps.github) prompt += ' ' + GITHUB_LINE
     if (caps.health) prompt += ' ' + HEALTH_LINE
     if (caps.computer) prompt += ' ' + COMPUTER_LINE + ' ' + BROWSE_LINE + ' ' + CONNECT_LINE + ' ' + WORKFLOW_LINE
@@ -412,6 +415,7 @@ import type { Tool, UserContext } from '@/lib/llm/types'
 import { readGatewayUsage, type GatewayUsage } from './metering'
 import { isGoogleTool, modelFields, privateRouteEnforced, privateRouteShadow, privateRouting, type RoutingPrefs } from './routing'
 import { addToCorpus, egressPolicy, EGRESS_BLOCK_MESSAGE, EGRESS_REJECT_MESSAGE, emptyCorpus, findLeak, isEgressTool, isHardBlockTool } from './egress-guard'
+import { invitesPromptLine } from './user-invites'
 
 function reportUsage(
     onUsage: ((u: GatewayUsage) => void) | undefined,
