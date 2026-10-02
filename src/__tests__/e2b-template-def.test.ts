@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest'
-// @ts-expect-error plain .mjs script, no types
 import { buildTemplateDefinition, REPO_ROOT } from '../../scripts/e2b-template-def.mjs'
 import { Template } from 'e2b'
 import fs from 'node:fs'
