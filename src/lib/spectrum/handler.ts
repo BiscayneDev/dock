@@ -22,7 +22,8 @@ import {
     type DinghyFact,
     type HistoryMessage,
 } from '@/spectrum/store'
-import { GOOGLE_CONNECT_ASK } from './connect-lines'
+import { verifiedWaitlistBackground } from './background-context'
+import { FIRST_USE_SUGGESTIONS, GOOGLE_CONNECT_ASK } from './connect-lines'
 import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsAnotherGoogle, wantsGithub, wantsHealth, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { recordUsage, spendToolFor, type GatewayUsage } from './metering'
 import { allowanceUsedUpMessage, claimLimitNotice, isOverDailyAllowance } from '@/lib/allowance'
@@ -596,6 +597,10 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     const knownFirstName = includeOpener
         ? await verifiedWaitlistFirstName(message.sender?.handle, chatGuid).catch(() => null)
         : null
+    // Public-profile background from the X handle they gave us, new chats only.
+    const background = includeOpener
+        ? await verifiedWaitlistBackground(message.sender?.handle, chatGuid).catch(() => null)
+        : null
     // Day-1 interview (F2): when the opener's answer arrives, at most two
     // short follow-ups go out over separate turns (skipped if already
     // answered); answers land as profile facts via the memory write path.
@@ -915,7 +920,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 includeOpener,
                 knownFirstName: knownFirstName ?? undefined,
                 capabilities: { ...(toolCtx ? capabilitiesFor(toolCtx) : guestCapabilities()), spend: true, reminders: true },
-                memory: memoryBlock,
+                memory: memoryBlock + (background ?? ''),
                 interviewLine: interviewLine ?? undefined,
                 onUsage,
             }
@@ -949,7 +954,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 facts,
                 includeOpener,
                 knownFirstName: knownFirstName ?? undefined,
-                memory: memoryBlock,
+                memory: memoryBlock + (background ?? ''),
                 interviewLine: interviewLine ?? undefined,
                 onUsage,
             })
@@ -1007,6 +1012,10 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             } else if (claimError.code !== '23505') {
                 logErr('first reply contact card claim failed', claimError)
             }
+        }
+        // One short nudge toward real asks, once, with the first-reply card.
+        if (answerDelivered && firstReplyCardClaimed && role === 'member') {
+            await sendText(space, chatGuid, 'reply', FIRST_USE_SUGGESTIONS).catch(() => false)
         }
         // The useful first answer stays first. Then invite Google so the next
         // request can use the person's own inbox and calendar. The durable

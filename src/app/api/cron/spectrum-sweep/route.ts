@@ -14,6 +14,7 @@ import { getSpectrumApp, getImessage } from '@/lib/spectrum/app'
 import { claimOutboxBatch, markOutboxFailed, markOutboxSent } from '@/lib/spectrum/outbox'
 import { chat, chatWithTools, MAX_HISTORY, wantsAnotherGoogle } from '@/lib/spectrum/dinghy'
 import { googleConnectedLine, isConnectRequest } from '@/lib/spectrum/connect-lines'
+import { readFirstFinding } from '@/lib/spectrum/first-finding'
 import { capabilitiesFor, loadImessageToolContext, toolsFor } from '@/lib/spectrum/imessage-tools'
 import { actionToolsFor, renderProposal } from '@/lib/spectrum/actions'
 import { allowanceUsedUpMessage, claimLimitNotice, isOverDailyAllowance } from '@/lib/allowance'
@@ -126,6 +127,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                     await saveMessage(guid, 'assistant', line).catch((err) =>
                         console.error('resume message save failed:', err instanceof Error ? err.message : String(err))
                     )
+                    // One real finding, right now. Silent when there is nothing real.
+                    if (toolCtxC?.tokens.google && claimed.provider === 'google') {
+                        const finding = await readFirstFinding(toolCtxC.tokens.google, toolCtxC.userId, toolCtxC.timezone).catch((err) => {
+                            console.error('first finding failed:', err instanceof Error ? err.message : String(err))
+                            return null
+                        })
+                        if (finding) {
+                            await space.send(toPlainText(finding))
+                            await saveMessage(guid, 'assistant', finding).catch(() => {})
+                        }
+                    }
                     results.resumes++
                     continue
                 }
