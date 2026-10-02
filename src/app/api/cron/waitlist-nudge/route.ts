@@ -1,12 +1,11 @@
 /**
- * Two nudges for invitees who never texted: one in-chat text ~4h after the
- * invite, one email ~36h after. Each fires at most once (timestamp claimed
+ * One email nudge (~36h after the invite) for invitees who never texted. No in-chat
+ * nudge: Photon rejects texting a user first. Fires at most once (timestamp claimed
  * before the send, cleared if the send fails). Off unless DINGHY_WAITLIST_NUDGE=on.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
-import { sendIntroText } from '@/lib/spectrum/waitlist-invites'
-import { chatNudgeText, nudgeDue, nudgeEmail, nudgeEnabled, type NudgeRow } from '@/lib/spectrum/waitlist-nudge'
+import { nudgeDue, nudgeEmail, nudgeEnabled, type NudgeRow } from '@/lib/spectrum/waitlist-nudge'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -44,9 +43,7 @@ export async function GET(request: NextRequest) {
       .eq('id', row.id).is(col, null).is('first_text_at', null).select('id')
     if (!claimed?.length) continue
     const token = row.start_token as string
-    const ok = due === 'chat'
-      ? await sendIntroText(row.phone as string, chatNudgeText(row.name, token), [])
-      : await (() => { const m = nudgeEmail(row.name, token); return sendNudgeEmail(row.email as string, m.subject, m.text) })()
+    const ok = await (() => { const m = nudgeEmail(row.name, token); return sendNudgeEmail(row.email as string, m.subject, m.text) })()
     if (ok) out[due]++
     else { out.failed++; await db.from('waitlist').update({ [col]: null }).eq('id', row.id) }
   }
