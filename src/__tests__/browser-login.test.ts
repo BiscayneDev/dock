@@ -67,7 +67,7 @@ describe('mintLoginLink', () => {
     store.mintConnectToken.mockClear()
     const bank = await mintLoginLink('u1', 'c', 'chase.com')
     expect(bank.ok).toBe(false)
-    if (!bank.ok) expect(bank.error).toMatch(/banks/)
+    if (!bank.ok) expect(bank.error).toMatch(/bank, broker/)
     expect((await mintLoginLink('u1', 'c', 'accounts.google.com')).ok).toBe(false)
     expect((await mintLoginLink('u1', 'c', 'not a site')).ok).toBe(false)
     expect(store.mintConnectToken).not.toHaveBeenCalled()

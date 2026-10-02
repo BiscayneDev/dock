@@ -25,6 +25,8 @@ import { healthSleep, healthReadiness, healthActivity, healthHeartRate, healthSu
 import { githubListRepos, githubGetRepo, githubListIssues, githubGetIssue, githubListPrs, githubGetPr, githubListNotifications } from '@/lib/tools/github'
 import { COMPUTER_TOOLS } from '@/lib/tools/computer'
 import { BROWSER_SESSION_TOOLS } from '@/lib/tools/browser-sessions'
+import { WORKFLOW_TOOLS } from '@/lib/tools/workflows'
+import { recipeDelete, recipeList } from '@/lib/tools/recipes'
 import { accountsLine, multiAccount } from '@/lib/integrations/google-accounts'
 
 /**
@@ -113,7 +115,7 @@ export function toolsFor(ctx: UserContext): Tool[] {
         ...(caps.x ? IMESSAGE_X_TOOLS : []),
         ...(caps.github ? IMESSAGE_GITHUB_TOOLS : []),
         ...(caps.health ? IMESSAGE_HEALTH_TOOLS : []),
-        ...(caps.computer !== false ? [...COMPUTER_TOOLS, ...BROWSER_SESSION_TOOLS] : []),
+        ...(caps.computer !== false ? [...COMPUTER_TOOLS, ...BROWSER_SESSION_TOOLS, ...WORKFLOW_TOOLS, recipeList, recipeDelete] : []),
     ]
 }
 

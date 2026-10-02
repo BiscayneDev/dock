@@ -22,7 +22,7 @@ import {
   auditEvent,
 } from '@/lib/capabilities/store'
 import { enqueueOutbox } from '@/lib/spectrum/outbox'
-import { filterStateToSite, isDenied, normalizeSite, siteTier, type SiteTier, type StorageState } from './policy'
+import { denyMessage, filterStateToSite, isDenied, normalizeSite, siteTier, type SiteTier, type StorageState } from './policy'
 import { CAPTURE_OUTPUT_PATH, CAPTURE_SCRIPT, CAPTURE_SCRIPT_PATH, NOVNC_PORT, loginStartCommands } from './login-scripts'
 
 /** Login sandbox lifetime: matches the link TTL. E2B kills it on timeout even if we never get to. */
@@ -111,18 +111,7 @@ export async function mintLoginLink(userId: string, chatGuid: string | null, sit
   if (!site) return { ok: false, error: `"${siteInput}" doesn't look like a website. Use a name like github.com.` }
   const denied = isDenied(site)
   if (denied) {
-    const why: Record<string, string> = {
-      financial: 'banks, brokers, payroll, tax and crypto accounts',
-      identity: 'Google, Apple, Microsoft and other sign-in providers',
-      passwords: 'password managers',
-      payments: 'payment accounts',
-      mail: 'email accounts',
-      commerce: 'shopping, travel and entertainment accounts',
-      social: 'social accounts',
-      work: 'cloud consoles and workplace accounts',
-      government: 'government accounts',
-    }
-    return { ok: false, error: `I don't hold logins for ${why[denied]} yet, so I can't connect ${site}.` }
+    return { ok: false, error: denyMessage(site, denied) }
   }
   const token = await mintConnectToken(userId, chatGuid, 'browser_session', { site })
   await auditEvent({ userId, kind: 'browser_session', label: site, event: 'connect_link', detail: { tier: siteTier(site) } })

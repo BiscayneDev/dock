@@ -8,13 +8,14 @@
  * only when the user's next message is a clear yes.
  */
 
+import { renderWorkflowDraft, validateWorkflow } from '@/lib/workflows/model'
 import { createServerClient } from '@/lib/supabase/server'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 import { gmailSend, gmailReply } from '@/lib/tools/gmail'
 import { gcalCreateEvent, gcalUpdateEvent, gcalFindFreeTime, gcalGetEvent } from '@/lib/tools/gcal'
 import { googleAccountsOf, multiAccount, resolveAccount, withAccount, type GoogleAccount } from '@/lib/integrations/google-accounts'
 
-export type PendingKind = 'gmail_send' | 'gmail_reply' | 'gcal_create_invite' | 'computer_browse' | 'google_disconnect'
+export type PendingKind = 'gmail_send' | 'gmail_reply' | 'gcal_create_invite' | 'computer_browse' | 'google_disconnect' | 'workflow_save'
 
 export interface Proposal {
     id: string
@@ -77,6 +78,10 @@ export function renderProposal(p: Proposal): string {
     }
     if (p.kind === 'google_disconnect') {
         return `Disconnect ${str(x.account)} from Dinghy?\n\nI'll stop reading its email and calendar. You can connect it again any time.\n\nReply Y to disconnect, N to cancel.`
+    }
+    if (p.kind === 'workflow_save') {
+        const def = { name: str(x.name), steps: Array.isArray(x.steps) ? (x.steps as unknown[]).map(str) : [], needs: Array.isArray(x.needs) ? (x.needs as unknown[]).map(str) : [] }
+        return renderWorkflowDraft(def, x.replacing === true)
     }
     const attendees = Array.isArray(x.attendees) ? (x.attendees as string[]).join(', ') : ''
     if (p.kind === 'computer_browse' && x.site) {
@@ -300,7 +305,7 @@ export async function executePendingActionDetailed(
     const finish = (status: 'done' | 'failed', result: unknown) =>
         supabase.rpc('finish_pending_action', { p_id: row.id, p_status: status, p_result: result as object })
 
-    if (!ctx || ctx.userId !== row.user_id || (row.kind !== 'computer_browse' && !ctx.tokens.google)) {
+    if (!ctx || ctx.userId !== row.user_id || (row.kind !== 'computer_browse' && row.kind !== 'workflow_save' && !ctx.tokens.google)) {
         await finish('failed', { error: 'account not connected for this chat' })
         return {
             ok: false,
@@ -332,6 +337,23 @@ export async function executePendingActionDetailed(
         const receipt = str((result.data as { receipt?: string } | undefined)?.receipt).trim()
         const body = answer ? `Browsing done:\n\n${answer}` : 'Browsing done.'
         return { ok: true, text: receipt ? `${body}\n\n(${receipt})` : body, kind: row.kind, payload: row.payload }
+    }
+
+    if (row.kind === 'workflow_save') {
+        const v = validateWorkflow(row.payload)
+        if (!v.ok) {
+            await finish('failed', { error: v.error })
+            return { ok: false, text: "Couldn't save that one. Ask me again and I'll redo it.", kind: row.kind, payload: row.payload }
+        }
+        try {
+            const { saveApprovedWorkflow } = await import('@/lib/tools/workflows')
+            await saveApprovedWorkflow(ctx.userId, v.def)
+        } catch (err) {
+            await finish('failed', { error: err instanceof Error ? err.message : String(err) })
+            return { ok: false, text: "Couldn't save that. Try again in a moment.", kind: row.kind, payload: row.payload }
+        }
+        await finish('done', { saved: v.def.name })
+        return { ok: true, text: `Saved "${v.def.name}". Say "run ${v.def.name}" any time, or "forget ${v.def.name}" to remove it.`, kind: row.kind, payload: row.payload }
     }
 
     if (row.kind === 'google_disconnect') {

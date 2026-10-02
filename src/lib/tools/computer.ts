@@ -26,7 +26,7 @@ import {
 } from '@/lib/computer/browser'
 import { proposeLoose } from '@/lib/spectrum/actions'
 import { listCapabilities } from '@/lib/capabilities/store'
-import { isDenied, normalizeSite } from '@/lib/browser-sessions/policy'
+import { denyMessage, isDenied, normalizeSite } from '@/lib/browser-sessions/policy'
 import { runLoggedInSession } from '@/lib/browser-sessions/run'
 
 const COMMAND_CHAR_CAP = 4000
@@ -270,7 +270,7 @@ export const computerBrowse: Tool = {
       }
       const site = normalizeSite(String(i.site ?? urls[0] ?? ''))
       if (!site) return { success: false, error: 'which site? pass site (e.g. github.com) with loggedIn' }
-      if (isDenied(site)) return { success: false, error: `I don't use logged-in sessions for ${site}.` }
+      { const why = isDenied(site); if (why) return { success: false, error: denyMessage(site, why) } }
       const live = (await listCapabilities(userId, 'browser_session')).some((c) => c.label === site)
       if (!live) {
         return {

@@ -12,6 +12,7 @@
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 import { chatWithTools } from '@/lib/spectrum/dinghy'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from '@/lib/spectrum/config'
+import { routingFor } from '@/lib/spectrum/routing'
 import { toolsFor } from '@/lib/spectrum/imessage-tools'
 import { actionToolsFor } from '@/lib/spectrum/actions'
 import { reminderToolsFor } from '@/lib/spectrum/reminders'
@@ -62,6 +63,7 @@ export function stubTools(real: Tool[], world: DryWorld, trace: TraceCall[], pro
       if (handler) {
         result = handler(inp, world)
         if (!result.success) status = 'error'
+        else if ((result.data as { status?: string } | undefined)?.status === 'awaiting_user_confirmation') status = 'proposed'
       } else if (t.name === 'computer_browse' && inp.loggedIn === true) {
         const site = normalizeSite(String(inp.site ?? ''))
         if (!site) result = { success: false, error: 'which site should I use your login on? (it has to be one you connected)' }
@@ -92,7 +94,11 @@ export function deriveAction(trace: TraceCall[]): string {
   switch (first.name) {
     case 'browser_connect': return 'propose_connect'
     case 'browser_disconnect': return 'revoke'
-    case 'browser_sessions': case 'reminder_list': return 'list_grants_and_workflows'
+    case 'browser_sessions': case 'reminder_list': case 'workflow_list': case 'recipe_list': return 'list_grants_and_workflows'
+    case 'workflow_run': return 'run_workflow'
+    case 'workflow_save': return 'propose_workflow'
+    case 'workflow_update': return 'update_workflow_readback'
+    case 'workflow_delete': case 'recipe_delete': return 'delete_recipe'
     case 'reminder_set': return 'propose_recipe'
     case 'reminder_cancel': return 'delete_recipe'
     case 'computer_browse': return 'run_workflow'
@@ -119,9 +125,11 @@ export async function runDryRun(
   const real = deps.realTools ?? [...toolsFor(ctx), ...actions.tools, ...reminderToolsFor('dry-run', world.actingUser, ctx.timezone)]
   const tools = stubTools(real, world, trace, proposeGated)
   const run = deps.chatWithTools ?? chatWithTools
+  const routed: Array<{ model: string; input_tokens: number; output_tokens: number; cost_usd: number | null; latency_ms: number }> = []
   const r = await run(
     [{ role: 'user', content: scenario.msg }],
-    { gatewayUrl: GATEWAY_URL, apiKey: SHIPYARD_API_KEY ?? '', model: SHIPYARD_MODEL, capabilities: { google: true, wallet: false, files: false, live: true, computer: true, spend: true, reminders: true } },
+    { gatewayUrl: GATEWAY_URL, apiKey: SHIPYARD_API_KEY ?? '', model: SHIPYARD_MODEL, routing: routingFor(), capabilities: { google: true, wallet: false, files: false, live: true, computer: true, spend: true, reminders: true },
+      onUsage: (u) => routed.push({ model: u.model, input_tokens: u.inputTokens, output_tokens: u.outputTokens, cost_usd: u.costUsd, latency_ms: u.latencyMs }) },
     tools,
     ctx
   )
@@ -162,6 +170,8 @@ export async function runDryRun(
     action: deriveAction(trace),
     confirm_shown: confirmSeen,
     revoke_ok: mine.every((g) => !g.revoked) || trace.some((c) => c.name === 'browser_disconnect'),
+    /** What the router actually used per gateway call (we pin no model). */
+    routed_models: routed,
     turns: 1,
     iterations: r.iterations,
     tool_call_count: r.toolCalls,
