@@ -1,0 +1,40 @@
+.panels { margin-top: 28px; }
+.wallet { background: #0e1a33; color: #fbf6ee; border-radius: 20px; padding: 26px; overflow: hidden; }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.eyebrow { font: 12px var(--font-dmmono), monospace; color: #e9af90; letter-spacing: .08em; }
+.refresh { background: none; color: inherit; border: 1px solid #ffffff35; border-radius: 20px; padding: 7px 12px; font: inherit; font-size: 12px; cursor: pointer; }
+.refresh:disabled { opacity: .6; }
+.walletLabel { font: 16px var(--font-schibsted), sans-serif; font-weight: 400; margin: 24px 0 6px; color: #fbf6eebf; }
+.value { font: 52px var(--font-fraunces), Georgia, serif; letter-spacing: -.035em; line-height: 1.1; margin: 12px 0; overflow-wrap: anywhere; }
+.message { font: 28px var(--font-fraunces), Georgia, serif; line-height: 1.2; margin: 16px 0; }
+.sub { font-size: 13px; line-height: 1.6; opacity: .72; margin: 8px 0 14px; }
+.note { font-size: 13px; line-height: 1.5; color: #f1b89c; }
+.button { display: inline-block; background: #fbf6ee; color: #0e1a33; border-radius: 24px; padding: 12px 18px; text-decoration: none; font-size: 14px; }
+.selectLabel { display: flex; align-items: center; gap: 10px; font-size: 12px; margin: 18px 0; }
+.selectLabel select { min-width: 0; max-width: 100%; background: #263149; color: #fbf6ee; border: 1px solid #ffffff40; padding: 8px; border-radius: 8px; }
+.holdings { border-top: 1px solid #ffffff22; padding-top: 16px; margin-top: 18px; }
+.walletName { font-size: 13px; font-weight: 500; }
+.small { font-size: 11px; opacity: .65; }
+.holding { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0 0; font-size: 14px; }
+.holding small { display: block; font-size: 11px; opacity: .6; margin-top: 3px; }
+.foot { font-size: 11px; line-height: 1.6; opacity: .6; margin: 20px 0 0; }
+.shelf { margin-top: 34px; }
+.heading { font: 28px var(--font-fraunces), Georgia, serif; font-weight: 500; margin: 0; }
+.grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin-top: 18px; }
+.file { border: 1px solid #0e1a3319; border-radius: 14px; overflow: hidden; background: #fffdfa; }
+.cover { display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; height: 94px; padding: 18px; box-sizing: border-box; color: #0e1a33; background: #ece3d5; font: 11px var(--font-dmmono), monospace; }
+.fileIcon { font: 32px Georgia, serif; color: #c8583a; }
+.fileInfo { padding: 16px; }
+.fileInfo h3 { font: 19px var(--font-fraunces), Georgia, serif; line-height: 1.2; margin: 0; overflow-wrap: anywhere; }
+.fileInfo p { margin: 8px 0 16px; font-size: 11px; opacity: .6; }
+.open { color: #0e1a33; text-decoration: none; font-size: 13px; font-weight: 500; }
+.status { display: block; font-size: 10px; opacity: .6; line-height: 1.5; margin-top: 8px; }
+.empty { padding: 26px; border: 1px dashed #0e1a3340; border-radius: 16px; margin-top: 18px; }
+.empty h3 { font: 23px var(--font-fraunces), Georgia, serif; margin: 12px 0; }
+.empty p { font-size: 14px; line-height: 1.6; opacity: .7; margin: 0; }
+.textButton { color: #0e1a33; background: none; border: 0; padding: 16px 0 0; font: inherit; font-size: 13px; cursor: pointer; }
+.panels a:focus-visible, .panels button:focus-visible, .panels select:focus-visible { outline: 3px solid #c8583a; outline-offset: 3px; }
+@media(max-width: 480px) { .wallet { padding: 22px 18px; } .value { font-size: 42px; } .fileInfo { padding: 13px; } .grid { gap: 10px; } .shelf>.row { align-items: baseline; } .fileInfo h3 { font-size: 18px; } }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 18px 0; }
+.filters button { border: 1px solid #0e1a3322; border-radius: 20px; background: transparent; padding: 7px 11px; font: inherit; font-size: 11px; cursor: pointer; color: #0e1a33; }
+.filters button[aria-pressed=true] { background: #0e1a33; color: #fbf6ee; }

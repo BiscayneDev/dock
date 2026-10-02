@@ -10,9 +10,11 @@ export function CoastShell({
   children,
   wide = false,
   right,
+  home = false,
 }: {
   children: React.ReactNode
   wide?: boolean
+  home?: boolean
   /** top-right nav slot (e.g. sign out) */
   right?: React.ReactNode
 }): React.JSX.Element {
@@ -29,7 +31,7 @@ export function CoastShell({
         {right}
       </nav>
       <main className={styles.main}>
-        <div className={`${styles.card} ${wide ? styles.wide : ''}`}>{children}</div>
+        <div className={`${styles.card} ${home ? styles.home : wide ? styles.wide : ''}`}>{children}</div>
       </main>
       <p className={styles.foot}><Link href="/">getdinghy.sh</Link> · <Link href="/privacy">privacy</Link></p>
     </div>

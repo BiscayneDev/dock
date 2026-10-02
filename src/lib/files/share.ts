@@ -10,6 +10,7 @@
  */
 
 import { createHash } from 'crypto'
+import { createServerClient } from '@/lib/supabase/server'
 
 const API = 'https://here.now/api/v1'
 const CLIENT = 'dinghy/files'
@@ -126,7 +127,14 @@ export async function revokeSite(link: string, userId: string): Promise<{ url: s
     if (!shareEnabled()) throw new Error('hosted files are not set up')
     const slug = slugFrom(link)
     if (!slug) throw new Error('not a Dinghy file link')
-    const site = await call<SiteDetails>(`/publish/${encodeURIComponent(slug)}`, { method: 'GET' })
+    const { data: saved, error } = await createServerClient().from('dinghy_files').select('id').eq('user_id', userId).eq('url', `https://${slug}.here.now/`).is('deleted_at', null).limit(1).maybeSingle()
+    if (error) throw new Error('Could not verify file ownership')
+    let site: SiteDetails
+    try { site = await call<SiteDetails>(`/publish/${encodeURIComponent(slug)}`, { method: 'GET' }) } catch (err) {
+        // A deleted/expired hosted page can be synced only with DB ownership.
+        if (saved && err instanceof Error && / 404$/.test(err.message)) return { url: `https://${slug}.here.now/` }
+        throw err
+    }
     if (site.displayDescription !== ownerLine(ownerTag(userId))) throw new Error('not one of your files')
     await call(`/publish/${encodeURIComponent(slug)}`, { method: 'DELETE' })
     return { url: site.siteUrl, ...(site.displayName ? { title: site.displayName } : {}) }

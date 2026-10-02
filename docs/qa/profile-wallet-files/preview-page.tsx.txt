@@ -1,0 +1,16 @@
+import { notFound } from 'next/navigation'
+import { CoastShell, shellStyles } from '@/components/brand/CoastShell'
+import ProfilePanels, { type PanelsFixture } from '@/components/profile/ProfilePanels'
+import styles from '../profile/profile.module.css'
+export default async function Preview({ searchParams }: { searchParams: Promise<{ state?: string }> }) {
+  if (process.env.NODE_ENV !== 'development') notFound()
+  const { state = 'populated' } = await searchParams
+  const fixture: PanelsFixture = { portfolio: { state: 'ready', checkedAt: '2026-10-02T20:00:00Z', wallets: [{ name: 'Everyday wallet', address: '0x000000000000000000000000000000000000AbCd', totalUsd: 2486.32, status: 'ready', asOf: '2026-10-02T19:59:00Z', holdings: [{ symbol: 'USDC', name: 'USD Coin', network: '8453', amount: '2,150.00', usd: 2150 }, { symbol: 'ETH', name: 'Ethereum', network: '8453', amount: '0.14', usd: 336.32 }] }] }, files: [
+    { id: '00000000-0000-4000-8000-000000000001', title: 'A long weekend in Lisbon', kind: 'itinerary', format: 'page', url: 'https://example.here.now/', created_at: '2026-10-02T17:00:00Z', expires_at: '2026-10-09T17:00:00Z', revoked_at: null },
+    { id: '00000000-0000-4000-8000-000000000003', title: 'Notes for next week', kind: 'file', format: 'page', url: 'https://example.here.now/', created_at: '2026-09-23T12:00:00Z', expires_at: '2026-09-30T12:00:00Z', revoked_at: null },
+    { id: '00000000-0000-4000-8000-000000000004', title: 'Dinner in Key Biscayne', kind: 'file', format: 'page', url: 'https://example.here.now/', created_at: '2026-10-01T12:00:00Z', expires_at: '2026-10-08T12:00:00Z', revoked_at: null }
+  ] }
+  if (state === 'empty') { fixture.portfolio = { state: 'disconnected', wallets: [], checkedAt: '2026-10-02T20:00:00Z' }; fixture.files = [] }
+  if (state === 'error') { fixture.portfolio = null; fixture.files = []; fixture.error = true }
+  return <CoastShell home right={<span className={shellStyles.navlink}>Sign out</span>}><div className={styles.label}>Your Dinghy</div><h1 className={styles.title}>Hello, <em>Alex</em></h1><p className={styles.meta}>Signed in · Preview with sample data</p><ProfilePanels fixture={fixture} /><section className={styles.section}><h2 className={styles.h2}>Connected accounts</h2><ul className={styles.list}><li className={styles.item}><div className={styles.grow}><div className={styles.name}>Google</div><div className={styles.desc}>Gmail and Calendar</div></div><span className={styles.on}>Connected</span></li></ul></section></CoastShell>
+}
