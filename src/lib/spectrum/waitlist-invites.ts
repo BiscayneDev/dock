@@ -24,6 +24,7 @@ import { sendWaitlistInvite } from '@/lib/email/waitlist-invite'
 import { firstName } from '@/lib/email/waitlist-confirmation'
 import { normalizeEmail } from '@/lib/waitlist'
 import { registerPhotonUser } from './photon-users'
+import { enqueueOutbox } from './outbox'
 import { toPlainText } from '@/lib/spectrum/plain-text'
 
 export type WaitlistInviteCommand = { kind: 'next'; count: number } | { kind: 'email'; email: string }
@@ -50,21 +51,40 @@ export function introText(name: string): string {
   return `Hi${first ? ` ${first}` : ''}, it's Dinghy. You're in the beta. Save this number and text me whatever you need.`
 }
 
+/** The sender's phone/email from a Spectrum message. The iMessage sender ref
+ * carries `address` and `id` (the same value); it has no `handle` field. */
+export function senderAddress(sender: { address?: string; id?: string } | null | undefined): string | null {
+  return sender?.address || sender?.id || null
+}
+
 export function chatGuidForPhone(phone: string): string {
   return `any;-;${phone}`
 }
 
+/** In-process backoff between intro-text attempts. Photon's allowlist takes
+ * several minutes (seen: 6 to 13) to accept a freshly registered shared-pool user
+ * ("Target not allowed for this project"), so one quick retry only; the outbox
+ * sweep owns the long retry. */
+export const INTRO_RETRY_DELAYS_MS = [3_000]
+
 /** Dinghy's first text, from the person's own line. False when Photon refuses or anything fails. */
-export async function sendIntroText(phone: string, text: string): Promise<boolean> {
-  try {
-    const { getSpectrumApp, getImessage } = await import('./app')
-    const im = await getImessage(await getSpectrumApp())
-    const space = await im.space.create(phone)
-    await space.send(toPlainText(text))
-    return true
-  } catch (err) {
-    console.error('waitlist intro text failed:', err instanceof Error ? err.message : String(err))
-    return false
+export async function sendIntroText(
+  phone: string,
+  text: string,
+  delays: number[] = INTRO_RETRY_DELAYS_MS,
+): Promise<boolean> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const { getSpectrumApp, getImessage } = await import('./app')
+      const im = await getImessage(await getSpectrumApp())
+      const space = await im.space.create(phone)
+      await space.send(toPlainText(text))
+      return true
+    } catch (err) {
+      console.error(`waitlist intro text failed (attempt ${attempt + 1}):`, err instanceof Error ? err.message : String(err))
+      if (attempt >= delays.length) return false
+      await new Promise((r) => setTimeout(r, delays[attempt]))
+    }
   }
 }
 
@@ -147,15 +167,19 @@ export async function runWaitlistInvites(_ownerChat: string, cmd: WaitlistInvite
       const { error: tokenError } = await supabase.from('waitlist').update({ start_token: token }).eq('id', row.id)
       if (tokenError) { failed.push(`${row.email} (couldn't create start link)`); continue }
     }
-    const didText = await sendIntroText(row.phone, introText(row.name ?? ''))
+    const intro = introText(row.name ?? '')
+    const didText = await sendIntroText(row.phone, intro)
+    // Still refused: queue it. The every-minute sweep retries with backoff, so the
+    // intro lands once Photon accepts the new user instead of being lost.
+    const queuedIntro = !didText && (await enqueueOutbox(chatGuidForPhone(row.phone), 'reply', intro)) !== null
     const didEmail = await sendWaitlistInvite(row.email, row.name ?? '', user.assignedPhoneNumber, token)
-    if (!didText && !didEmail) { failed.push(row.email); continue }
+    if (!didText && !didEmail && !queuedIntro) { failed.push(row.email); continue }
 
     const now = new Date().toISOString()
     await supabase.from('waitlist')
-      .update({ status: 'invited', updated_at: now, ...((didEmail || didText) ? { invite_sent_at: now } : {}), ...(didText ? { intro_texted_at: now } : {}) })
+      .update({ status: 'invited', updated_at: now, ...((didEmail || didText || queuedIntro) ? { invite_sent_at: now } : {}), ...(didText ? { intro_texted_at: now } : {}) })
       .eq('id', row.id)
-    ;(didText ? texted : emailed).push(`${who} -> ${user.assignedPhoneNumber}`)
+    ;(didText ? texted : emailed).push(`${who} -> ${user.assignedPhoneNumber}${!didText && queuedIntro ? ' (intro text queued, retrying)' : ''}`)
   }
 
   const lines: string[] = []
