@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeSite, isDenied, cookieBelongsToSite, filterStateToSite, egressHostsFor } from '@/lib/browser-sessions/policy'
+import { normalizeSite, isDenied, siteTier, cookieBelongsToSite, filterStateToSite, egressHostsFor } from '@/lib/browser-sessions/policy'
 
 describe('normalizeSite', () => {
   it('reduces typed input to a host', () => {
@@ -28,7 +28,9 @@ describe('isDenied', () => {
     expect(isDenied('github.com')).toBeNull()
     expect(isDenied('notchase.com')).toBeNull()
     expect(isDenied('chase.com.evil.example')).toBeNull()
-    expect(isDenied('google.com')).toBeNull()
+    expect(isDenied('bankless.co')).toBeNull()
+    expect(isDenied('mygoogle.com')).toBeNull()
+    expect(isDenied('google.com.evil.example')).toBeNull()
   })
 })
 
@@ -77,5 +79,40 @@ describe('egressHostsFor', () => {
   it('allows the site and its subdomains, plus normalized extras', () => {
     expect(egressHostsFor('github.com')).toEqual(['github.com', '*.github.com'])
     expect(egressHostsFor('github.com', ['https://www.githubassets.com', 'bad host'])).toEqual(['github.com', '*.github.com', 'githubassets.com'])
+  })
+})
+
+describe('broadened denylist', () => {
+  const denied = [
+    'google.com', 'mail.google.com', 'drive.google.com', 'docs.google.com', 'youtube.com', 'gmail.com',
+    'outlook.live.com', 'outlook.office.com', 'office.com', 'microsoft.com', 'login.microsoftonline.com',
+    'icloud.com', 'www.icloud.com', 'apple.com', 'yahoo.com', 'mail.yahoo.com', 'facebook.com', 'm.facebook.com',
+    'meta.com', 'instagram.com', 'x.com', 'twitter.com', 'linkedin.com', 'amazon.com', 'smile.amazon.com',
+    'ebay.com', 'doordash.com', 'schwab.com', 'client.schwab.com', 'fidelity.com', 'netbenefits.fidelity.com',
+    'gusto.com', 'adp.com', 'workforcenow.adp.com', 'turbotax.com', 'irs.gov', 'sa.www4.irs.gov', 'ssa.gov',
+    'tax.ny.gov', 'army.mil', 'firstbank.example', 'my-bank.example.org', 'online.banking.example.com',
+    'acme-payroll.io', 'login.example.com', 'sso.corp.example.com',
+  ]
+  for (const h of denied) it(`denies ${h}`, () => expect(isDenied(h), h).not.toBeNull())
+
+  it('still allows ordinary low-stakes sites and does not over-match words', () => {
+    for (const h of ['github.com', 'linear.app', 'news.ycombinator.com', 'bankless.co', 'idea.example.com', 'taxonomy.example.com', 'app.notion.so'])
+      expect(isDenied(h), h).toBeNull()
+  })
+  it('catches lookalike subdomain tricks only when the real domain is the suffix', () => {
+    expect(isDenied('google.com.evil.example')).toBeNull()
+    expect(isDenied('evil.example/google.com')).toBeNull()
+    expect(isDenied('x.mail.google.com')).toBe('identity')
+  })
+})
+
+describe('siteTier', () => {
+  it('splits denied, allowed and confirm', () => {
+    expect(siteTier('mail.google.com')).toBe('denied')
+    expect(siteTier('github.com')).toBe('allowed')
+    expect(siteTier('gist.github.com')).toBe('allowed')
+    expect(siteTier('notgithub.com')).toBe('confirm')
+    expect(siteTier('github.com.evil.example')).toBe('confirm')
+    expect(siteTier('smallshop.example.com')).toBe('confirm')
   })
 })

@@ -9,36 +9,88 @@
  *   whatever is not the connected site is dropped before storage.
  */
 
-export type DenyReason = 'financial' | 'identity' | 'passwords' | 'payments'
+export type DenyReason = 'financial' | 'identity' | 'passwords' | 'payments' | 'mail' | 'commerce' | 'social' | 'work' | 'government'
 
-/** Host suffixes (host itself and any subdomain). Deliberately conservative. */
+const group = (reason: DenyReason, suffixes: string[]) => suffixes.map((suffix) => ({ suffix, reason }))
+
+/**
+ * Host suffixes (the host itself and every subdomain). A session cookie on a
+ * parent domain (.google.com) is the whole account, so identity, mail and
+ * commerce providers are denied at the registrable domain, not per subdomain.
+ */
 const DENYLIST: Array<{ suffix: string; reason: DenyReason }> = [
-  // banks / brokers / card issuers
-  ...[
+  ...group('financial', [
     'chase.com', 'bankofamerica.com', 'wellsfargo.com', 'citi.com', 'citibank.com', 'capitalone.com',
     'usbank.com', 'pnc.com', 'schwab.com', 'fidelity.com', 'vanguard.com', 'robinhood.com',
-    'americanexpress.com', 'discover.com', 'ally.com', 'sofi.com', 'chime.com', 'mercury.com',
-    'revolut.com', 'wise.com', 'hsbc.com', 'barclays.co.uk', 'tdbank.com', 'etrade.com',
-    'interactivebrokers.com', 'merrilledge.com',
-  ].map((suffix) => ({ suffix, reason: 'financial' as const })),
-  // exchanges and wallets
-  ...[
+    'americanexpress.com', 'amex.com', 'discover.com', 'ally.com', 'sofi.com', 'chime.com', 'mercury.com',
+    'revolut.com', 'wise.com', 'hsbc.com', 'barclays.co.uk', 'tdbank.com', 'td.com', 'etrade.com',
+    'interactivebrokers.com', 'merrilledge.com', 'tdameritrade.com', 'webull.com', 'public.com',
+    'tastytrade.com', 'tradestation.com', 'stash.com', 'acorns.com', 'betterment.com', 'wealthfront.com',
+    'navyfederal.org', 'usaa.com', 'synchrony.com', 'regions.com', 'truist.com', 'citizensbank.com',
+    'keybank.com', 'huntington.com', 'fifththird.com', 'santander.com', 'monzo.com', 'n26.com',
+    'plaid.com', 'mint.com', 'creditkarma.com', 'experian.com', 'equifax.com', 'transunion.com',
+    'quickbooks.com', 'intuit.com', 'turbotax.com', 'hrblock.com', 'freetaxusa.com',
+    'gusto.com', 'adp.com', 'paychex.com', 'rippling.com', 'justworks.com', 'deel.com', 'trinet.com',
+    'bill.com', 'brex.com', 'ramp.com', 'carta.com', 'angellist.com', 'wealthsimple.com',
+  ]),
+  ...group('financial', [
     'coinbase.com', 'binance.com', 'binance.us', 'kraken.com', 'gemini.com', 'bitstamp.net',
     'okx.com', 'bybit.com', 'kucoin.com', 'crypto.com', 'phantom.app', 'metamask.io',
-    'ledger.com', 'trezor.io', 'paybox.sh',
-  ].map((suffix) => ({ suffix, reason: 'financial' as const })),
-  // account / identity providers
-  ...[
-    'accounts.google.com', 'myaccount.google.com', 'appleid.apple.com', 'idmsa.apple.com',
-    'login.live.com', 'account.microsoft.com', 'login.microsoftonline.com', 'okta.com',
-    'auth0.com',
-  ].map((suffix) => ({ suffix, reason: 'identity' as const })),
-  // password managers
-  ...['1password.com', 'lastpass.com', 'bitwarden.com', 'dashlane.com', 'keepersecurity.com', 'proton.me']
-    .map((suffix) => ({ suffix, reason: 'passwords' as const })),
-  // payment processors
-  ...['paypal.com', 'venmo.com', 'cash.app', 'stripe.com', 'zellepay.com', 'link.com']
-    .map((suffix) => ({ suffix, reason: 'payments' as const })),
+    'ledger.com', 'trezor.io', 'paybox.sh', 'uniswap.org', 'opensea.io', 'blockchain.com', 'bitfinex.com',
+    'etherscan.io',
+  ]),
+  ...group('identity', [
+    'google.com', 'googleusercontent.com', 'gmail.com', 'youtube.com', 'google.co.uk',
+    'apple.com', 'icloud.com', 'me.com', 'mac.com',
+    'microsoft.com', 'live.com', 'microsoftonline.com', 'office.com', 'office365.com', 'outlook.com',
+    'hotmail.com', 'msn.com', 'sharepoint.com', 'azure.com', 'windows.net',
+    'yahoo.com', 'aol.com', 'ymail.com', 'protonmail.com', 'fastmail.com', 'zoho.com', 'hey.com',
+    'okta.com', 'auth0.com', 'onelogin.com', 'duosecurity.com', 'twilio.com', 'authy.com',
+  ]),
+  ...group('social', [
+    'facebook.com', 'fb.com', 'messenger.com', 'instagram.com', 'meta.com', 'whatsapp.com', 'threads.net',
+    'x.com', 'twitter.com', 'linkedin.com', 'tiktok.com', 'snapchat.com', 'reddit.com', 'discord.com',
+    'telegram.org', 'pinterest.com', 'tumblr.com', 'bsky.app',
+  ]),
+  ...group('commerce', [
+    'amazon.com', 'amazon.co.uk', 'amazon.ca', 'amazon.de', 'ebay.com', 'walmart.com', 'target.com',
+    'costco.com', 'bestbuy.com', 'etsy.com', 'shopify.com', 'myshopify.com', 'aliexpress.com',
+    'doordash.com', 'ubereats.com', 'uber.com', 'lyft.com', 'grubhub.com', 'instacart.com',
+    'airbnb.com', 'booking.com', 'expedia.com', 'delta.com', 'united.com', 'aa.com', 'southwest.com',
+    'ticketmaster.com', 'stubhub.com', 'steampowered.com', 'steamcommunity.com', 'epicgames.com',
+    'playstation.com', 'xbox.com', 'nintendo.com', 'netflix.com', 'spotify.com',
+  ]),
+  ...group('passwords', [
+    '1password.com', '1password.eu', 'lastpass.com', 'bitwarden.com', 'dashlane.com', 'keepersecurity.com',
+    'proton.me', 'nordpass.com', 'roboform.com',
+  ]),
+  ...group('payments', [
+    'paypal.com', 'paypal.me', 'venmo.com', 'cash.app', 'stripe.com', 'zellepay.com', 'link.com',
+    'squareup.com', 'square.com', 'wise.com', 'payoneer.com', 'braintreegateway.com', 'adyen.com',
+  ]),
+  // cloud consoles and code hosts where a session can mint credentials or spend money
+  ...group('work', [
+    'aws.amazon.com', 'amazonaws.com', 'console.cloud.google.com', 'cloud.google.com', 'digitalocean.com',
+    'vercel.com', 'cloudflare.com', 'heroku.com', 'supabase.com', 'namecheap.com', 'godaddy.com',
+    'slack.com', 'zoom.us', 'dropbox.com', 'box.com',
+  ]),
+  ...group('government', ['irs.gov', 'ssa.gov', 'login.gov', 'id.me', 'healthcare.gov', 'usps.com', 'dmv.org']),
+]
+
+/** Whole TLDs where a login is almost always government or military identity. */
+const DENIED_TLDS: Array<{ tld: string; reason: DenyReason }> = [
+  { tld: 'gov', reason: 'government' },
+  { tld: 'mil', reason: 'government' },
+]
+
+/**
+ * Host labels that mark a login page for money or payroll no matter whose
+ * brand it is (e.g. "firstbank.example", "acme-payroll.io"). Matches whole
+ * hyphen- or dot-separated words so "bankless.co" is not caught by "bank".
+ */
+const DENIED_WORDS: Array<{ re: RegExp; reason: DenyReason }> = [
+  { re: /(^|[.-])([a-z0-9]*bank|[a-z0-9]*banking|creditunion|cu|fcu|payroll|brokerage|wealth|mortgage|loans?|insurance|tax|taxes|wallet|exchange)([.-]|$)/, reason: 'financial' },
+  { re: /(^|[.-])(login|signin|sso|accounts?|auth|id|idp|passport|vault)\.[a-z0-9-]+\.[a-z.]+$/, reason: 'identity' },
 ]
 
 /** Two-label public suffixes we know about, so "x.co.uk" is not treated as a TLD cookie. */
@@ -77,7 +129,32 @@ function hostUnder(host: string, suffix: string): boolean {
 export function isDenied(host: string): DenyReason | null {
   const h = host.toLowerCase()
   for (const d of DENYLIST) if (hostUnder(h, d.suffix)) return d.reason
+  const tld = h.split('.').pop() ?? ''
+  for (const t of DENIED_TLDS) if (tld === t.tld) return t.reason
+  for (const w of DENIED_WORDS) if (w.re.test(h)) return w.reason
   return null
+}
+
+/**
+ * v1 connect tiers. "allowed" sites are low-stakes (a session leak does not
+ * move money or take over an identity) and connect with one tap. Everything
+ * else that is not denied is "confirm": the user must explicitly acknowledge
+ * that Dinghy will hold a session for a site it has not vetted. Denied sites
+ * never connect.
+ */
+const ALLOWED_SITES = [
+  'github.com', 'gitlab.com', 'linear.app', 'notion.so', 'readwise.io', 'goodreads.com', 'letterboxd.com',
+  'news.ycombinator.com', 'medium.com', 'substack.com', 'nytimes.com', 'wsj.com', 'economist.com', 'ft.com',
+  'bloomberg.com', 'theatlantic.com', 'newyorker.com', 'washingtonpost.com', 'stratechery.com',
+  'strava.com', 'trello.com', 'asana.com', 'airtable.com', 'figma.com', 'canva.com',
+]
+
+export type SiteTier = 'allowed' | 'confirm' | 'denied'
+
+export function siteTier(host: string): SiteTier {
+  if (isDenied(host)) return 'denied'
+  const h = host.toLowerCase()
+  return ALLOWED_SITES.some((s) => hostUnder(h, s)) ? 'allowed' : 'confirm'
 }
 
 export interface BrowserCookie {
