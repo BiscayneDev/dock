@@ -508,7 +508,7 @@ export async function chatWithTools(
     const res = await fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.apiKey}` },
-        body: JSON.stringify({ ...modelFields(opts.model, opts.routing), messages, stream: false }),
+        body: JSON.stringify({ ...modelFields(opts.model, opts.routing), messages, tools: toolDefs, tool_choice: 'none', stream: false }),
     })
     if (!res.ok) throw new Error(`Gateway ${res.status}: ${res.statusText}`)
     const data = (await res.json()) as {
