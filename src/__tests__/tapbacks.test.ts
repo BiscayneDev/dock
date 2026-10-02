@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { ackTapback, normalizeInbound, reactionDecision, shouldThread, tapback, withReplyContext } from '@/lib/spectrum/tapbacks'
 
@@ -79,5 +81,21 @@ describe('threading', () => {
     it('model sees what they replied to', () => {
         expect(withReplyContext('yes', { text: 'which flight?', fromAgent: true })).toContain('reply to your earlier message: "which flight?"')
         expect(withReplyContext('yes')).toBe('yes')
+    })
+})
+
+
+describe('tapbacks persist', () => {
+    it('tapback() never unsends the reaction it placed', async () => {
+        const unsend = vi.fn()
+        const react = vi.fn().mockResolvedValue({ unsend })
+        await tapback({ content: { type: 'text' }, react }, '👀')
+        expect(react).toHaveBeenCalledWith('👀')
+        expect(unsend).not.toHaveBeenCalled()
+    })
+    it('handler does not unsend the working 👀 after the reply lands', () => {
+        const src = readFileSync(join(process.cwd(), 'src/lib/spectrum/handler.ts'), 'utf8')
+        expect(src).not.toMatch(/\.unsend\s*\(/)
+        expect(src).not.toContain('eyes unsend')
     })
 })

@@ -854,11 +854,10 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
 
     const tChatStart = Date.now()
     const typingHandle = startTypingReTap(space)
-    // 👀 on their message when a turn runs long (tools, files); lifted once
-    // the answer lands.
-    let eyes: Promise<{ unsend?: () => Promise<unknown> } | null> | null = null
+    // 👀 on their message when a turn runs long (tools, files). It stays: we
+    // never unsend our own tapbacks (Halsey: "it should keep them").
     const eyesTimer = setTimeout(() => {
-        eyes = tapback(message, '👀')
+        void tapback(message, '👀')
     }, 6_000)
     eyesTimer.unref?.()
     try {
@@ -958,10 +957,6 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             answerDelivered = await sendThreaded(space, chatGuid, message, plainReply)
         } else {
             answerDelivered = await sendText(space, chatGuid, 'reply', plainReply)
-        }
-        if (eyes) {
-            const handle = await (eyes as Promise<{ unsend?: () => Promise<unknown> } | null>)
-            if (handle?.unsend) await handle.unsend().catch((err) => logErr('eyes unsend failed', err))
         }
         await saveMessage(chatGuid, 'assistant', plainReply).catch((err) => logErr('message save failed', err))
         // The exact draft, rendered by the server, as its own bubble.
