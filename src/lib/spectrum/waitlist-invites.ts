@@ -17,6 +17,7 @@
  * No phone on file means no Photon user and no line that can reach them, so
  * those rows are skipped and named in the reply.
  */
+import { provisionSpectrumIdentity } from './provision'
 import { randomBytes } from 'node:crypto'
 import { createServerClient } from '@/lib/supabase/server'
 import { sendWaitlistInvite } from '@/lib/email/waitlist-invite'
@@ -136,6 +137,8 @@ export async function runWaitlistInvites(_ownerChat: string, cmd: WaitlistInvite
       { onConflict: 'chat_guid', ignoreDuplicates: true },
     )
     if (allowErr) { failed.push(`${row.email} (couldn't allowlist)`); continue }
+    // Bind the chat to a user now so tools work before Google (best effort; the first message retries).
+    await provisionSpectrumIdentity(chatGuidForPhone(row.phone), row.phone)
 
     // An opaque token keeps the phone, assigned line and name out of the URL.
     // Reuse it for an invite resend so an earlier email never breaks.

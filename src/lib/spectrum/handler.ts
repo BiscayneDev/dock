@@ -22,9 +22,11 @@ import {
     type DinghyFact,
     type HistoryMessage,
 } from '@/spectrum/store'
+import { GOOGLE_CONNECT_ASK } from './connect-lines'
 import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsAnotherGoogle, wantsGithub, wantsHealth, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { recordUsage, spendToolFor, type GatewayUsage } from './metering'
 import { allowanceUsedUpMessage, claimLimitNotice, isOverDailyAllowance } from '@/lib/allowance'
+import { provisionSpectrumIdentity } from './provision'
 import { capabilitiesFor, guestCapabilities, guestToolContext, liveInfoTools, loadImessageToolContext, toolsFor } from './imessage-tools'
 import { reminderToolsFor } from './reminders'
 import { payboxSigningToolsFor } from '@/lib/tools/paybox-signing'
@@ -230,6 +232,18 @@ async function sendText(space: InboundSpace, chatGuid: string, kind: OutboxKind,
     }
 }
 
+/** Right after the welcome: one-tap Google connect, framed by what it unlocks. Never throws. */
+async function sendGoogleAsk(space: InboundSpace, chatGuid: string): Promise<void> {
+    try {
+        if (await isGoogleConnected(chatGuid).catch(() => true)) return
+        const link = await createConnectLink(chatGuid, 'connect my gmail')
+        await sendText(space, chatGuid, 'connect_link', GOOGLE_CONNECT_ASK)
+        await sendLink(space as LinkSender, chatGuid, 'connect_link', link)
+    } catch (err) {
+        logErr('welcome Google ask failed', err)
+    }
+}
+
 /** A message from a chat that isn't on the beta allowlist. */
 async function handleGatedMessage(space: InboundSpace, chatGuid: string, text: string): Promise<void> {
     try {
@@ -237,10 +251,13 @@ async function handleGatedMessage(space: InboundSpace, chatGuid: string, text: s
         if (code) {
             const result = await redeemInvite(chatGuid, code)
             if (result === 'ok' || result === 'already') {
+                // Bind the new member to a user now so tools work before Google.
+                await provisionSpectrumIdentity(chatGuid)
                 await sendText(space, chatGuid, 'reply', GATE_WELCOME)
                 await (space as InboundSpace & { send(b: unknown): Promise<unknown> })
                     .send(dinghyContactCard(await dinghyLineFor(chatGuid)))
                     .catch((err) => logErr('welcome contact card failed', err))
+                await sendGoogleAsk(space, chatGuid)
             } else if (result === 'invalid') {
                 await sendText(space, chatGuid, 'reply', GATE_INVALID)
             }
@@ -1000,7 +1017,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 return null
             })
             if (link) {
-                await sendText(space, chatGuid, 'connect_link', 'Connect Google so I can learn your day from your inbox and calendar. You approve the access on Google. Then I can brief you each morning at 8 your time:')
+                await sendText(space, chatGuid, 'connect_link', GOOGLE_CONNECT_ASK)
                 await sendLink(space as LinkSender, chatGuid, 'connect_link', link)
             }
         }

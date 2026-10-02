@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const from = vi.fn()
-vi.mock('@/lib/supabase/server', () => ({ createServerClient: () => ({ from }) }))
+const rpc = vi.fn(async () => ({ data: null, error: null }))
+vi.mock('@/lib/supabase/server', () => ({ createServerClient: () => ({ from, rpc }) }))
 vi.mock('@/lib/crypto', () => ({ decryptTokenFromDb: (s: string) => s }))
 import { loadImessageToolContext, capabilitiesFor, toolsFor } from '@/lib/spectrum/imessage-tools'
 function rows(identity: unknown, user: unknown, tokens: unknown[] = []) {
@@ -9,7 +10,7 @@ function rows(identity: unknown, user: unknown, tokens: unknown[] = []) {
     return { select: () => ({ eq: () => ({ maybeSingle: async () => result, then: (resolve: (v: unknown) => unknown) => Promise.resolve(result).then(resolve) }) }) }
   })
 }
-beforeEach(() => from.mockReset())
+beforeEach(() => { from.mockReset(); rpc.mockClear() })
 describe('bound users before OAuth', () => {
   it('keeps the computer and file capabilities without account tokens', async () => {
     rows({ user_id: 'user-a' }, { id: 'user-a', name: 'Ada', timezone: 'America/New_York' })

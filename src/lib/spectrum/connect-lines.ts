@@ -19,3 +19,7 @@ export function googleConnectedLine(ctx: Parameters<typeof googleAccountsOf>[0] 
     }
     return `connected ✓ i can see gmail + calendar for ${accounts.map((a) => a.email).join(' and ')} now (${accounts[0].email} is primary)`
 }
+
+/** The early Google ask: what it unlocks, one tap, approval stays on Google's screen. */
+export const GOOGLE_CONNECT_ASK =
+    "Next, connect Google. I'll see your calendar and inbox, so I can brief you every morning at 8 your time and handle real tasks. One tap, and you approve the access on Google:"
