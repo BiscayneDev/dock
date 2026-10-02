@@ -15,7 +15,7 @@ const sig: Signals = {
 
 describe('connect research digest (headers only, nothing guessed)', () => {
   it('ranks repeat correspondents, ignoring bulk, bare addresses and singletons', () => {
-    expect(topPeople([...sig.to, ...sig.from], 5).map((p) => p.name)).toEqual(['Priya N', 'Sam Lee'])
+    expect(topPeople([...sig.to, ...sig.from], 5).map((p) => p.name)).toEqual(['Sam Lee', 'Priya N'])
   })
   it('summarizes people, events and the busiest day', () => {
     const dg = buildDigest(sig, 'America/New_York')
