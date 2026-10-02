@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { ackTapback, normalizeInbound, reactionDecision, shouldThread, tapback, withReplyContext } from '@/lib/spectrum/tapbacks'
+import { ackTapback, doneTapback, normalizeInbound, reactionDecision, settleWorkingTapback, shouldThread, tapback, withReplyContext } from '@/lib/spectrum/tapbacks'
 
 const preview = 'send this email?\n\nto: a@b.com\nsubject: hi\n\nbody\n\nreply y to send, n to cancel'
 
@@ -79,5 +81,54 @@ describe('threading', () => {
     it('model sees what they replied to', () => {
         expect(withReplyContext('yes', { text: 'which flight?', fromAgent: true })).toContain('reply to your earlier message: "which flight?"')
         expect(withReplyContext('yes')).toBe('yes')
+    })
+})
+
+
+describe('tapbacks persist', () => {
+    it('tapback() never unsends the reaction it placed', async () => {
+        const unsend = vi.fn()
+        const react = vi.fn().mockResolvedValue({ unsend })
+        await tapback({ content: { type: 'text' }, react }, '👀')
+        expect(react).toHaveBeenCalledWith('👀')
+        expect(unsend).not.toHaveBeenCalled()
+    })
+    it('handler settles the 👀 through settleWorkingTapback, with no direct unsend', () => {
+        const src = readFileSync(join(process.cwd(), 'src/lib/spectrum/handler.ts'), 'utf8')
+        expect(src).not.toMatch(/\.unsend\s*\(/)
+        expect(src).toContain('settleWorkingTapback(message, eyes, text)')
+    })
+})
+
+describe('doneTapback', () => {
+    it('✅ by default', () => expect(doneTapback('find my flight to nyc')).toBe('✅'))
+    it('❤️ for thanks', () => expect(doneTapback('thanks')).toBe('❤️'))
+    it('🎉 for good news', () => expect(doneTapback('I got the job!')).toBe('🎉'))
+    it('😂 for a joke', () => expect(doneTapback('lmao')).toBe('😂'))
+})
+
+describe('settleWorkingTapback', () => {
+    it('lifts 👀 then reacts with the done emoji', async () => {
+        const order: string[] = []
+        const react = vi.fn(async (e: string) => { order.push('react ' + e); return {} })
+        const unsend = vi.fn(async () => { order.push('unsend') })
+        const out = await settleWorkingTapback({ content: { type: 'text' }, react }, Promise.resolve({ unsend }), 'check my inbox')
+        expect(out).toBe('✅')
+        expect(order).toEqual(['unsend', 'react ✅'])
+    })
+    it('does nothing when 👀 was never placed', async () => {
+        const react = vi.fn()
+        expect(await settleWorkingTapback({ content: { type: 'text' }, react }, null, 'hi')).toBeNull()
+        expect(react).not.toHaveBeenCalled()
+    })
+    it('does nothing when the 👀 failed to land', async () => {
+        const react = vi.fn()
+        expect(await settleWorkingTapback({ content: { type: 'text' }, react }, Promise.resolve(null), 'hi')).toBeNull()
+        expect(react).not.toHaveBeenCalled()
+    })
+    it('survives a failing unsend and still reacts', async () => {
+        const react = vi.fn().mockResolvedValue({})
+        const unsend = vi.fn().mockRejectedValue(new Error('x'))
+        expect(await settleWorkingTapback({ content: { type: 'text' }, react }, Promise.resolve({ unsend }), 'thanks')).toBe('❤️')
     })
 })

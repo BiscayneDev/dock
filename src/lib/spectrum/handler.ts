@@ -69,7 +69,7 @@ import { markWaitlistFirstInbound, parseWaitlistInviteCommand, runWaitlistInvite
 import { balanceText, inviteBalance, isInviteStatusCommand, mintMemberInvite } from './user-invites'
 import { interviewDirective, markOpenerAsked } from './interview'
 import { attachment } from 'spectrum-ts'
-import { ackTapback, normalizeInbound, reactionDecision, shouldThread, tapback, withReplyContext, type Inbound, type MessageLike } from './tapbacks'
+import { ackTapback, normalizeInbound, reactionDecision, settleWorkingTapback, shouldThread, tapback, withReplyContext, type Inbound, type MessageLike } from './tapbacks'
 import { toPlainText } from '@/lib/spectrum/plain-text'
 import { routingFor } from './routing'
 
@@ -854,8 +854,8 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
 
     const tChatStart = Date.now()
     const typingHandle = startTypingReTap(space)
-    // 👀 on their message when a turn runs long (tools, files); lifted once
-    // the answer lands.
+    // 👀 on their message when a turn runs long (tools, files). Once the answer
+    // lands it swaps to a done reaction (✅ or a matched one) and stays.
     let eyes: Promise<{ unsend?: () => Promise<unknown> } | null> | null = null
     const eyesTimer = setTimeout(() => {
         eyes = tapback(message, '👀')
@@ -959,10 +959,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         } else {
             answerDelivered = await sendText(space, chatGuid, 'reply', plainReply)
         }
-        if (eyes) {
-            const handle = await (eyes as Promise<{ unsend?: () => Promise<unknown> } | null>)
-            if (handle?.unsend) await handle.unsend().catch((err) => logErr('eyes unsend failed', err))
-        }
+        await settleWorkingTapback(message, eyes, text)
         await saveMessage(chatGuid, 'assistant', plainReply).catch((err) => logErr('message save failed', err))
         // The exact draft, rendered by the server, as its own bubble.
         const loose = takeLooseProposal(chatGuid)
