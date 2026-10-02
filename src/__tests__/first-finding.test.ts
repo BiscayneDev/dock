@@ -22,7 +22,7 @@ describe('first finding', () => {
     it('collapses newlines and truncates long subjects', () => {
         const out = formatFirstFinding(null, { from: 'a@b.c', subject: `x\n${'y'.repeat(200)}` }, now, tz)!
         expect(out).not.toContain('\n')
-        expect(out.length).toBeLessThan(200)
+        expect(out.length).toBeLessThan(260)
     })
     it('parses sender names', () => {
         expect(senderName('"Lee, Sam" <s@x.com>')).toBe('Lee, Sam')

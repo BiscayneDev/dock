@@ -51,7 +51,10 @@ export function formatFirstFinding(event: FindingEvent | null, mail: FindingMail
         parts.push(`${senderName(mail.from)} emailed you "${clean(mail.subject, 70)}" and it's still unread.`)
     }
     if (parts.length === 0) return null
-    return `First look: ${parts.join(' ')} Want me to dig into either?`
+    const offer = mail
+        ? 'Want me to draft a reply for you to review? Nothing goes out until you say so.'
+        : 'Want me to draft a note about it for you to review? Nothing goes out until you say so.'
+    return `First look: ${parts.join(' ')} ${offer}`
 }
 
 export async function readFirstFinding(

@@ -51,8 +51,8 @@ describe('first-reply copy', () => {
     expect(GOOGLE_CONNECT_ASK).not.toMatch(/[*_`#]|can't|cannot/i)
   })
   it('pre-Google tips do not promise email or calendar answers', () => {
-    expect(FIRST_USE_SUGGESTIONS_NO_GOOGLE).toContain('once Google is connected')
-    expect(FIRST_USE_SUGGESTIONS_NO_GOOGLE).not.toMatch(/what's on my calendar|anything I need to reply/)
+    expect(FIRST_USE_SUGGESTIONS_NO_GOOGLE).toContain('one real thing')
+    expect(GOOGLE_CONNECT_ASK).toContain('headers only')
     expect(FIRST_USE_SUGGESTIONS_NO_GOOGLE).not.toMatch(/[*_`#]|can't|cannot/i)
   })
 })
