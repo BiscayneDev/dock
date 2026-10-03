@@ -24,7 +24,6 @@ import { sendWaitlistInvite } from '@/lib/email/waitlist-invite'
 import { firstName } from '@/lib/email/waitlist-confirmation'
 import { normalizeEmail } from '@/lib/waitlist'
 import { registerPhotonUser } from './photon-users'
-import { enqueueOutbox } from './outbox'
 import { toPlainText } from '@/lib/spectrum/plain-text'
 
 export type WaitlistInviteCommand = { kind: 'next'; count: number } | { kind: 'email'; email: string }
@@ -92,21 +91,39 @@ export async function sendIntroText(
  * The signed webhook supplies the sender handle; a guessed chat ID or email is
  * not enough to identify a waitlist person. Conditional update is idempotent.
  */
-export async function markWaitlistFirstInbound(phone: string | null | undefined, chatGuid: string): Promise<void> {
-  if (!phone || !/^\+[1-9]\d{7,14}$/.test(phone)) return
+export async function markWaitlistFirstInbound(phone: string | null | undefined, chatGuid: string): Promise<boolean> {
+  if (!phone || !/^\+[1-9]\d{7,14}$/.test(phone)) return false
   const supabase = createServerClient()
   const { data: identity, error: identityError } = await supabase.from('spectrum_identities')
     .select('handle').eq('chat_guid', chatGuid).maybeSingle()
   if (identityError) throw new Error(`identity check failed: ${identityError.message}`)
-  if (identity?.handle !== phone) return
+  if (identity?.handle !== phone) return false
   const { data: matches, error: matchError } = await supabase.from('waitlist')
     .select('id').eq('phone', phone).eq('status', 'invited').limit(2)
   if (matchError) throw new Error(`waitlist match failed: ${matchError.message}`)
-  if (matches?.length !== 1) return
-  const { error } = await supabase.from('waitlist')
+  if (matches?.length !== 1) return false
+  const { data: claimed, error } = await supabase.from('waitlist')
     .update({ status: 'active', first_text_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-    .eq('id', matches[0].id).eq('status', 'invited')
+    .eq('id', matches[0].id).eq('status', 'invited').select('id')
   if (error) throw new Error(`waitlist activation failed: ${error.message}`)
+  return (claimed?.length ?? 0) > 0
+}
+
+/** Short plain welcome, sent as the reply to the person's first text. */
+export function welcomeText(name: string | null | undefined): string {
+  const first = firstName(name ?? '')
+  return `Hi${first ? ` ${first}` : ''}, it's Dinghy. You're in the beta. Save this number, and tell me what you need.`
+}
+
+/** Once they have texted first, an old queued intro is stale and would double up
+ * with the welcome. Mark it done (kept for audit) instead of deleting it. */
+export async function cancelStaleIntro(chatGuid: string): Promise<void> {
+  const supabase = createServerClient()
+  const { error } = await supabase.from('spectrum_outbox')
+    .update({ status: 'sent', lease_claimed_at: null, last_error: 'cancelled: user texted first' })
+    .eq('chat_guid', chatGuid).eq('status', 'pending').eq('kind', 'reply')
+    .ilike('text', "%it's Dinghy. You're in the beta.%")
+  if (error) throw new Error(`stale intro cancel failed: ${error.message}`)
 }
 
 /** Returns a short lowercase summary for the owner. */
@@ -167,26 +184,24 @@ export async function runWaitlistInvites(_ownerChat: string, cmd: WaitlistInvite
       const { error: tokenError } = await supabase.from('waitlist').update({ start_token: token }).eq('id', row.id)
       if (tokenError) { failed.push(`${row.email} (couldn't create start link)`); continue }
     }
-    const intro = introText(row.name ?? '')
-    const didText = await sendIntroText(row.phone, intro)
-    // Still refused: queue it. The every-minute sweep retries with backoff, so the
-    // intro lands once Photon accepts the new user instead of being lost.
-    const queuedIntro = !didText && (await enqueueOutbox(chatGuidForPhone(row.phone), 'reply', intro)) !== null
+    // Photon's shared pool won't text a registered user first, so there is no intro
+    // text. The invite email carries the tap-to-text link; their first text starts
+    // the thread and Dinghy's welcome goes out as the reply to it.
     const didEmail = await sendWaitlistInvite(row.email, row.name ?? '', user.assignedPhoneNumber, token)
-    if (!didText && !didEmail && !queuedIntro) { failed.push(row.email); continue }
+    if (!didEmail) { failed.push(`${row.email} (invite email didn't send - they're registered, re-run the invite to retry)`); continue }
 
     const now = new Date().toISOString()
     await supabase.from('waitlist')
-      .update({ status: 'invited', updated_at: now, ...((didEmail || didText || queuedIntro) ? { invite_sent_at: now } : {}), ...(didText ? { intro_texted_at: now } : {}) })
+      .update({ status: 'invited', updated_at: now, invite_sent_at: now })
       .eq('id', row.id)
-    ;(didText ? texted : emailed).push(`${who} -> ${user.assignedPhoneNumber}${!didText && queuedIntro ? ' (intro text queued, retrying)' : ''}`)
+    emailed.push(`${who} -> ${user.assignedPhoneNumber}`)
   }
 
   const lines: string[] = []
   if (resent.length) lines.push(`Resent invite to ${resent.join(", ")}`)
   if (alreadyInvited.length) lines.push(`Already invited: ${alreadyInvited.join(', ')}`)
   if (texted.length) lines.push(`Texted ${texted.length}: ${texted.join(', ')}`)
-  if (emailed.length) lines.push(`Emailed ${emailed.length} (the text didn't go through - they're allowlisted and just need to text their line): ${emailed.join(', ')}`)
+  if (emailed.length) lines.push(`Invited ${emailed.length} (email sent; they're allowlisted and start by texting their line): ${emailed.join(', ')}`)
   if (noPhone.length) lines.push(`No phone on file, skipped: ${noPhone.join(', ')}`)
   if (failed.length) lines.push(`Couldn't invite: ${failed.join(', ')}`)
   return lines.join('\n')

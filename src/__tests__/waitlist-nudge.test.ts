@@ -5,14 +5,9 @@ const base: NudgeRow = { status: 'invited', first_text_at: null, intro_texted_at
 const at = (s: string) => new Date(s)
 
 describe('waitlist nudges', () => {
-  it('chat nudge after 4h in daytime, once', () => {
-    expect(nudgeDue(base, at('2026-10-01T17:00:00Z'))).toBeNull() // 3h
-    expect(nudgeDue(base, at('2026-10-01T18:30:00Z'))).toBe('chat') // 4.5h, 2:30pm ET
-    expect(nudgeDue({ ...base, chat_nudge_sent_at: 'x' }, at('2026-10-01T18:30:00Z'))).toBeNull()
-  })
-  it('holds the chat nudge overnight', () => {
+  it('never nudges in chat (Photon rejects texting first)', () => {
+    expect(nudgeDue(base, at('2026-10-01T18:30:00Z'))).toBeNull() // 4.5h, 2:30pm ET
     expect(inQuietHours(at('2026-10-02T04:00:00Z'))).toBe(true) // midnight ET
-    expect(nudgeDue(base, at('2026-10-02T04:00:00Z'))).toBeNull()
   })
   it('email at 36h, once, even if the chat nudge went', () => {
     const t = at('2026-10-03T02:30:00Z')

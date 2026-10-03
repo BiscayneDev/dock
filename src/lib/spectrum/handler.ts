@@ -69,7 +69,7 @@ import {
     WIPE_PROMPT,
 } from './memory-commands'
 import { buildIcs } from './ics'
-import { senderAddress, markWaitlistFirstInbound, parseWaitlistInviteCommand, runWaitlistInvites, verifiedWaitlistFirstName } from './waitlist-invites'
+import { senderAddress, markWaitlistFirstInbound, cancelStaleIntro, welcomeText, parseWaitlistInviteCommand, runWaitlistInvites, verifiedWaitlistFirstName } from './waitlist-invites'
 import { balanceText, inviteBalance, inviteToolsFor, isInviteStatusCommand, mintMemberInvite } from './user-invites'
 import { interviewDirective, markOpenerAsked } from './interview'
 import { attachment } from 'spectrum-ts'
@@ -412,9 +412,16 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     if (role) {
         // The signed sender and bound identity must agree. Mark the first
         // allowed inbound before rate limits and intent-specific early returns.
-        await markWaitlistFirstInbound(senderAddress(message.sender), chatGuid).catch((err) =>
+        const firstInbound = await markWaitlistFirstInbound(senderAddress(message.sender), chatGuid).catch((err) => {
             logErr('waitlist activation failed', err)
-        )
+            return false
+        })
+        if (firstInbound) {
+            // They texted first, so Photon now accepts replies. Drop any stale queued
+            // intro, then send one short plain welcome ahead of the real answer.
+            await cancelStaleIntro(chatGuid).catch((err) => logErr('stale intro cancel failed', err))
+            await sendText(space, chatGuid, 'reply', welcomeText(await verifiedWaitlistFirstName(senderAddress(message.sender), chatGuid).catch(() => null))).catch(() => false)
+        }
     }
 
     // Per-chat rate limit (owner exempt), before any LLM or gate work.

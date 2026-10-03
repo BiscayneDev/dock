@@ -35,7 +35,7 @@ export function nudgeDue(row: NudgeRow, now: Date): 'chat' | 'email' | null {
   const age = now.getTime() - new Date(anchorIso).getTime()
   const inviteAge = row.invite_sent_at ? now.getTime() - new Date(row.invite_sent_at).getTime() : age
   if (!row.nudge_sent_at && row.email && inviteAge >= EMAIL_NUDGE_AFTER_MS) return 'email'
-  if (!row.chat_nudge_sent_at && row.phone && age >= CHAT_NUDGE_AFTER_MS && age < CHAT_NUDGE_STALE_MS && !inQuietHours(now)) return 'chat'
+  // No in-chat nudge: Photon's shared pool rejects texting a user who has not texted first.
   return null
 }
 
