@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { START_CONNECT_REQUEST, startReadyPath } from '@/lib/spectrum/start-link'
+import { phoneFromChatGuid, markFirstLookPending } from '@/lib/spectrum/first-look'
 import { getSession } from '@/lib/auth/session'
 import {
   exchangeCode as exchangeGoogleCode,
@@ -34,6 +36,20 @@ import {
   markConnectTerminal,
   bindSpectrumIdentity,
 } from '@/lib/connect-token'
+
+async function startReadyRedirect(chatGuid: string): Promise<string | null> {
+  try {
+    const phone = phoneFromChatGuid(chatGuid)
+    if (!phone) return null
+    const { createServerClient } = await import('@/lib/supabase/server')
+    const { data } = await createServerClient().from('waitlist').select('start_token').eq('phone', phone).not('start_token', 'is', null).limit(1).maybeSingle()
+    if (!data?.start_token) return null
+    await markFirstLookPending(phone)
+    return startReadyPath(data.start_token as string)
+  } catch {
+    return null
+  }
+}
 
 export async function GET(
   request: NextRequest,
@@ -274,6 +290,11 @@ async function handleGoogleConnectCallback(
     // iMessage connects land on a branded done page — the chat is their
     // home, not the Telegram onboarding card.
     if (connect.platform === 'imessage') {
+      if (connect.pendingRequest === START_CONNECT_REQUEST) {
+        // Connected from the start page: back to it, where the number is waiting.
+        const back = await startReadyRedirect(connect.chatId)
+        if (back) return NextResponse.redirect(`${appUrl}${back}`)
+      }
       return NextResponse.redirect(`${appUrl}/connect/success`)
     }
     return NextResponse.redirect(`${appUrl}/onboarding?connected=google&via=chat`)

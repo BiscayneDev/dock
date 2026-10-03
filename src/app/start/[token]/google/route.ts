@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { createConnectLink } from '@/spectrum/store'
 import { chatGuidForPhone } from '@/lib/spectrum/waitlist-invites'
-import { startGoogleEligible } from '@/lib/spectrum/start-link'
+import { startGoogleEligible, START_CONNECT_REQUEST } from '@/lib/spectrum/start-link'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const chatGuid = chatGuidForPhone(data!.phone as string)
     const { data: allowed } = await db.from('beta_allowlist').select('chat_guid').eq('chat_guid', chatGuid).maybeSingle()
     if (!allowed) return NextResponse.redirect(back)
-    const link = await createConnectLink(chatGuid, 'connect my gmail')
+    const link = await createConnectLink(chatGuid, START_CONNECT_REQUEST)
     return NextResponse.redirect(link)
   } catch (err) {
     console.error('start google connect failed:', err instanceof Error ? err.message : String(err))

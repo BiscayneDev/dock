@@ -69,6 +69,7 @@ import {
     WIPE_PROMPT,
 } from './memory-commands'
 import { buildIcs } from './ics'
+import { claimFirstLook } from './first-look'
 import { senderAddress, markWaitlistFirstInbound, cancelStaleIntro, welcomeText, parseWaitlistInviteCommand, runWaitlistInvites, verifiedWaitlistFirstName } from './waitlist-invites'
 import { balanceText, inviteBalance, inviteToolsFor, isInviteStatusCommand, mintMemberInvite } from './user-invites'
 import { interviewDirective, markOpenerAsked } from './interview'
@@ -421,6 +422,14 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             // intro, then send one short plain welcome ahead of the real answer.
             await cancelStaleIntro(chatGuid).catch((err) => logErr('stale intro cancel failed', err))
             await sendText(space, chatGuid, 'reply', welcomeText(await verifiedWaitlistFirstName(senderAddress(message.sender), chatGuid).catch(() => null))).catch(() => false)
+            // The first look they connected Google for rides right behind the welcome. Sent
+            // through the outbox, so a failed send retries (Photon can need a few minutes).
+            const firstPhone = senderAddress(message.sender)
+            const look = firstPhone ? await claimFirstLook(firstPhone).catch(() => null) : null
+            if (look) {
+                await sendText(space, chatGuid, 'reply', look).catch(() => false)
+                await saveMessage(chatGuid, 'assistant', look, true).catch(() => {})
+            }
         }
     }
 
@@ -1109,4 +1118,4 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         clearTimeout(eyesTimer)
         stopTypingReTap(space, typingHandle)
     }
-}
+            }

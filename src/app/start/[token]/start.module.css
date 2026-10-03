@@ -11,3 +11,9 @@
 .fallback { margin: 30px 0 12px; color: #C7D0E0; font-size: 14px; line-height: 1.6; }
 .fallback a { color: #F3EDE3; font-size: 20px; font-weight: 700; }
 .fine { margin: 0; color: #A9B7CD; font-size: 13px; }
+.number { margin: 18px 0 4px; font: 600 38px Georgia, serif; letter-spacing: -.02em; }
+.card { display: flex; gap: 14px; align-items: flex-start; margin: 4px 0 8px; padding: 14px 16px; border: 1px solid #33405A; border-radius: 12px; background: #101C3D; color: #F3EDE3; font-size: 14px; line-height: 1.5; }
+.dotDone, .dotWorking { flex: none; width: 18px; height: 18px; margin-top: 2px; border-radius: 50%; }
+.dotDone { background: #7FC8A9; }
+.dotWorking { border: 2px solid #F2A380; border-top-color: transparent; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
