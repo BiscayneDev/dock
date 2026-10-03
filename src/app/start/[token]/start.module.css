@@ -17,3 +17,6 @@
 .dotDone { background: #7FC8A9; }
 .dotWorking { border: 2px solid #F2A380; border-top-color: transparent; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.field { padding: 15px 16px; border: 1px solid #33405A; border-radius: 10px; background: #101C3D; color: #F3EDE3; font-size: 16px; }
+.field::placeholder { color: #8FA0BC; }
+button.button { border: 0; cursor: pointer; font-size: 16px; font-family: inherit; }
