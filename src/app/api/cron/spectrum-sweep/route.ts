@@ -15,7 +15,9 @@ import { claimOutboxBatch, markOutboxFailed, markOutboxSent } from '@/lib/spectr
 import { chat, chatWithTools, MAX_HISTORY, wantsAnotherGoogle } from '@/lib/spectrum/dinghy'
 import { googleConnectedLine, isConnectRequest } from '@/lib/spectrum/connect-lines'
 import { readFirstFinding } from '@/lib/spectrum/first-finding'
-import { runConnectResearch } from '@/lib/spectrum/connect-research'
+import { runConnectResearch, RESEARCH_START_LINE } from '@/lib/spectrum/connect-research'
+import { START_CONNECT_REQUEST } from '@/lib/spectrum/start-link'
+import { phoneFromChatGuid, composeFirstLook, storeFirstLook, claimFirstLook } from '@/lib/spectrum/first-look'
 import { capabilitiesFor, loadImessageToolContext, toolsFor } from '@/lib/spectrum/imessage-tools'
 import { actionToolsFor, renderProposal } from '@/lib/spectrum/actions'
 import { allowanceUsedUpMessage, claimLimitNotice, isOverDailyAllowance } from '@/lib/allowance'
@@ -121,6 +123,46 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 // connect lands: confirm only. Replaying it re-answers a finished request
                 // (and races the user's own next message).
                 const connectOnly = claimed.provider === 'google' && isConnectRequest(claimed.pendingRequest)
+                if (connectOnly && claimed.provider === 'google' && claimed.pendingRequest === START_CONNECT_REQUEST) {
+                    // Connected from the start page: no outbound-first text. Take the first
+                    // look now, store it, and deliver it as the reply to their first text.
+                    await ackResume(claimed.id)
+                    const phone = phoneFromChatGuid(guid)
+                    const toolCtxS = await loadImessageToolContext(guid).catch(() => null)
+                    if (phone) {
+                        let status: 'ready' | 'empty' | 'failed' = 'failed'
+                        let text: string | null = null
+                        if (toolCtxS?.tokens.google) {
+                            try {
+                                const finding = await readFirstFinding(toolCtxS.tokens.google, toolCtxS.userId, toolCtxS.timezone).catch(() => null)
+                                let digest: string | null = null
+                                await runConnectResearch({
+                                    chatGuid: guid,
+                                    userId: toolCtxS.userId,
+                                    tokens: toolCtxS.tokens.google,
+                                    tz: toolCtxS.timezone,
+                                    say: async (t) => { if (t !== RESEARCH_START_LINE) digest = t },
+                                })
+                                text = composeFirstLook(finding, digest)
+                                status = text ? 'ready' : 'empty'
+                            } catch (err) {
+                                console.error('start first look failed:', err instanceof Error ? err.message : String(err))
+                            }
+                        }
+                        await storeFirstLook(phone, status, text)
+                        // Already texted us (race): they can receive it now.
+                        const { data: live } = await createServerClient().from('waitlist').select('status').eq('phone', phone).maybeSingle()
+                        if (status === 'ready' && live?.status === 'active') {
+                            const t = await claimFirstLook(phone)
+                            if (t) {
+                                await space.send(toPlainText(t))
+                                await saveMessage(guid, 'assistant', t, true).catch(() => {})
+                            }
+                        }
+                    }
+                    results.resumes++
+                    continue
+                }
                 if (connectOnly) {
                     const toolCtxC = await loadImessageToolContext(guid).catch(() => null)
                     const line = googleConnectedLine(toolCtxC, wantsAnotherGoogle(claimed.pendingRequest))
