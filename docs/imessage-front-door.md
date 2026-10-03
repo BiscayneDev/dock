@@ -43,9 +43,9 @@ No Next.js bundler, no vendored tgz, no `@/` aliases. Just `spectrum-ts` + `@spe
 
 ## Spectrum Cloud project
 
-- **Project:** Dinghy (free tier, 10 users)
+- **Project:** Dinghy (paid Photon plan)
 - **Project ID:** `958b9de0-be41-4251-97ba-aa83894db907`
-- **Managed iMessage line:** +1 (628) 264-7754 (shared free line; replies only to numbers added to the project)
+- **Managed iMessage line:** +1 (628) 264-7754 (shared pool line; replies only to numbers registered as project users)
 - **Photon dashboard:** https://app.photon.codes
 
 ## Adding iMessage contacts
