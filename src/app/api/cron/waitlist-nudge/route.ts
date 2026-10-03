@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
   for (const row of (data ?? []) as Array<NudgeRow & { id: string; name: string | null }>) {
     const due = nudgeDue(row, now)
     if (!due) continue
+    if (String(row.email).endsWith('.invalid')) continue // invite-link signups have no real email
     const col = due === 'chat' ? 'chat_nudge_sent_at' : 'nudge_sent_at'
     const { data: claimed } = await db.from('waitlist').update({ [col]: now.toISOString() })
       .eq('id', row.id).is(col, null).is('first_text_at', null).select('id')
