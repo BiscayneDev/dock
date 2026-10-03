@@ -48,11 +48,14 @@ export async function claimInvite(codeIn: string, phoneIn: string, nameIn: strin
       .select('uses, max_uses, expires_at').eq('code_hash', hashInviteCode(code)).maybeSingle()
     if (invErr || !inv || inv.uses >= inv.max_uses || new Date(inv.expires_at) <= new Date()) return { ok: false, reason: 'bad_code' }
 
-    // A number that is already allowlisted or on the list has its own link and chat.
-    // Never give its start token to whoever typed the number.
+    // A joined waitlist row without provisioning is not a seat. Reuse its row,
+    // but never return an existing token or reveal its email/name to the claimant.
     const { data: allowed } = await db.from('beta_allowlist').select('chat_guid').eq('chat_guid', chatGuid).maybeSingle()
-    const { data: existing } = await db.from('waitlist').select('id').eq('phone', phone).limit(1).maybeSingle()
-    if (allowed || existing) return { ok: false, reason: 'has_seat' }
+    const { data: existing, error: existingErr } = await db.from('waitlist')
+      .select('id, status, start_token, photon_user_id, dinghy_line').eq('phone', phone).limit(2)
+    if (existingErr || (existing?.length ?? 0) > 1) return { ok: false, reason: 'try_again' }
+    const waiting = existing?.[0]
+    if (allowed || (waiting && (waiting.status !== 'joined' || waiting.start_token || waiting.photon_user_id || waiting.dinghy_line))) return { ok: false, reason: 'has_seat' }
 
     const user = await registerPhotonUser(phone, name)
     if (!user) return { ok: false, reason: 'no_line' }
@@ -62,11 +65,15 @@ export async function claimInvite(codeIn: string, phoneIn: string, nameIn: strin
 
     const token = randomBytes(24).toString('base64url')
     const now = new Date().toISOString()
-    const { error: rowErr } = await db.from('waitlist').insert({
-      email: `invite-${randomBytes(6).toString('hex')}${INVITEE_EMAIL_SUFFIX}`,
-      name, phone, status: 'invited', start_token: token,
-      photon_user_id: user.id, dinghy_line: user.assignedPhoneNumber, line_assigned_at: now,
-    })
+    const seat = { status: 'invited', start_token: token,
+      photon_user_id: user.id, dinghy_line: user.assignedPhoneNumber, line_assigned_at: now, updated_at: now }
+    const { data: saved, error: rowErr } = waiting
+      ? await db.from('waitlist').update(seat).eq('id', waiting.id).eq('status', 'joined')
+        .is('start_token', null).is('photon_user_id', null).is('dinghy_line', null).select('id')
+      : await db.from('waitlist').insert({
+        email: `invite-${randomBytes(6).toString('hex')}${INVITEE_EMAIL_SUFFIX}`, name, phone, ...seat,
+      }).select('id')
+    if (!rowErr && saved?.length !== 1) return { ok: false, reason: 'try_again' }
     if (rowErr) throw new Error(`waitlist insert failed: ${rowErr.message}`)
     await provisionSpectrumIdentity(chatGuid, phone).catch(() => null)
     return { ok: true, token }
