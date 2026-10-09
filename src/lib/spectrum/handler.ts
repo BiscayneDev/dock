@@ -34,7 +34,7 @@ import { payboxSigningToolsFor } from '@/lib/tools/paybox-signing'
 import { EMPTY_MEMORY, loadMemoryContext, renderMemoryBlock, updateMemory } from './memory'
 import { FILE_NUDGE, fileToolsFor, stripFileMarkers, type MadeFile } from '@/lib/files/tool'
 import { hostedHistoryLine, sendFileWithPreview, sendHostedFile } from '@/lib/files/send'
-import { actionToolsFor, cancelPendingActions, executePendingActionDetailed, hasPendingAction, takeLooseProposal, parseConfirmation, renderProposal, sendConfirmedReaction } from './actions'
+import { actionToolsFor, cancelPendingActions, executePendingActionDetailed, hasPendingAction, takeLooseProposal, parseConfirmation, isRepeatedActionConfirmation, renderProposal, sendConfirmedReaction } from './actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { dinghyContactCard } from './contact-card'
 import { takeLooseConnectLink } from '@/lib/tools/google-connect'
@@ -847,6 +847,13 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     {
         const recent = await loadHistory(chatGuid, 2).catch(() => [] as HistoryMessage[])
         const lastAssistant = [...recent].reverse().find((m) => m.role === 'assistant')?.content ?? null
+        // A repeated Y after a completed action is not a new task. Do not let
+        // the model reconstruct the old draft from history and send it twice.
+        if (textIntents && isRepeatedActionConfirmation(text, lastAssistant)) {
+            await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
+            await tapback(message, '✅')
+            return
+        }
         const emoji = ackTapback(text, lastAssistant)
         if (emoji && (await tapback(message, emoji))) {
             await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
@@ -1118,4 +1125,4 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         clearTimeout(eyesTimer)
         stopTypingReTap(space, typingHandle)
     }
-            }
+}
