@@ -32,6 +32,12 @@ export function parseConfirmation(text: string): 'yes' | 'no' | null {
     return null
 }
 
+/** A second confirmation must not recreate the action that just finished. */
+export function isRepeatedActionConfirmation(text: string, lastAssistant: string | null): boolean {
+    return parseConfirmation(text) !== null &&
+        (lastAssistant === 'Reply sent.' || lastAssistant === 'Event created and invites sent.')
+}
+
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 const ACCOUNT_INPUT = {
