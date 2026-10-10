@@ -18,6 +18,6 @@ describe('routingFor', () => {
     })
     it('builds the request fields', () => {
         expect(modelFields('pinned', undefined)).toEqual({ model: 'pinned' })
-        expect(modelFields('pinned', { providers: ['hopscotch'] })).toEqual({ model: 'auto', shipyard: { providers: ['hopscotch'] } })
+        expect(modelFields('pinned', { providers: ['hopscotch'] })).toEqual({ model: 'auto', shipyard: { providers: ['hopscotch'], attempt_timeout_ms: 15_000 } })
     })
 })
