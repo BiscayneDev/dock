@@ -1,3 +1,4 @@
+import { needsFileRepair } from '@/lib/files/reply'
 import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 import { withinTurn, TurnDeadlineExceeded } from './turn-budget'
 import type { RunStage } from './run-stage'
@@ -160,8 +161,8 @@ export interface PromptCapabilities {
 
 const FILES_LINE =
     'You can make real documents with create_file for plans, itineraries, schedules, notes, checklists and tables. ' +
-    'By default each one becomes a file link (a here.now page with a pdf download on it) that opens with one tap, sent right after your reply; ' +
-    'it is private unless they forward it, and anyone they forward it to can open it. Links expire after 7 days; making the file again gives a fresh link. ' +
+    'By default each one becomes a file link (a here.now page with a pdf download on it) that opens with one tap. The app sends it immediately after your assistant message, without waiting for the user; ' +
+    'it is private unless they forward it, and anyone they forward it to can open it. Links expire after 7 days; making the file again gives a fresh link. Never claim a new document was created without a successful create_file call in this turn, and never use a historical file URL as the new document. ' +
     'If they want the file itself in the chat, set attach=true. revoke_file kills a link they no longer want working. ' +
     'Every file you make is saved to memory with its full text: recall_file reopens one from any earlier chat, so to update a file, recall it, change it and create_file the full new version. ' +
     'For "where should I eat / what is near X" asks call find_places first: it finds real venues with open-now, walk time and map links and makes the page itself, so skip web_search and create_file for those. ' +
@@ -656,10 +657,10 @@ export async function chatWithTools(
 
         if (choice?.finish_reason !== 'tool_calls' || calls.length === 0) {
             const reply = msg?.content ?? '(no response)'
-            if (!pageRetry && !pageAttempted && tools.some((t) => t.name === 'create_file') && needsAnswerPage(reply) && iteration < MAX_TOOL_ITERATIONS && (opts.deadlineAt === undefined || opts.deadlineAt - Date.now() >= 20_000)) {
+            if (!pageRetry && !pageAttempted && tools.some((t) => t.name === 'create_file') && (needsAnswerPage(reply) || needsFileRepair(reply)) && iteration < MAX_TOOL_ITERATIONS && (opts.deadlineAt === undefined || opts.deadlineAt - Date.now() >= 20_000)) {
                 pageRetry = true
                 completionMode = true
-                messages.push({ role: 'assistant', content: reply }, { role: 'system', content: PAGE_FINISH })
+                messages.push({ role: 'assistant', content: reply }, { role: 'system', content: needsFileRepair(reply) ? 'No file was created in this turn. An older URL from history is not the new document. Call create_file now with the research already gathered, then give a short verdict. Do not claim delivery without a successful file tool.' : PAGE_FINISH })
                 continue
             }
             return { reply, toolCalls: toolCallCount, iterations: iteration, tainted }
