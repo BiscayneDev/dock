@@ -23,7 +23,7 @@ export async function confirmErase(userId: string, id: string, token: string, ph
   if (error) throw new Error('Could not confirm deletion')
   return data === true
 }
-export interface ErasureJob { id: string; user_id: string; chats: string[] }
+export interface ErasureJob { id: string; user_id: string; chats: string[]; lease_token?: string }
 export interface CleanupOps {
   revokeTokens(job: ErasureJob): Promise<string[]>
   killSandboxes(job: ErasureJob): Promise<void>
@@ -53,10 +53,16 @@ async function allRows(table: string, columns: string, userId: string): Promise<
 }
 export function cleanupOps(): CleanupOps {
   const db = createServerClient()
+  async function pulse(j:ErasureJob):Promise<void> {
+    const {data,error}=await db.rpc('dinghy_erasure_heartbeat',{p_job:j.id,p_lease:j.lease_token})
+    if(error || data!==true)throw new Error('cleanup_lease_lost')
+  }
   return {
     async revokeTokens(j) {
+      await pulse(j)
       const notes: string[] = []
       for (const row of await allRows('oauth_tokens','id,provider,refresh_token,access_token',j.user_id)) {
+        await pulse(j)
         const provider = String(row.provider)
         if (provider==='google' || provider.startsWith('google:')) {
           const encrypted = (row.refresh_token || row.access_token) as string | undefined
@@ -67,6 +73,7 @@ export function cleanupOps(): CleanupOps {
       return [...new Set(notes)]
     },
     async killSandboxes(j) {
+      await pulse(j)
       const sessions = await allRows('computer_sessions','id,sandbox_id',j.user_id)
       // Connect attempts have token_hash rather than id; separate stable scan.
       const { data, error } = await db.from('capability_connect_attempts').select('params').eq('user_id',j.user_id).limit(1000)
@@ -90,18 +97,21 @@ export function cleanupOps(): CleanupOps {
         return found
       }
       for(const id of await listed())ids.add(id)
-      for(const id of ids)await Sandbox.kill(id)
+      for(const id of ids){await pulse(j);await Sandbox.kill(id)}
       if((await listed()).length)throw new Error('sandbox_cleanup_unverified')
     },
     async removePages(j) {
+      await pulse(j)
       const sites=await listOwnedSites(j.user_id)
-      for(const link of sites)await revokeOwnedSite(link,j.user_id)
+      for(const link of sites){await pulse(j);await revokeOwnedSite(link,j.user_id)}
       if((await listOwnedSites(j.user_id)).length)throw new Error('hosted_delete_unverified')
     },
     async removeStorage(j) {
+      await pulse(j)
       const bucket = db.storage.from('dinghy-files')
       async function clear(prefix: string): Promise<void> {
         for (;;) {
+          await pulse(j)
           const { data, error } = await bucket.list(prefix,{limit:100,sortBy:{column:'name',order:'asc'}})
           if (error) throw new Error('storage_inventory_failed')
           if (!data?.length) return
@@ -121,9 +131,10 @@ export function cleanupOps(): CleanupOps {
       await clear(j.user_id)
     },
     async finish(j,notes) {
-      const saved=await db.from('dinghy_erasure_jobs').update({provider_notes:notes}).eq('id',j.id)
+      await pulse(j)
+      const saved=await db.from('dinghy_erasure_jobs').update({provider_notes:notes}).eq('id',j.id).eq('lease_token',j.lease_token)
       if(saved.error) throw new Error('deletion_status_unavailable')
-      const { data, error } = await db.rpc('dinghy_erasure_finish',{p_job:j.id})
+      const { data, error } = await db.rpc('dinghy_erasure_finish',{p_job:j.id,p_lease:j.lease_token})
       if (error || data!==true) throw new Error('database_cleanup_failed')
     },
   }
@@ -145,7 +156,7 @@ export async function processErasure(): Promise<'off'|'idle'|'complete'|'blocked
   } catch (err) {
     const allowed=new Set(['provider_revoke_failed','login_sandbox_inventory_failed','sandbox_cleanup_failed','hosted_inventory_unverified','storage_inventory_failed','storage_cleanup_failed','database_cleanup_failed'])
     const tag=err instanceof Error && allowed.has(err.message) ? err.message : 'cleanup_failed'
-    await db.from('dinghy_erasure_jobs').update({status:'blocked',obstacle:tag,lease_until:new Date(Date.now()+3600_000).toISOString()}).eq('id',job.id)
+    await db.from('dinghy_erasure_jobs').update({status:'blocked',obstacle:tag,lease_until:new Date(Date.now()+3600_000).toISOString()}).eq('id',job.id).eq('lease_token',job.lease_token)
     return 'blocked'
   }
 }
