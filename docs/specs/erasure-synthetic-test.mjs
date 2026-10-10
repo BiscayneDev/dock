@@ -27,7 +27,7 @@ await db.exec(`insert into spectrum_messages values(gen_random_uuid(),'chat-b','
 await db.exec(`update dinghy_erasure_jobs set frozen_at=now()-interval '6 minutes'`)
 const job=(await db.query('select dinghy_erasure_claim() as job')).rows[0].job
 if(job.id!==id)throw Error('Claim mismatch')
-if(!(await db.query('select dinghy_erasure_finish($1) as ok',[id])).rows[0].ok)throw Error('Finish false')
+if(!(await db.query('select dinghy_erasure_finish($1,$2) as ok',[id,job.lease_token])).rows[0].ok)throw Error('Finish false')
 const remaining=(await db.query(`select count(*)::int as n from spectrum_messages`)).rows[0].n
 if(remaining!==2)throw Error('Other user affected')
 if((await db.query('select count(*)::int as n from inference_usage')).rows[0].n!==0)throw Error('Usage orphan retained')
