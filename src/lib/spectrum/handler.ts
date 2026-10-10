@@ -205,6 +205,10 @@ async function sendFile(space: InboundSpace, chatGuid: string, file: MadeFile): 
     if (file.hosted) {
         const hosted = { ...file, hosted: file.hosted }
         const line = hostedHistoryLine(hosted)
+        if (file.card) {
+            // Card above the link, best effort: the link still goes out if the card does not.
+            try { await (space as ContentSender).send(attachment(file.card, { name: 'preview.png', mimeType: 'image/png' })) } catch (err) { logErr('page card send failed', err) }
+        }
         try {
             await sendHostedFile(space as ContentSender, hosted)
         } catch (err) {
@@ -1219,4 +1223,4 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         clearTimeout(eyesTimer)
         stopTypingReTap(space, typingHandle)
     }
-                }
+    }

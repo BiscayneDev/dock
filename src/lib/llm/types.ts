@@ -63,6 +63,8 @@ export interface UserContext {
   name: string
   timezone: string
   tokens: Record<string, DecryptedTokens>
+  /** Set by the turn loop for create_file only: true when no Gmail/Calendar text is in this turn, so free photo lookups may send the subject name out and a preview card may be sent. Left unset for places pages and any other caller. */
+  photosOk?: boolean
 }
 
 export interface DecryptedTokens {
