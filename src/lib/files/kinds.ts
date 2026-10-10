@@ -175,13 +175,14 @@ function renderBriefing(lines: string[]): string {
     return `<div class="brs">${items.join('')}</div>`
 }
 
-/** gallery: "img/name.jpg | caption | credit | license". Only builder-copied images render. */
+/** gallery: "img/name.jpg | caption | credit | license | source url | license url". Only builder-copied images render. */
 function renderGallery(lines: string[]): string {
     const figs = lines.slice(0, 6).map((l) => {
-        const [src, caption, credit, license] = cells(l)
+        const [src, caption, credit, license, sourceUrl, licenseUrl] = cells(l)
         const p = img(src)
         if (!p) return ''
-        const cr = [credit, license].filter(Boolean).map((t) => esc(t as string)).join(' · ')
+        const link = (txt: string | undefined, u: string | undefined) => txt && u && /^https:\/\/[^\s"'<>]+$/.test(u) ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(txt)}</a>` : txt ? esc(txt) : ''
+        const cr = [esc(credit ?? ''), link(license, licenseUrl), sourceUrl ? link('source', sourceUrl) : ''].filter(Boolean).join(' · ')
         return `<figure><img src="${esc(p)}" alt="${esc(caption ?? '')}" loading="lazy" decoding="async"><figcaption>${esc(caption ?? '')}${cr ? `<small>${cr}</small>` : ''}</figcaption></figure>`
     }).filter(Boolean)
     if (!figs.length) return ''
