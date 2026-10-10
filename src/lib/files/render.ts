@@ -212,7 +212,7 @@ function renderReplies(lines: string[], line?: string): string {
             ? `<a class="reply" href="${esc(href)}"><span class="reply-k">Reply</span><span class="reply-t">${esc(t)}</span></a>`
             : `<div class="reply reply-off"><span class="reply-k">Say</span><span class="reply-t">${esc(t)}</span></div>`
     })
-    return `<div class="replies"><p class="reply-hint">${line ? 'Tap to open Messages with this ready to send' : 'You can text me'}</p>${items.join('')}</div>`
+    return `<div class="replies"><p class="reply-hint">${line ? 'Tap to reply' : 'You can text me'}</p>${items.join('')}</div>`
 }
 
 
@@ -358,7 +358,7 @@ export function renderHtml(doc: DinghyDoc, opts: HtmlOptions = {}): string {
 <meta name="description" content="${esc(desc)}">
 <meta property="og:title" content="${esc(doc.title)}"><meta property="og:description" content="${esc(desc)}">
 <meta property="og:site_name" content="Dinghy"><meta property="og:type" content="article">${og}
-<meta name="robots" content="noindex"><meta name="theme-color" content="${BRAND.paper}">
+<meta name="robots" content="noindex"><meta name="theme-color" content="${BRAND.paper}" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#0C1528" media="(prefers-color-scheme: dark)"><meta name="color-scheme" content="light dark">
 <style>
 ${face('Fraunces', frauncesDisplay, 500)}${face('Fraunces', frauncesItalic, 400, 'italic')}${face('Schibsted', schibsted400, 400)}${face('Schibsted', schibsted600, 600)}${face('DM Mono', dmMono500, 500)}
 :root{--paper:${BRAND.paper};--sand:${BRAND.sand};--ink:${BRAND.ink};--body:rgba(14,26,51,.78);--mute:rgba(14,26,51,.55);--line:rgba(14,26,51,.12);--accent:${BRAND.accent}}
@@ -397,6 +397,51 @@ hr{border:0;border-top:1px solid var(--line);margin:32px 0}
 .dl{margin:14px 0 0;font:500 11px/1 'DM Mono',monospace;letter-spacing:.14em;text-transform:uppercase}.dl a{text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:8px 14px;display:inline-block}
 .foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;max-width:720px;margin:0 auto;padding:36px 24px 44px;font:500 10px 'DM Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}.foot a{color:inherit;text-decoration:none}
 @media (max-width:600px){table.tbl,table.tbl tbody,table.tbl tr,table.tbl td{display:block;width:100%}table.tbl thead{display:none}table.tbl tr{margin:12px 0;padding:6px 14px;border:1px solid var(--line);border-radius:16px}table.tbl td{border:0;padding:6px 0}table.tbl td::before{content:attr(data-label);display:block;font:500 10px/1.6 'DM Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}table.tbl td:first-child{font:500 19px/1.3 Fraunces,Georgia,serif;color:var(--ink)}table.tbl td:first-child::before{display:none}.band{height:220px}.card{margin-top:-52px;padding:28px 22px 26px}h1{font-size:36px}h2{font-size:24px}body{font-size:16px}.row{grid-template-columns:84px 1fr}}
+/* design layer: scale, rhythm, motion, dark mode */
+:root{--r:20px;--gap:24px;--ease:cubic-bezier(.22,.8,.24,1);--warn:#FFF1E8;--shadow:0 1px 2px rgba(14,26,51,.05),0 10px 30px -12px rgba(14,26,51,.18)}
+body{font-size:17px;line-height:1.65;text-rendering:optimizeLegibility}
+.brand svg{stroke:var(--ink)}
+.card{box-shadow:0 2px 4px rgba(14,26,51,.04),0 30px 70px -20px rgba(14,26,51,.28);padding:48px 52px 44px}
+.brand{justify-content:space-between}
+h1{font-size:clamp(36px,7.2vw,58px);line-height:1;letter-spacing:-.028em;margin:22px 0 14px;text-wrap:balance}
+h1::after{content:'';display:block;width:56px;height:3px;border-radius:3px;background:linear-gradient(90deg,var(--accent),#F79E75);margin-top:20px}
+.sub{font-size:19px;line-height:1.5;color:var(--mute);max-width:34em;margin:0}
+.sec{margin-top:56px;padding-top:0;border-top:0;counter-increment:sec}
+.sec h2{display:flex;align-items:baseline;gap:14px;font-size:clamp(25px,5vw,32px);letter-spacing:-.02em}
+.sec h2::before{content:counter(sec,decimal-leading-zero);font:500 11px/1 'DM Mono',monospace;letter-spacing:.14em;color:var(--accent);transform:translateY(-.35em)}
+main.card{counter-reset:sec}
+p{max-width:38em}
+.pick,.facts,.opts,.cost,.heads,.place,.sources,.replies,.rows,table.tbl{margin-block:var(--gap)}
+.pick{background:linear-gradient(135deg,var(--sand),var(--paper));border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:var(--r);padding:22px 26px;box-shadow:var(--shadow)}
+.pick p{font:italic 400 22px/1.4 Fraunces,Georgia,serif;margin:10px 0 0}
+.fact,.opt,.cost,.place{border-radius:var(--r);transition:transform .25s var(--ease),box-shadow .25s var(--ease),border-color .25s var(--ease)}
+.fact{background:linear-gradient(180deg,var(--paper),var(--sand))}
+.opt{box-shadow:var(--shadow)}
+.opt-name{font-size:22px;letter-spacing:-.01em}
+@media (hover:hover){.opt:hover,.place:hover{transform:translateY(-2px);border-color:var(--accent)}}
+.heads{background:var(--warn);border-radius:var(--r);border-left-color:var(--accent)}
+.reply{transition:transform .18s var(--ease),filter .18s var(--ease);box-shadow:var(--shadow)}
+.reply:active{transform:scale(.98)}.reply:hover{filter:brightness(1.12)}
+a:focus-visible,.reply:focus-visible,.checklist input:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.checklist input{transition:transform .15s var(--ease)}.checklist input:active{transform:scale(.88)}
+.foot{padding-bottom:max(44px,env(safe-area-inset-bottom))}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes dawn{from{transform:scale(1.08);opacity:.6}to{transform:none;opacity:1}}
+.band svg{animation:dawn 1.6s var(--ease) both}
+.card>*{animation:rise .7s var(--ease) both}
+.card>*:nth-child(2){animation-delay:.05s}.card>*:nth-child(3){animation-delay:.1s}.card>*:nth-child(4){animation-delay:.15s}.card>*:nth-child(5){animation-delay:.2s}.card>*:nth-child(6){animation-delay:.25s}.card>*:nth-child(n+7){animation-delay:.3s}
+@media (prefers-reduced-motion:reduce){.band svg,.card>*{animation:none}.opt,.place,.reply,.fact{transition:none}}
+@media (max-width:600px){.card{padding:30px 22px 28px;border-radius:22px}.sec{margin-top:44px}.pick p{font-size:20px}.sub{font-size:17px}.reply{min-height:56px}}
+@media (prefers-color-scheme:dark){
+:root{--paper:#0C1528;--sand:#15213B;--ink:#F7EFE2;--body:rgba(247,239,226,.84);--mute:rgba(247,239,226,.58);--line:rgba(247,239,226,.14);--accent:#F28F6B;--warn:#2B2030;--shadow:0 1px 2px rgba(0,0,0,.4),0 12px 30px -12px rgba(0,0,0,.6)}
+body{background:#080F1E}
+.card{box-shadow:0 30px 80px -20px rgba(0,0,0,.7)}
+.band svg{filter:saturate(.85) brightness(.82)}
+.reply{background:var(--accent);color:#0C1528}.reply-k{color:#0C1528;opacity:.7}.reply-off{background:var(--sand);color:var(--ink)}.reply-off .reply-k{color:var(--accent);opacity:1}
+th{background:var(--sand);color:var(--ink)}
+.dl a{color:var(--ink)}
+}
+@media print{.band{display:none}.card{margin:0;box-shadow:none;width:100%;max-width:none}.card>*,.band svg{animation:none}.reply,.pa,.dl{display:none}}
 </style></head>
 <body>
 <div class="band" aria-hidden="true">${sunriseSvg({ id: 'f', sunX: 900, boatX: 300, horizon: 330 })}</div>
