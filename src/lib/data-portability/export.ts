@@ -61,7 +61,7 @@ async function readRows(db: ReturnType<typeof createServerClient>, section: Expo
     if (last !== null) query = query.gt(section.key, last)
     const { data, error } = await query
     if (error) throw new Error(`Export read failed: ${section.table}`)
-    const page = (data ?? []) as ExportRow[]
+    const page = (data ?? []) as unknown as ExportRow[]
     rows.push(...page)
     if (Buffer.byteLength(JSON.stringify(rows)) > MAX_BYTES) throw new Error('Export too large for chat delivery')
     if (page.length < PAGE) return rows
@@ -138,5 +138,5 @@ export async function canDeliverDataExport(chatGuid: string, handle: string | nu
   if (process.env.DINGHY_DATA_EXPORT_ENABLED !== '1' || !handle) return false
   const { data, error } = await createServerClient().from('spectrum_identities')
     .select('handle').eq('chat_guid', chatGuid).maybeSingle()
-  return !error && Boolean(data?.handle) && data.handle === handle
-}
+  return !error && Boolean(data?.handle) && data?.handle === handle
+  }
