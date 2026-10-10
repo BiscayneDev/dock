@@ -61,8 +61,10 @@ import {
 import { earlierUserText, loadActiveRuns, steerNote } from './active-run'
 import { claimInboundDelivery, enqueueOutbox, markOutboxFailed, markOutboxSent, type OutboxKind } from './outbox'
 import { briefableUserId, handleMuteIntent } from './briefing'
+import { chooseCurrentPlace, isPlaceOnlyMessage, placeStatement, travelAck } from './place'
+import { currentStatement, freshPin } from './place-load'
 import { isLocationAttachment, parseLocation, saveUserLocation } from './location'
-import { currentTravelPlace, localClockContext, parseTimezoneIntent, resolvePlaceTimezone, resolvePinTimezone, setChatTimezone, timezoneAck } from './timezone'
+import { localClockContext, parseHomeTimezoneIntent, validIanaTimezone, resolvePlaceTimezone, resolvePinTimezone, setChatTimezone, timezoneAck } from './timezone'
 import { describeImage, readInboundAttachment, type InboundAttachmentContent } from './attachments'
 import { sendLink, splitStandaloneUrl, type LinkSender } from './links'
 import {
@@ -319,10 +321,9 @@ async function maybeHandleLocationShare(space: InboundSpace, message: InboundMes
         return true
     }
     await saveUserLocation(userId, loc)
-    const changed = await setChatTimezone(chatGuid, zone)
-    await sendText(space, chatGuid, 'reply', changed
-        ? timezoneAck({ zone, label: zone.split('/').pop()!.replaceAll('_', ' ') })
-        : "I couldn't save that timezone. Please try again.")
+    // A pin is where they are, not where they live: record it, never rewrite home.
+    const label = loc.label ?? zone.split('/').pop()!.replaceAll('_', ' ')
+    await sendText(space, chatGuid, 'reply', `Got it. I'll use ${label} (${zone}) for this chat's clock while the pin is fresh (15 minutes). Your home timezone stays as it is.`)
     return true
 }
 
@@ -523,7 +524,18 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     // A direct location or timezone update runs only in an allowlisted, signed
     // chat after the rate gate, before the model can guess a timezone.
     if (textIntents) {
-        const place = parseTimezoneIntent(text)
+        const place = parseHomeTimezoneIntent(text)
+        const stated = place ? null : placeStatement(text)
+        if (stated && isPlaceOnlyMessage(text)) {
+            const resolved = stated.kind === 'at' ? await resolvePlaceTimezone(stated.place).catch(() => null) : null
+            if (stated.kind === 'home' || resolved?.kind === 'one') {
+                await saveMessage(chatGuid, 'user', text).catch(() => {})
+                const reply = stated.kind === 'home' ? 'Welcome back. Back on your home time.' : travelAck(resolved!.kind === 'one' ? resolved.choice.label : '', (await loadImessageToolContext(chatGuid).catch(() => null))?.timezone ?? 'UTC')
+                await sendText(space, chatGuid, 'reply', reply)
+                await saveMessage(chatGuid, 'assistant', reply).catch(() => {})
+                return
+            }
+        }
         if (place) {
             await saveMessage(chatGuid, 'user', text).catch(() => {})
             try {
@@ -978,14 +990,30 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         })
         // Right model for the task: Shipyard's Jev judges each call's tier
         // (routing.ts). Dinghy only pins the provider allowlist.
-        // Stated travel overrides the home zone for this turn only. Do not
-        // rewrite the permanent morning timezone from a work-trip aside.
-        const travelPlace = currentTravelPlace(text)
-        if (toolCtx && travelPlace) {
-            const travelZone = await withinTurn(deadlineAt, () => resolvePlaceTimezone(travelPlace)).catch(() => null)
-            if (travelZone?.kind === 'one') toolCtx.timezone = travelZone.choice.zone
+        // Current place is derived from recent user statements or a fresh pin.
+        // Capture saved home before swapping the turn-local tool context.
+        let away: { home: string; label: string; source: 'statement' | 'pin' } | undefined
+        if (toolCtx) {
+            const home = toolCtx.timezone
+            const stated = await withinTurn(deadlineAt, async () => {
+                const st = placeStatement(text) ? { ...placeStatement(text)!, at: Date.now() } : await currentStatement(chatGuid)
+                if (!st) return null
+                if (st.kind === 'home') return { home: true as const }
+                const r = await resolvePlaceTimezone(st.place).catch(() => null)
+                return r?.kind === 'one' ? r.choice : null
+            }).catch(() => null)
+            let pin: { zone: string; label: string; observedAt: number } | null = null
+            if (!stated) {
+                const uid = await briefableUserId(chatGuid).catch(() => null)
+                const p = uid ? await freshPin(uid).catch(() => null) : null
+                const z = p ? await withinTurn(deadlineAt, () => resolvePinTimezone(p)).catch(() => null) : null
+                if (p && z) pin = { zone: z, label: p.label ?? z.split('/').pop()!.replaceAll('_', ' '), observedAt: p.observedAt }
+            }
+            const cur = chooseCurrentPlace({ home, stated, pin, now: Date.now() })
+            if (validIanaTimezone(cur.zone)) toolCtx.timezone = cur.zone
+            if (cur.source !== 'home') away = { home, label: cur.label, source: cur.source }
         }
-        const clock = localClockContext(toolCtx?.timezone ?? 'UTC')
+        const clock = localClockContext(toolCtx?.timezone ?? 'UTC', new Date(), away)
         const routing = routingFor()
         let reply: string
         let replyTainted = false
@@ -1193,4 +1221,4 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         clearTimeout(eyesTimer)
         stopTypingReTap(space, typingHandle)
     }
-    }
+            }
