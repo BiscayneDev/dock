@@ -593,23 +593,21 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
 
     const t0 = Date.now()
     // Memory loads in parallel with history; any failure means no memory.
-    const memoryP = loadMemoryContext(chatGuid, text).catch((err) => {
-        logErr('memory load failed', err)
-        return EMPTY_MEMORY
-    })
-    // A DB blip degrades to no-history, never a dead tail.
-    const history = await loadHistory(chatGuid, MAX_HISTORY).catch((err) => {
-        logErr('history load failed', err)
-        return [] as HistoryMessage[]
-    })
-    const facts = productFactsFor(
-        role,
-        await loadFacts().catch((err) => {
+    const [memory, history, loadedFacts] = await Promise.all([
+        loadMemoryContext(chatGuid, text).catch((err) => {
+            logErr('memory load failed', err)
+            return EMPTY_MEMORY
+        }),
+        loadHistory(chatGuid, MAX_HISTORY).catch((err) => {
+            logErr('history load failed', err)
+            return [] as HistoryMessage[]
+        }),
+        loadFacts().catch((err) => {
             logErr('facts load failed', err)
             return [] as DinghyFact[]
-        })
-    )
-    const memory = await memoryP
+        }),
+    ])
+    const facts = productFactsFor(role, loadedFacts)
     const memoryBlock = renderMemoryBlock(memory)
     const tContext = Date.now()
     // The opener is for a genuinely new chat only: no history and no
@@ -939,7 +937,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     try {
         // Read tools only for chats bound to a user with Google/PayBox connected;
         // everyone else gets the plain conversational path.
-        await onStage('context')
+        await onStage('context', `preflight_ms=${Date.now() - turnStartedAt}`)
         const toolCtx = await withinTurn(deadlineAt, () => loadImessageToolContext(chatGuid)).catch((err) => {
             if (err instanceof TurnDeadlineExceeded) throw err
             logErr('tool context load failed', err)
@@ -1027,7 +1025,10 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 onUsage,
             })
         }
-        await onStage('reply_ready')
+        await onStage('reply_ready', JSON.stringify({
+            gatewayMs: usage.reduce((sum, u) => sum + u.latencyMs, 0),
+            workMs: Date.now() - tChatStart,
+        }))
         const tChatEnd = Date.now()
         clearTimeout(eyesTimer)
         const recentAfter = await loadHistory(chatGuid, 6).catch(() => [] as HistoryMessage[])

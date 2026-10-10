@@ -146,18 +146,16 @@ export async function loadImessageToolContext(chatGuid: string): Promise<UserCon
     if (!userId) userId = await provisionSpectrumIdentity(chatGuid)
     if (!userId) return null
 
-    const { data: user, error: userError } = await supabase
-        .from('users')
-        .select('id, name, timezone')
-        .eq('id', userId)
-        .maybeSingle()
-
+    // Both reads depend only on the verified binding, not on each other.
+    const [userResult, tokenResult] = await Promise.all([
+        supabase.from('users').select('id, name, timezone').eq('id', userId).maybeSingle(),
+        supabase.from('oauth_tokens')
+            .select('provider, provider_account_email, access_token, refresh_token, expires_at')
+            .eq('user_id', userId),
+    ])
+    const { data: user, error: userError } = userResult
+    const { data: tokenRows, error: tokenError } = tokenResult
     if (userError || !user?.id) return null
-
-    const { data: tokenRows, error: tokenError } = await supabase
-        .from('oauth_tokens')
-        .select('provider, provider_account_email, access_token, refresh_token, expires_at')
-        .eq('user_id', userId)
 
     if (tokenError) throw new Error(`OAuth token lookup failed: ${tokenError.message}`)
 

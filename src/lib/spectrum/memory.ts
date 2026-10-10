@@ -114,10 +114,14 @@ export async function resolveUserId(chatGuid: string): Promise<string | null> {
 
 export async function loadMemoryContext(chatGuid: string, query: string): Promise<MemoryContext> {
     const supabase = createServerClient()
-    const userId = await resolveUserId(chatGuid).catch(() => null)
-    // One embedding per message, shared by fact and summary recall. Bounded
-    // so a slow embeddings API never delays the reply.
-    const embedding = query.trim().length >= 3 ? await withTimeout(embedText(query), EMBED_READ_TIMEOUT_MS).catch(() => null) : null
+    // Identity and embedding are independent; keep the full recall path,
+    // but overlap them instead of paying both waits before the DB reads.
+    const [userId, embedding] = await Promise.all([
+        resolveUserId(chatGuid).catch(() => null),
+        query.trim().length >= 3
+            ? withTimeout(embedText(query), EMBED_READ_TIMEOUT_MS).catch(() => null)
+            : Promise.resolve(null),
+    ])
     const ctxRpc = userId ? 'dinghy_user_memory_context' : 'dinghy_memory_context'
     const ctxArgs = userId ? { p_user_id: userId } : { p_chat_guid: chatGuid }
     const [ctxRes, facts, older, plans, files] = await Promise.all([
@@ -457,4 +461,4 @@ export async function forgetMemories(chatGuid: string, match: string): Promise<n
     const { data, error } = await createServerClient().rpc(rpc as string, args)
     if (error) throw new Error(`${rpc} failed: ${error.message}`)
     return (data as number) ?? 0
-}
+    }
