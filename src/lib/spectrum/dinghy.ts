@@ -586,6 +586,7 @@ export async function chatWithTools(
     messages = withVolatileNote(messages, [opts.volatile, opts.interviewLine].filter(Boolean).join('\n\n')) as Record<string, unknown>[]
 
     let placesMismatch: string | null = null
+    let independentTool = false
     let toolCallCount = 0
     let successfulSearches = 0
     let sourceOnly = true
@@ -663,7 +664,7 @@ export async function chatWithTools(
         const calls = msg?.tool_calls ?? []
 
         if (choice?.finish_reason !== 'tool_calls' || calls.length === 0) {
-            const reply = placesMismatch ?? msg?.content ?? '(no response)'
+            const reply = (!independentTool ? placesMismatch : null) ?? msg?.content ?? '(no response)'
             if (!pageRetry && !pageAttempted && tools.some((t) => t.name === 'create_file') && (needsAnswerPage(reply) || needsFileRepair(reply)) && iteration < MAX_TOOL_ITERATIONS && (opts.deadlineAt === undefined || opts.deadlineAt - Date.now() >= 20_000)) {
                 pageRetry = true
                 completionMode = true
@@ -676,6 +677,7 @@ export async function chatWithTools(
         messages.push({ role: 'assistant', content: msg?.content ?? null, tool_calls: calls })
         for (const call of calls) {
             toolCallCount++
+            if (call.function.name !== 'find_places') independentTool = true
             const tool = tools.find((t) => t.name === call.function.name)
             let content: string
             if (completionMode && (call.function.name === 'web_search' || (pageAttempted && call.function.name === 'create_file'))) {
@@ -754,7 +756,7 @@ export async function chatWithTools(
     reportUsage(opts.onUsage, res, data, opts.model, Date.now() - tFinal)
     await logGatewayCall(buildCallRow(synthCtx, 'ok', tFinal, res, data))
     return {
-        reply: placesMismatch ?? data.choices?.[0]?.message?.content ?? '(no response)',
+        reply: (!independentTool ? placesMismatch : null) ?? data.choices?.[0]?.message?.content ?? '(no response)',
         toolCalls: toolCallCount,
         iterations: MAX_TOOL_ITERATIONS + 1,
         tainted,
