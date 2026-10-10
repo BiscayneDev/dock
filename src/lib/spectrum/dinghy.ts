@@ -686,7 +686,7 @@ export async function chatWithTools(
                     if (call.function.name === 'create_file') pageAttempted = true
                     if (!['web_search', 'web_fetch'].includes(call.function.name)) sourceOnly = false
                     const result = await withinTurn(opts.deadlineAt, () => Promise.race([
-                        tool.execute(input, ctx),
+                        tool.execute(input, call.function.name === 'create_file' ? { ...ctx, photosOk: !tainted } : ctx),
                         new Promise<never>((_, reject) =>
                             setTimeout(() => reject(new Error(`tool timed out after ${TOOL_TIMEOUT_MS / 1000}s`)), TOOL_TIMEOUT_MS)
                         ),
