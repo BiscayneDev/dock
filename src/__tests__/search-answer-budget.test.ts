@@ -7,7 +7,7 @@ const opts = { gatewayUrl: 'https://gateway.test', apiKey: 'test', model: 'test'
 const answer = '1. A - verified option\n2. B - verified option\n3. C - verified option'
 function tool(name: string, success = true): Tool { return { name, description: name, inputSchema: {}, execute: vi.fn(async () => ({ success, data: { results: [{ url: 'https://venue.test/menu' }] }, error: success ? undefined : 'unavailable' })) } }
 function response(name?: string, reply = 'Done.') { return new Response(JSON.stringify({ choices: [{ finish_reason: name ? 'tool_calls' : 'stop', message: name ? { content: null, tool_calls: [{ id: Math.random().toString(), function: { name, arguments: '{}' } }] } : { content: reply } }] })) }
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers() })
 describe('research completion headroom', () => {
   it('stops repeated search with time left for page creation and keeps returned evidence', async () => {
     let now = 1000
@@ -37,6 +37,38 @@ describe('research completion headroom', () => {
     vi.stubGlobal('fetch', vi.fn(async (_url, init) => { bodies.push(JSON.parse(init.body)); return bodies.length === 1 ? response('web_search') : response() }))
     await chatWithTools([{ role: 'user', content: 'Research' }], { ...opts, deadlineAt: Date.now() + 30_000 }, [search], ctx)
     expect(bodies[1].tools[0].function.name).toBe('web_search')
+  })
+})
+describe('post-search gateway rescue', () => {
+  it('returns only observed links when the bounded gateway stalls', async () => {
+    vi.useFakeTimers()
+    const search = tool('web_search'); let n = 0; const bodies: any[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      bodies.push(JSON.parse(init.body))
+      if (++n === 1) return response('web_search')
+      return new Promise<Response>((_resolve, reject) => init.signal.addEventListener('abort', () => reject(new Error('aborted'))))
+    }))
+    const run = chatWithTools([{ role: 'user', content: 'Dinner near my hotel' }], { ...opts, deadlineAt: Date.now() + 50_000 }, [search], ctx)
+    await vi.advanceTimersByTimeAsync(25_000)
+    const r = await run
+    expect(r.reply).toContain('not verified recommendations')
+    expect(r.reply).toContain('https://venue.test/menu')
+    expect(bodies[1].max_tokens).toBe(1200)
+    vi.useRealTimers()
+  })
+  it('does not turn a deadline after an action into a source-only completion', async () => {
+    vi.useFakeTimers()
+    const search = tool('web_search'), action = tool('gcal_create'); let n = 0
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      if (++n === 1) return response('web_search')
+      if (n === 2) return response('gcal_create')
+      return new Promise<Response>((_resolve, reject) => init.signal.addEventListener('abort', () => reject(new Error('aborted'))))
+    }))
+    const run = chatWithTools([{ role: 'user', content: 'Research and schedule' }], { ...opts, deadlineAt: Date.now() + 50_000 }, [search, action], ctx)
+    const expectation = expect(run).rejects.toThrow('turn deadline exceeded')
+    await vi.advanceTimersByTimeAsync(50_000)
+    await expectation
+    vi.useRealTimers()
   })
 })
 describe('answer page retry', () => {
