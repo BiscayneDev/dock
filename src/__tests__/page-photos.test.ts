@@ -93,7 +93,11 @@ describe('fail-closed attribution', () => {
     })
     it('allows only exact licences', async () => {
         for (const l of ['CC BY 4.0 International', 'CC BY-NC 4.0', 'CC BY-SA', 'GFDL', 'CC BY 4.0x']) expect(await findPhoto('Harbor Skiff', 'general', one({ ...good, LicenseShortName: { value: l } }))).toBeNull()
-        expect(await findPhoto('Harbor Skiff', 'general', one({ ...good, LicenseShortName: { value: 'CC BY-SA 3.0' } }))).not.toBeNull()
+        expect(await findPhoto('Harbor Skiff', 'general', one({ ...good, LicenseShortName: { value: 'CC BY-SA 3.0' }, LicenseUrl: { value: 'https://creativecommons.org/licenses/by-sa/3.0/' } }))).not.toBeNull()
+    })
+    it('skips a mismatched license URL', async () => {
+        expect(await findPhoto('Harbor Skiff', 'general', one({ ...good, LicenseShortName: { value: 'CC BY-SA 3.0' } }))).toBeNull()
+        expect(await findPhoto('Harbor Skiff', 'general', one({ ...good, LicenseUrl: { value: 'https://creativecommons.org/licenses/by/4.0/extra' } }))).toBeNull()
     })
     it('does not match on categories alone', async () => {
         expect(await findPhoto('Harbor Skiff', 'general', one({ ...good, Categories: { value: 'Other' } }))).not.toBeNull()
