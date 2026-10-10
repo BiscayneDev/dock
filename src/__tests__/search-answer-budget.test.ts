@@ -91,3 +91,18 @@ describe('answer page retry', () => {
   })
   it('keeps short answers in chat', () => { expect(needsAnswerPage('The restaurant opens at 6.')).toBe(false); expect(needsAnswerPage(answer)).toBe(true) })
 })
+
+describe('fabricated file claims', () => {
+  it('repairs a short stale-link announcement inside the same evidence-bearing loop', async () => {
+    const file = tool('create_file'), search = tool('web_search'); const bodies: any[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      bodies.push(JSON.parse(init.body))
+      return bodies.length === 1 ? response('web_search') : bodies.length === 2 ? response(undefined, "I've compiled a document. Here is the link: https://old-page.here.now/") : response('create_file')
+    }))
+    const r = await chatWithTools([{ role: 'user', content: 'Compare these vehicles' }], opts, [search, file], ctx)
+    expect(file.execute).toHaveBeenCalledOnce()
+    expect(JSON.stringify(bodies[2].messages)).toContain('https://venue.test/menu')
+    expect(JSON.stringify(bodies[2].messages)).toContain('An older URL from history is not the new document')
+    expect(r.reply).toBe('Here you go.')
+  })
+})
