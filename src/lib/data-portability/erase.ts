@@ -2,7 +2,8 @@ import { createHash, randomBytes } from 'node:crypto'
 import { createServerClient } from '@/lib/supabase/server'
 import { decryptTokenFromDb } from '@/lib/crypto'
 import { revokeGoogleToken } from '@/lib/integrations/revoke'
-import { revokeSite, slugFrom } from '@/lib/files/share'
+import { listOwnedSites, revokeOwnedSite } from '@/lib/files/share'
+import { sandboxOwnerTag } from './owner-tag'
 import { erasureEnabled } from './erasure-state'
 
 export { ERASE_WARNING } from './erasure-copy'
@@ -10,14 +11,14 @@ export { ERASE_WARNING } from './erasure-copy'
 export function confirmPhrase(text: string): boolean { return text === 'DELETE MY DATA' }
 export function hashEraseToken(token: string): string { return createHash('sha256').update(token).digest('hex') }
 export async function requestErase(userId: string): Promise<{ id: string; token: string }> {
-  if (!erasureEnabled() || process.env.DINGHY_ERASURE_HOST_INVENTORY_VERIFIED!=='1') throw new Error('Data deletion is not enabled')
+  if (!erasureEnabled()) throw new Error('Data deletion is not enabled')
   const token = randomBytes(32).toString('base64url')
   const { data, error } = await createServerClient().rpc('dinghy_erasure_request', { p_user_id: userId, p_hash: hashEraseToken(token) })
   if (error || typeof data !== 'string') throw new Error('Could not start deletion')
   return { id: data, token }
 }
 export async function confirmErase(userId: string, id: string, token: string, phrase: string): Promise<boolean> {
-  if (!erasureEnabled() || process.env.DINGHY_ERASURE_HOST_INVENTORY_VERIFIED!=='1' || !confirmPhrase(phrase) || !/^[0-9a-f-]{36}$/i.test(id) || !/^[A-Za-z0-9_-]{43}$/.test(token)) return false
+  if (!erasureEnabled() || !confirmPhrase(phrase) || !/^[0-9a-f-]{36}$/i.test(id) || !/^[A-Za-z0-9_-]{43}$/.test(token)) return false
   const { data, error } = await createServerClient().rpc('dinghy_erasure_confirm', { p_user_id: userId, p_job: id, p_hash: hashEraseToken(token) })
   if (error) throw new Error('Could not confirm deletion')
   return data === true
@@ -72,24 +73,30 @@ export function cleanupOps(): CleanupOps {
       if (error || (data?.length ?? 0)>=1000) throw new Error('login_sandbox_inventory_failed')
       const ids = new Set(sessions.map(s => s.sandbox_id).filter((s): s is string => typeof s==='string'))
       for (const row of data ?? []) if (typeof row.params?.sandbox_id==='string') ids.add(row.params.sandbox_id)
-      for (const id of ids) {
-        try {
-          if (!process.env.E2B_API_KEY) throw new Error('sandbox_credentials_unavailable')
-          const { Sandbox } = await import('e2b')
-          await Sandbox.kill(id)
-        } catch (err) {
-          // Only an explicit provider 404 is idempotent success, not any failure.
-          if (!(err && typeof err==='object' && 'statusCode' in err && err.statusCode===404)) throw new Error('sandbox_cleanup_failed')
-        }
+      if (!process.env.E2B_API_KEY) {
+        if(ids.size) throw new Error('sandbox_credentials_unavailable')
+        return
       }
+      const { Sandbox } = await import('e2b')
+      async function listed():Promise<string[]> {
+        const p=Sandbox.list({query:{metadata:{dinghy_owner:sandboxOwnerTag(j.user_id)},state:['running','paused']}})
+        const found:string[]=[]
+        while(p.hasNext) {
+          for(const row of await p.nextItems()) {
+            if(row.metadata?.dinghy_owner!==sandboxOwnerTag(j.user_id)) throw new Error('sandbox_owner_mismatch')
+            found.push(row.sandboxId)
+          }
+        }
+        return found
+      }
+      for(const id of await listed())ids.add(id)
+      for(const id of ids)await Sandbox.kill(id)
+      if((await listed()).length)throw new Error('sandbox_cleanup_unverified')
     },
     async removePages(j) {
-      if (process.env.DINGHY_ERASURE_HOST_INVENTORY_VERIFIED!=='1') throw new Error('hosted_inventory_unverified')
-      for (const row of await allRows('dinghy_files','id,url',j.user_id)) {
-        if (typeof row.url==='string' && slugFrom(row.url)) await revokeSite(row.url,j.user_id)
-      }
-      // No verified list-by-owner endpoint exists in this code. A DB-missing
-      // page cannot be found by guessing a URL: do not claim full completion.
+      const sites=await listOwnedSites(j.user_id)
+      for(const link of sites)await revokeOwnedSite(link,j.user_id)
+      if((await listOwnedSites(j.user_id)).length)throw new Error('hosted_delete_unverified')
     },
     async removeStorage(j) {
       const bucket = db.storage.from('dinghy-files')
@@ -125,7 +132,7 @@ export function cleanupOps(): CleanupOps {
 export async function processErasure(): Promise<'off'|'idle'|'complete'|'blocked'> {
   if (!erasureEnabled()) return 'off'
   // Activation requires an independently verified hosted-object inventory.
-  if (process.env.DINGHY_ERASURE_HOST_INVENTORY_VERIFIED !== '1') return 'blocked'
+  if (process.env.DINGHY_ERASURE_LEGACY_SANDBOX_INVENTORY_VERIFIED !== '1') return 'blocked'
   const db=createServerClient()
   const { data, error }=await db.rpc('dinghy_erasure_claim')
   if (error) throw new Error('Deletion queue unavailable')
