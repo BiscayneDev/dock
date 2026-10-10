@@ -129,6 +129,19 @@ export interface HtmlOptions {
     download?: { href: string; label: string }
 }
 
+// "> Pick: Hotel X" (or "> **Pick:** ...") leads the page as a highlighted verdict card.
+const PICK = /^\*{0,2}(?:top )?pick\s*:\s*\*{0,2}\s*/i
+
+/** Tables get a data-label on every cell so phones can stack each row into a card. */
+export function renderTable(t: Tokens.Table): string {
+    const heads = t.header.map((h) => h.text)
+    const head = `<tr>${t.header.map((h) => `<th>${marked.parseInline(h.text)}</th>`).join('')}</tr>`
+    const rows = t.rows
+        .map((r) => `<tr>${r.map((c, i) => `<td data-label="${esc(heads[i] ?? '')}">${marked.parseInline(c.text)}</td>`).join('')}</tr>`)
+        .join('')
+    return `<table class="tbl"><thead>${head}</thead><tbody>${rows}</tbody></table>`
+}
+
 export function renderHtml(doc: DinghyDoc, opts: HtmlOptions = {}): string {
     const body: string[] = []
     for (const t of tokens(doc.body)) {
@@ -147,7 +160,11 @@ export function renderHtml(doc: DinghyDoc, opts: HtmlOptions = {}): string {
             body.push(allRows ? `<div class="rows">${items.join('')}</div>` : `<${l.ordered ? 'ol' : 'ul'}>${items.join('')}</${l.ordered ? 'ol' : 'ul'}>`)
         } else if (t.type === 'hr') body.push('<hr>')
         else if (t.type === 'space') continue
-        else body.push(marked.parser([t]))
+        else if (t.type === 'table') body.push(renderTable(t as Tokens.Table))
+        else if (t.type === 'blockquote' && PICK.test((t as Tokens.Blockquote).text.trim())) {
+            const q = t as Tokens.Blockquote
+            body.push(`<aside class="pick"><span class="pick-label">top pick</span>${marked.parse(q.text.trim().replace(PICK, ''), { async: false }) as string}</aside>`)
+        } else body.push(marked.parser([t]))
     }
     const desc = opts.description ?? doc.subtitle ?? 'Made by Dinghy.'
     const og = opts.ogImage
@@ -183,12 +200,13 @@ table{width:100%;border-collapse:collapse;margin:16px 0;font-size:15px}
 th{font:500 11px 'DM Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);text-align:left;padding:10px 12px;background:var(--sand)}
 th:first-child{border-radius:8px 0 0 8px}th:last-child{border-radius:0 8px 8px 0}
 td{padding:10px 12px;border-bottom:1px solid var(--line)}
+.pick{margin:22px 0;padding:18px 22px;border-radius:18px;background:var(--sand);border-left:4px solid var(--accent);color:var(--ink);font-size:18px}.pick p{margin:6px 0 0}.pick-label{display:block;font:500 10px/1 'DM Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
 blockquote{margin:20px 0;padding:14px 18px;border-radius:16px;background:var(--sand);color:var(--ink);font:italic 400 19px/1.45 Fraunces,Georgia,serif}blockquote p{margin:0}
 code{font:14px 'DM Mono',monospace;background:var(--sand);padding:1px 6px;border-radius:6px}
 hr{border:0;border-top:1px solid var(--line);margin:32px 0}
 .dl{margin:14px 0 0;font:500 11px/1 'DM Mono',monospace;letter-spacing:.14em;text-transform:uppercase}.dl a{text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:8px 14px;display:inline-block}
 .foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;max-width:720px;margin:0 auto;padding:36px 24px 44px;font:500 10px 'DM Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}.foot a{color:inherit;text-decoration:none}
-@media (max-width:600px){.band{height:220px}.card{margin-top:-52px;padding:28px 22px 26px}h1{font-size:36px}h2{font-size:24px}body{font-size:16px}.row{grid-template-columns:84px 1fr}}
+@media (max-width:600px){table.tbl,table.tbl tbody,table.tbl tr,table.tbl td{display:block;width:100%}table.tbl thead{display:none}table.tbl tr{margin:12px 0;padding:6px 14px;border:1px solid var(--line);border-radius:16px}table.tbl td{border:0;padding:6px 0}table.tbl td::before{content:attr(data-label);display:block;font:500 10px/1.6 'DM Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}table.tbl td:first-child{font:500 19px/1.3 Fraunces,Georgia,serif;color:var(--ink)}table.tbl td:first-child::before{display:none}.band{height:220px}.card{margin-top:-52px;padding:28px 22px 26px}h1{font-size:36px}h2{font-size:24px}body{font-size:16px}.row{grid-template-columns:84px 1fr}}
 </style></head>
 <body>
 <div class="band" aria-hidden="true">${sunriseSvg({ id: 'f', sunX: 900, boatX: 300, horizon: 330 })}</div>

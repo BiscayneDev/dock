@@ -18,7 +18,7 @@ vi.mock('@/lib/supabase/server', () => ({
   createServerClient: () => ({ from: () => db, storage: { from: () => ({ upload, createSignedUrl }) } }),
 }))
 
-import { renderFile } from '@/lib/files/render'
+import { renderFile, renderHtml } from '@/lib/files/render'
 import { fileToolsFor, parseFileInput, FILES_BUCKET } from '@/lib/files/tool'
 import { ownerTag, slugFrom } from '@/lib/files/share'
 import type { UserContext } from '@/lib/llm/types'
@@ -273,5 +273,25 @@ describe('file memory', () => {
     findFile.mockResolvedValueOnce(null)
     expect((await recall.execute({ query: 'tokyo' }, ctx)).success).toBe(false)
     expect((await recall.execute({}, ctx)).success).toBe(false)
+  })
+})
+
+describe('answer pages: pick card and mobile tables', () => {
+  it('turns a "Pick:" quote into a top-pick card and stacks table cells with labels', () => {
+    const html = renderHtml({
+      title: 'Hotels in Lisbon',
+      body: '> Pick: Hotel A, closest to the venue.\n\n| Hotel | Price |\n| --- | --- |\n| Hotel A | $210 |\n| Hotel B | $150 |\n',
+    })
+    expect(html).toContain('class="pick"')
+    expect(html).toContain('top pick')
+    expect(html).toContain('Hotel A, closest to the venue.')
+    expect(html).not.toContain('<blockquote>Pick')
+    expect(html).toContain('class="tbl"')
+    expect(html).toContain('data-label="Price"')
+  })
+  it('leaves ordinary quotes as quotes', () => {
+    const html = renderHtml({ title: 'T', body: '> a calm note\n' })
+    expect(html).toContain('<blockquote>')
+    expect(html).not.toContain('class="pick"')
   })
 })
