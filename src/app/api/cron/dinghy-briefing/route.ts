@@ -1,3 +1,4 @@
+import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 /**
  * Dinghy morning briefing (cron, hourly at 8am in each user timezone): one iMessage per bound Spectrum
  * identity — today's calendar, unread/important email, and (owner only)
@@ -262,6 +263,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             if (forced) await clearBriefingForce(ctx.userId).catch(() => {})
             // Best-effort immediate send; the sweep covers any failure.
             try {
+                await assertAccountActive(ctx.userId,chatGuid)
                 const space = await im.space.get(chatGuid)
                 if (brief) await sendBrief(space, { card: brief.card, text })
                 else await space.send(toPlainText(text))
