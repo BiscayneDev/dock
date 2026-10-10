@@ -8,7 +8,7 @@
  * the HTML, so a page cannot pull from a third-party server when it opens.
  */
 
-export const KIND_BLOCKS = ['weather', 'scores', 'media', 'stay', 'route', 'briefing', 'gallery'] as const
+export const KIND_BLOCKS = ['weather', 'scores', 'media', 'stay', 'route', 'briefing', 'gallery', 'lead', 'checks'] as const
 export type KindBlock = (typeof KIND_BLOCKS)[number]
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -189,6 +189,36 @@ function renderGallery(lines: string[]): string {
     return `<div class="gal gal-${Math.min(figs.length, 3)}">${figs.join('')}</div>`
 }
 
+const FOCUS: Record<string, string> = { price: 'price', cost: 'price', family: 'family fit', fit: 'fit', place: 'location', location: 'location', access: 'access', time: 'timing' }
+
+/** lead: "for | name", "focus | price", "pick | name | why", "beat | name | why it lost", "care | chip | chip". The page opens on the pick and what it was built around. */
+function renderLead(lines: string[]): string {
+    const rows: Record<string, string[]> = {}
+    for (const l of lines.slice(0, 8)) { const [k, ...v] = cells(l); if (k && !rows[k.toLowerCase()]) rows[k.toLowerCase()] = v }
+    const pick = rows.pick
+    if (!pick?.[0]) return ''
+    const who = rows.for?.[0]
+    const focus = FOCUS[(rows.focus?.[0] ?? '').toLowerCase()]
+    const beat = rows.beat
+    const care = (rows.care ?? []).filter(Boolean).slice(0, 5)
+    return `<section class="ld"><div class="ld-top">${who ? `<span class="ld-for">Made for ${esc(who)}</span>` : ''}${focus ? `<span class="ld-focus">Built around ${esc(focus)}</span>` : ''}</div>`
+        + `<h3 class="ld-pick">${esc(pick[0])}</h3>${pick[1] ? `<p class="ld-why">${esc(pick[1])}</p>` : ''}`
+        + (beat?.[0] ? `<p class="ld-beat"><span>Beat</span> ${esc(beat[0])}${beat[1] ? ` - ${esc(beat[1])}` : ''}</p>` : '')
+        + (care.length ? `<div class="ld-care">${care.map((c) => `<span>${esc(c)}</span>`).join('')}</div>` : '') + '</section>'
+}
+
+/** checks: "claim | confirmed or unverified | where it came from | when". Anything not clearly confirmed shows as unverified. */
+function renderChecks(lines: string[]): string {
+    const rows = lines.slice(0, 8).map((l) => {
+        const [claim, status, where, when] = cells(l)
+        if (!claim) return ''
+        const ok = /^confirmed$/i.test(status ?? '') && Boolean(where?.trim()) && Boolean(when?.trim())
+        const meta = [where, when ? `checked ${when}` : ''].filter(Boolean).map(esc).join(' · ')
+        return `<li class="${ok ? 'ck-ok' : 'ck-no'}"><span class="ck-tag">${ok ? 'Confirmed' : 'Unverified'}</span><span class="ck-t">${esc(claim)}${meta ? `<small>${meta}</small>` : ''}</span></li>`
+    }).filter(Boolean)
+    return rows.length ? `<ul class="ck">${rows.join('')}</ul>` : ''
+}
+
 export function renderKind(name: KindBlock, lines: string[]): string {
     switch (name) {
         case 'weather': return renderWeather(lines)
@@ -198,6 +228,8 @@ export function renderKind(name: KindBlock, lines: string[]): string {
         case 'route': return renderRoute(lines)
         case 'briefing': return renderBriefing(lines)
         case 'gallery': return renderGallery(lines)
+        case 'lead': return renderLead(lines)
+        case 'checks': return renderChecks(lines)
     }
 }
 
@@ -252,5 +284,18 @@ h4{margin:0;font:500 21px/1.2 Fraunces,Georgia,serif;letter-spacing:-.01em;color
 .gal figcaption{position:absolute;left:0;right:0;bottom:0;padding:26px 14px 10px;color:#fff;font-size:13px;background:linear-gradient(transparent,rgba(8,15,30,.78))}.gal small{display:block;opacity:.75;font-size:10px;margin-top:2px}
 @media (max-width:600px){.wx-now{font-size:60px}.wx-hero{padding:22px}.wx-day{grid-template-columns:44px 26px 32px 1fr 32px 0}.wx-dr{display:none}.md{grid-template-columns:92px 1fr}.st{grid-template-columns:1fr}.st-pic{min-height:170px}.st-b{padding:0 16px 14px}.gal-2,.gal-3{grid-template-columns:1fr}}
 @media (prefers-color-scheme:dark){.wx-dg path[fill="#fff"]{fill:#fff}.sc,.wx,.md,.st{box-shadow:var(--shadow)}.wx-hero,.md-blank,.st-blank{filter:brightness(.92)}}
-@media print{.wx,.sc,.md,.st{box-shadow:none;break-inside:avoid}}
+.ld,.ck{margin:20px 0}
+.ld{border:1px solid var(--line);border-radius:var(--r,20px);padding:24px 26px;background:var(--paper);box-shadow:var(--shadow)}
+.ld-top{display:flex;flex-wrap:wrap;gap:8px 14px;font:500 12px/1 'DM Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}.ld-focus{color:var(--accent)}
+.ld-pick{margin:14px 0 6px;font:500 32px/1.12 Fraunces,Georgia,serif;letter-spacing:-.015em;color:var(--ink)}
+.ld-why{margin:0 0 12px;font-size:17px;line-height:1.5;color:var(--body)}
+.ld-beat{margin:0 0 14px;font-size:14px;color:var(--mute)}.ld-beat span{font:500 11px/1 'DM Mono',monospace;letter-spacing:.12em;text-transform:uppercase;margin-right:6px}
+.ld-care{display:flex;flex-wrap:wrap;gap:8px}.ld-care span{padding:5px 12px;border-radius:999px;background:var(--sand);color:var(--ink);font-size:13px}
+.ck{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:var(--r,20px);overflow:hidden;background:var(--paper)}
+.ck li{display:flex;gap:14px;align-items:flex-start;padding:12px 18px;border-bottom:1px solid var(--line);color:var(--ink);font-size:15px}.ck li:last-child{border-bottom:0}
+.ck-tag{flex:none;padding:3px 10px;border-radius:999px;font:500 11px/1.5 'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase;background:var(--sand);color:var(--mute)}
+.ck-ok .ck-tag{background:#DDF1E4;color:#14532D}.ck-no .ck-tag{background:#FBE9D0;color:#7A3E00}
+.ck small{display:block;margin-top:2px;color:var(--mute);font-size:12px}
+@media (prefers-color-scheme:dark){.ck-ok .ck-tag{background:#17402A;color:#BFEBCF}.ck-no .ck-tag{background:#4A3210;color:#F5D7A1}}
+@media print{.ld,.ck{box-shadow:none;break-inside:avoid}.wx,.sc,.md,.st{box-shadow:none;break-inside:avoid}}
 `
