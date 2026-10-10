@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { chatWithTools } from '@/lib/spectrum/dinghy'
+import { chat, chatWithTools } from '@/lib/spectrum/dinghy'
 import { PrivateRouteUnavailable } from '@/lib/spectrum/routing'
 import { addToCorpus, egressPolicy, emptyCorpus, findLeak, isEgressTool, isHardBlockTool } from '@/lib/spectrum/egress-guard'
 import type { Tool } from '@/lib/llm/types'
@@ -103,5 +103,23 @@ describe('stage B turn behavior', () => {
     const r = await chatWithTools([{ role: 'user', content: 'hi' }], opts, [tool('weather')], ctx)
     expect(r.tainted).toBe(false)
     expect(bodies[0].shipyard).toEqual({ providers: ['hopscotch'], attempt_timeout_ms: 15_000, max_tier: 'economy' })
+  })
+})
+
+
+describe('trimmed history privacy', () => {
+  it('retains private routing for old taint omitted from both wire histories', async () => {
+    vi.stubEnv('DINGHY_PRIVATE_ROUTE', 'on')
+    vi.stubEnv('DINGHY_PRIVATE_PROVIDERS', 'venice-private')
+    const history = [{ role: 'assistant', content: 'OLD_GOOGLE_SECRET', googleDerived: true }, ...Array.from({ length: 12 }, (_, i) => ({ role: 'user', content: `clean ${i}` }))]
+    const bodies: Record<string, any>[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init: { body: string }) => { bodies.push(JSON.parse(init.body)); return resp({ content: 'done' }, 'stop') }))
+    await chat(history, opts)
+    const r = await chatWithTools(history, opts, [tool('weather')], ctx)
+    expect(r.tainted).toBe(true)
+    for (const b of bodies) {
+      expect(b.shipyard.providers).toEqual(['venice-private'])
+      expect(JSON.stringify(b.messages)).not.toContain('OLD_GOOGLE_SECRET')
+    }
   })
 })
