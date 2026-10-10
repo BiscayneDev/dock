@@ -117,8 +117,95 @@ function runs(text: string): Run[] {
 }
 
 function tokens(md: string): Token[] {
-    return marked.lexer(md ?? '')
+    return marked.lexer(flattenBlocks(md ?? ''))
 }
+
+
+// ── Components: ":::name" blocks ─────────────────────────────────────────────
+// The model writes plain Markdown; our code draws the components. Unknown block
+// names are left as ordinary text. Blocks never contain raw HTML (all escaped).
+const BLOCK_NAMES = ['facts', 'cost', 'heads-up', 'place'] as const
+type BlockName = (typeof BLOCK_NAMES)[number]
+type Segment = { kind: 'md'; text: string } | { kind: 'block'; name: BlockName; lines: string[] }
+
+export function splitBlocks(md: string): Segment[] {
+    const out: Segment[] = []
+    let buf: string[] = []
+    const flush = () => {
+        if (buf.length) out.push({ kind: 'md', text: buf.join('\n') })
+        buf = []
+    }
+    const lines = (md ?? '').split('\n')
+    for (let i = 0; i < lines.length; i++) {
+        const open = lines[i].match(/^\s*:::\s*(facts|cost|heads-up|place)\s*$/i)
+        if (open) {
+            const end = lines.findIndex((l, j) => j > i && /^\s*:::\s*$/.test(l))
+            if (end > i) {
+                flush()
+                out.push({ kind: 'block', name: open[1].toLowerCase() as BlockName, lines: lines.slice(i + 1, end).map((l) => l.trim()).filter(Boolean).slice(0, 12) })
+                i = end
+                continue
+            }
+        }
+        buf.push(lines[i])
+    }
+    flush()
+    return out
+}
+
+/** "Label: value" -> pair. Lines with no label keep an empty label. */
+function pair(line: string): { k: string; v: string } {
+    const m = line.match(/^([^:]{1,28}):\s*(.+)$/)
+    return m ? { k: m[1].trim(), v: m[2].trim() } : { k: '', v: line }
+}
+
+/** Safe map and phone links for a place block. */
+export function placeLinks(address: string, phone: string): { map: string | null; tel: string | null } {
+    const map = address ? `https://maps.apple.com/?q=${encodeURIComponent(address)}` : null
+    const digits = phone.replace(/[^\d+]/g, '')
+    return { map, tel: /^\+?\d{7,15}$/.test(digits) ? `tel:${digits}` : null }
+}
+
+function renderBlock(name: BlockName, lines: string[]): string {
+    const inline = (t: string) => marked.parseInline(esc(t)) as string
+    if (name === 'facts') {
+        const chips = lines.slice(0, 8).map(pair).map((p) => `<div class="fact"><span class="fk">${esc(p.k)}</span><span class="fv">${inline(p.v)}</span></div>`)
+        return `<div class="facts">${chips.join('')}</div>`
+    }
+    if (name === 'cost') {
+        const items = lines.map(pair)
+        const rows = items.map((p) => {
+            const total = /^total/i.test(p.k)
+            return `<div class="crow${total ? ' ctotal' : ''}"><span>${esc(p.k)}</span><span>${inline(p.v)}</span></div>`
+        })
+        const hasTotal = items.some((p) => /^total/i.test(p.k))
+        const note = hasTotal ? '' : '<p class="cnote">No total given. Ask Dinghy for the all-in price.</p>'
+        return `<div class="cost">${rows.join('')}${note}</div>`
+    }
+    if (name === 'heads-up') {
+        return `<aside class="heads"><span class="heads-label">heads up</span>${lines.map((l) => `<p>${inline(l)}</p>`).join('')}</aside>`
+    }
+    // place
+    const f = Object.fromEntries(lines.map(pair).map((p) => [p.k.toLowerCase(), p.v]))
+    const title = f['name'] ?? lines[0] ?? 'Place'
+    const { map, tel } = placeLinks(f['address'] ?? '', f['phone'] ?? '')
+    const meta = [f['address'], f['hours']].filter(Boolean).map((t) => `<div class="pm">${esc(t)}</div>`).join('')
+    const acts = `${map ? `<a href="${esc(map)}" target="_blank" rel="noopener noreferrer">Map</a>` : ''}${tel ? `<a href="${esc(tel)}">Call</a>` : ''}`
+    return `<div class="place"><div class="pn">${esc(title)}</div>${meta}${acts ? `<div class="pa">${acts}</div>` : ''}</div>`
+}
+
+/** Plain-Markdown form of the blocks, for PDF and DOCX (and anything that does not draw components). */
+export function flattenBlocks(md: string): string {
+    return splitBlocks(md)
+        .map((sg) => {
+            if (sg.kind === 'md') return sg.text
+            if (sg.name === 'heads-up') return `> Heads up: ${sg.lines.join(' ')}`
+            return sg.lines.map((l) => `- ${l}`).join('\n')
+        })
+        .join('\n')
+}
+
+const DAY_HEAD = /^(?:day\s*\d+|(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*\b)/i
 
 // ── HTML ─────────────────────────────────────────────────────────────────────
 
@@ -144,20 +231,24 @@ export function renderTable(t: Tokens.Table): string {
 
 export function renderHtml(doc: DinghyDoc, opts: HtmlOptions = {}): string {
     const body: string[] = []
-    for (const t of tokens(doc.body)) {
+    for (const seg of splitBlocks(doc.body)) {
+      if (seg.kind === 'block') { body.push(renderBlock(seg.name, seg.lines)); continue }
+      for (const t of marked.lexer(seg.text)) {
         if (t.type === 'heading') {
             const h = t as Tokens.Heading
-            body.push(h.depth <= 2 ? `<section class="sec"><h2>${marked.parseInline(h.text)}</h2></section>` : `<h3>${marked.parseInline(h.text)}</h3>`)
+            body.push(h.depth <= 2 ? `<section class="sec"><h2>${marked.parseInline(h.text)}</h2></section>` : `<h3${DAY_HEAD.test(h.text.trim()) ? ' class="day"' : ''}>${marked.parseInline(h.text)}</h3>`)
         } else if (t.type === 'list') {
             const l = t as Tokens.List
             const items = l.items.map((it) => {
+                if (it.task) return `<li class="chk"><label><input type="checkbox"${it.checked ? ' checked' : ''}> <span>${marked.parseInline(it.text)}</span></label></li>`
                 const tr = splitTimeRow(it.text)
                 return tr
                     ? `<div class="row"><span class="t">${esc(tr.time)}</span><span>${marked.parseInline(tr.rest)}</span></div>`
                     : `<li>${marked.parseInline(it.text)}</li>`
             })
             const allRows = items.every((i) => i.startsWith('<div'))
-            body.push(allRows ? `<div class="rows">${items.join('')}</div>` : `<${l.ordered ? 'ol' : 'ul'}>${items.join('')}</${l.ordered ? 'ol' : 'ul'}>`)
+            const isChecklist = l.items.length > 0 && l.items.every((it) => it.task)
+            body.push(isChecklist ? `<ul class="checklist">${items.join('')}</ul>` : allRows ? `<div class="rows">${items.join('')}</div>` : `<${l.ordered ? 'ol' : 'ul'}>${items.join('')}</${l.ordered ? 'ol' : 'ul'}>`)
         } else if (t.type === 'hr') body.push('<hr>')
         else if (t.type === 'space') continue
         else if (t.type === 'table') body.push(renderTable(t as Tokens.Table))
@@ -165,6 +256,7 @@ export function renderHtml(doc: DinghyDoc, opts: HtmlOptions = {}): string {
             const q = t as Tokens.Blockquote
             body.push(`<aside class="pick"><span class="pick-label">top pick</span>${marked.parse(q.text.trim().replace(PICK, ''), { async: false }) as string}</aside>`)
         } else body.push(marked.parser([t]))
+      }
     }
     const desc = opts.description ?? doc.subtitle ?? 'Made by Dinghy.'
     const og = opts.ogImage
@@ -202,6 +294,12 @@ th:first-child{border-radius:8px 0 0 8px}th:last-child{border-radius:0 8px 8px 0
 td{padding:10px 12px;border-bottom:1px solid var(--line)}
 .pick{margin:22px 0;padding:18px 22px;border-radius:18px;background:var(--sand);border-left:4px solid var(--accent);color:var(--ink);font-size:18px}.pick p{margin:6px 0 0}.pick-label{display:block;font:500 10px/1 'DM Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
 blockquote{margin:20px 0;padding:14px 18px;border-radius:16px;background:var(--sand);color:var(--ink);font:italic 400 19px/1.45 Fraunces,Georgia,serif}blockquote p{margin:0}
+.facts{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}.fact{flex:1 1 130px;padding:10px 14px;border:1px solid var(--line);border-radius:14px;background:var(--paper)}.fk{display:block;font:500 10px/1.6 'DM Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}.fv{display:block;color:var(--ink);font-weight:600;font-size:16px}
+.cost{margin:18px 0;padding:6px 18px;border:1px solid var(--line);border-radius:16px}.crow{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}.crow:last-child{border-bottom:0}.crow span:first-child{white-space:nowrap}.crow span:last-child{text-align:right}.ctotal{font-weight:600;color:var(--ink);font-size:18px}.cnote{margin:6px 0 10px;font-size:13px;color:var(--accent)}
+.heads{margin:22px 0;padding:14px 18px;border-radius:16px;background:#fff1e8;border-left:4px solid var(--ink);color:var(--ink)}.heads p{margin:6px 0 0}.heads-label{display:block;font:500 10px/1 'DM Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--ink)}
+.place{margin:16px 0;padding:14px 18px;border:1px solid var(--line);border-radius:16px}.pn{font:600 17px/1.3 Schibsted,sans-serif;color:var(--ink)}.pm{font-size:14px;color:var(--body)}.pa{display:flex;gap:10px;margin-top:10px}.pa a{text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:7px 16px;font:500 11px/1 'DM Mono',monospace;letter-spacing:.12em;text-transform:uppercase}
+.checklist{list-style:none;padding:0}.checklist li{margin:0;padding:8px 0;border-bottom:1px solid var(--line)}.checklist label{display:flex;gap:12px;align-items:flex-start;cursor:pointer}.checklist input{width:22px;height:22px;margin:1px 0 0;accent-color:var(--accent)}.checklist input:checked+span{text-decoration:line-through;color:var(--mute)}
+h3.day{margin:30px 0 4px;padding-top:14px;border-top:1px solid var(--line);font:500 11px/1 'DM Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
 code{font:14px 'DM Mono',monospace;background:var(--sand);padding:1px 6px;border-radius:6px}
 hr{border:0;border-top:1px solid var(--line);margin:32px 0}
 .dl{margin:14px 0 0;font:500 11px/1 'DM Mono',monospace;letter-spacing:.14em;text-transform:uppercase}.dl a{text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:8px 14px;display:inline-block}
