@@ -73,10 +73,12 @@ export function validateImage(b: Buffer): { ext: string; type: string; w: number
     return null
 }
 
-const strip = (s: string) => s.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim().slice(0, 60)
+const clean = (s: string) => s.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim()
+const strip = (s: string) => clean(s).slice(0, 60)
 
 /** Open licences we show. Anything else (or unknown) is skipped, not guessed. */
-const OK_LICENSE = /^(CC0|CC BY(?:-SA)? [0-9.]+|Public domain|PD)/i
+/** Exact allowlist: nothing else passes, and no prefix matching. */
+const OK_LICENSE = /^(CC0 1\.0|Public domain|CC BY [1-4]\.0|CC BY-SA [1-4]\.0|CC BY 2\.5|CC BY-SA 2\.5|CC BY 3\.0|CC BY-SA 3\.0)$/
 
 async function guarded(fetcher: Fetcher, url: string, headers?: Record<string, string>): Promise<Response> {
     const u = new URL(url)
@@ -158,17 +160,16 @@ async function fromCommons(fetcher: Fetcher, query: string): Promise<{ url: stri
     for (const page of Object.values(data.query?.pages ?? {})) {
         const ii = page.imageinfo?.[0]
         const md = ii?.extmetadata
-        const license = strip(md?.LicenseShortName?.value ?? '')
+        const license = clean(md?.LicenseShortName?.value ?? '')
         if (!ii?.thumburl || !OK_LICENSE.test(license) || (ii.width ?? 0) < 600) continue
-        const hay = [page.title, md?.ObjectName?.value, md?.Categories?.value].map((v) => strip(v ?? '')).join(' ')
+        // Fail closed: the subject must show in the file title or name, and attribution must be complete.
+        const hay = [page.title, md?.ObjectName?.value].map((v) => clean(v ?? '')).join(' ')
         if (!subjectMatches(query, hay)) continue
-        return {
-            url: ii.thumburl,
-            credit: strip(md?.Artist?.value ?? '') || 'Wikimedia Commons',
-            license,
-            sourceUrl: safeUrl(ii.descriptionurl, /^commons\.wikimedia\.org$/),
-            licenseUrl: safeUrl(md?.LicenseUrl?.value, /(^|\.)creativecommons\.org$/),
-        }
+        const author = clean(md?.Artist?.value ?? '')
+        const sourceUrl = safeUrl(ii.descriptionurl, /^commons\.wikimedia\.org$/)
+        const licenseUrl = safeUrl(md?.LicenseUrl?.value, /(^|\.)creativecommons\.org$/)
+        if (!author || author.length > 120 || /[\[\]()|]/.test(author) || !sourceUrl || !licenseUrl) continue
+        return { url: ii.thumburl, credit: author, license, sourceUrl, licenseUrl }
     }
     return null
 }
