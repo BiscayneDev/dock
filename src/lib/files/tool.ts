@@ -21,6 +21,7 @@ import { randomUUID } from 'crypto'
 import { createServerClient } from '@/lib/supabase/server'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 import { renderFile, renderHtml, type DinghyDoc, type FileFormat, type RenderedFile } from './render'
+import { attachPhotos, type Photo } from './photos'
 import { publishSite, revokeSite, shareEnabled, type PublishedSite, type SiteFile } from './share'
 import { findFile, rememberFile } from '@/lib/spectrum/plans'
 import { geocodeCached, nearbyEateries, keywords, toPlaces, zoneAt, anchorConfident, looksLikeStreetAddress, geocoderIsPrivate, BudgetUnavailable } from '@/lib/places/osm'
@@ -115,7 +116,13 @@ async function replyLineFor(chatGuid: string | undefined): Promise<string | unde
     try { return await dinghyLineFor(chatGuid) } catch { return undefined }
 }
 
-async function host(doc: DinghyDoc, format: FileFormat, userId: string, replyLine?: string): Promise<{ hosted: HostedFile; pdf: RenderedFile | null }> {
+async function host(input: DinghyDoc, format: FileFormat, userId: string, replyLine?: string, photosOk = false): Promise<{ hosted: HostedFile; pdf: RenderedFile | null }> {
+    // Free credited photos, only on a clean turn, never longer than 12s in total. A miss keeps the colour card.
+    const found = await Promise.race([
+        attachPhotos(input.body, { allowed: photosOk }),
+        new Promise<{ body: string; photos: [] }>((resolve) => setTimeout(() => resolve({ body: input.body, photos: [] }), 12_000)),
+    ]).catch(() => ({ body: input.body, photos: [] as Photo[] }))
+    const doc: DinghyDoc = { ...input, body: found.body }
     const pdf = format === 'pdf' ? await renderFile(doc, 'pdf') : null
     const html = renderHtml(doc, {
         ogImage: fileCardUrl(doc, format === 'pdf' ? 'pdf' : 'page'),
@@ -124,6 +131,7 @@ async function host(doc: DinghyDoc, format: FileFormat, userId: string, replyLin
     })
     const files: SiteFile[] = [{ path: 'index.html', bytes: Buffer.from(html, 'utf8'), contentType: 'text/html; charset=utf-8' }]
     if (pdf) files.push({ path: pdf.filename, bytes: pdf.bytes, contentType: pdf.mimeType })
+    for (const p of found.photos) files.push({ path: p.path, bytes: p.bytes, contentType: p.contentType })
     const hosted = await publishSite(files, { title: doc.title, userId })
     return { hosted, pdf }
 }
@@ -161,7 +169,7 @@ export function fileToolsFor(): FileToolset {
             let hostError: string | undefined
             if (wantsPage && shareEnabled()) {
                 try {
-                    const { hosted, pdf } = await host(parsed.doc, parsed.format, ctx.userId, await replyLineFor(ctx.chatGuid))
+                    const { hosted, pdf } = await host(parsed.doc, parsed.format, ctx.userId, await replyLineFor(ctx.chatGuid), ctx.photosOk === true)
                     const file = pdf ?? (await renderFile(parsed.doc, 'html'))
                     const entry: MadeFile = { ...file, format: parsed.format, kind, title: parsed.doc.title, subtitle: parsed.doc.subtitle, link: null, hosted, markdown: parsed.doc.body }
                     made.push(entry)
