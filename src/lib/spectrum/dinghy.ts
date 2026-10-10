@@ -1,3 +1,6 @@
+import { withinTurn, TurnDeadlineExceeded } from './turn-budget'
+import type { RunStage } from './run-stage'
+
 /**
  * Dinghy conversation logic, ported from src/spectrum/index.ts for the
  * serverless webhook route. Pure of transport: callers supply persistence
@@ -371,6 +374,8 @@ export async function chat(
         onUsage?: (u: GatewayUsage) => void
         /** Task-aware Shipyard routing for this turn (routing.ts); unset = pinned model. */
         routing?: RoutingPrefs
+        deadlineAt?: number
+        onStage?: (stage: RunStage, detail?: string) => Promise<void>
         startTainted?: boolean
     }
 ): Promise<string> {
@@ -382,22 +387,24 @@ export async function chat(
         ...history.map(toWireMessage),
     ]
 
+    await opts.onStage?.('gateway')
     const t0 = Date.now()
-    const res = await fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
+    const res = await withinTurn(opts.deadlineAt, (signal) => fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
+        signal,
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${opts.apiKey}`,
         },
         body: JSON.stringify({ ...modelFields(opts.model, (opts.startTainted || history.some((m) => m.googleDerived)) && privateRouteEnforced() ? privateRouting() : opts.routing), messages, stream: false }),
-    })
+    }))
 
     if (!res.ok) {
-        const body = await res.text().catch(() => '')
+        const body = await withinTurn(opts.deadlineAt, () => res.text()).catch(() => '')
         throw new Error(`Gateway ${res.status}: ${body || res.statusText}`)
     }
 
-    const data = (await res.json()) as {
+    const data = (await withinTurn(opts.deadlineAt, () => res.json())) as {
         model?: string
         usage?: { prompt_tokens?: number; completion_tokens?: number }
         choices: { message: { content: string | null } }[]
@@ -493,6 +500,8 @@ export async function chatWithTools(
         /** Task-aware Shipyard routing for this turn (routing.ts); unset = pinned model. */
         routing?: RoutingPrefs
         /** The turn already holds Google data (tagged history, cron that reads Google): private route from the first call. */
+        deadlineAt?: number
+        onStage?: (stage: RunStage, detail?: string) => Promise<void>
         startTainted?: boolean
     },
     tools: Tool[],
@@ -531,20 +540,22 @@ export async function chatWithTools(
         return opts.routing
     }
     for (let iteration = 1; iteration <= MAX_TOOL_ITERATIONS; iteration++) {
+        await opts.onStage?.('gateway', String(iteration))
         const t0 = Date.now()
-        const res = await fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
+        const res = await withinTurn(opts.deadlineAt, (signal) => fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
+            signal,
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${opts.apiKey}`,
             },
             body: JSON.stringify({ ...modelFields(opts.model, routingNow()), messages, tools: toolDefs, stream: false }),
-        })
+        }))
         if (!res.ok) {
-            const body = await res.text().catch(() => '')
+            const body = await withinTurn(opts.deadlineAt, () => res.text()).catch(() => '')
             throw new Error(`Gateway ${res.status}: ${body || res.statusText}`)
         }
-        const data = (await res.json()) as {
+        const data = (await withinTurn(opts.deadlineAt, () => res.json())) as {
             model?: string
             usage?: { prompt_tokens?: number; completion_tokens?: number }
             choices: { finish_reason: string; message: { content: string | null; tool_calls?: GatewayToolCall[] } }[]
@@ -569,19 +580,21 @@ export async function chatWithTools(
                 content = JSON.stringify({ error: egressRejection(call.function.name, call.function.arguments || '', tainted, corpus) })
             } else {
                 try {
+                    await opts.onStage?.('tool', call.function.name)
                     const input = JSON.parse(call.function.arguments || '{}') as unknown
-                    const result = await Promise.race([
+                    const result = await withinTurn(opts.deadlineAt, () => Promise.race([
                         tool.execute(input, ctx),
                         new Promise<never>((_, reject) =>
                             setTimeout(() => reject(new Error(`tool timed out after ${TOOL_TIMEOUT_MS / 1000}s`)), TOOL_TIMEOUT_MS)
                         ),
-                    ])
+                    ]))
                     content = JSON.stringify(result.success ? result.data ?? {} : { error: result.error ?? 'tool failed' })
                     if (isGoogleTool(call.function.name)) {
                         tainted = true
                         addToCorpus(corpus, content)
                     }
                 } catch (err) {
+                    if (err instanceof TurnDeadlineExceeded) throw err
                     content = JSON.stringify({ error: err instanceof Error ? err.message : String(err) })
                 }
             }
@@ -590,14 +603,16 @@ export async function chatWithTools(
         }
     }
     // Loop exhausted: ask for a plain-text answer without tools.
+    await opts.onStage?.('synthesis')
     const tFinal = Date.now()
-    const res = await fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
+    const res = await withinTurn(opts.deadlineAt, (signal) => fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
+        signal,
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.apiKey}` },
         body: JSON.stringify({ ...modelFields(opts.model, routingNow()), messages, tools: toolDefs, tool_choice: 'none', stream: false }),
-    })
+    }))
     if (!res.ok) throw new Error(`Gateway ${res.status}: ${res.statusText}`)
-    const data = (await res.json()) as {
+    const data = (await withinTurn(opts.deadlineAt, () => res.json())) as {
         model?: string
         usage?: { prompt_tokens?: number; completion_tokens?: number }
         choices: { message: { content: string | null } }[]

@@ -1,3 +1,6 @@
+import { withinTurn, TURN_WORK_MS, TURN_DEADLINE_REPLY, TurnDeadlineExceeded } from './turn-budget'
+import { runStageRecorder } from './run-stage'
+
 /**
  * Inbound message handling for the webhook route, ported from
  * src/spectrum/index.ts. Runs after the HTTP response (the SDK invokes the
@@ -372,6 +375,7 @@ async function handleInboundTapback(space: InboundSpace, message: InboundMessage
 }
 
 export async function handleSpectrumMessage(space: InboundSpace, message: InboundMessage): Promise<void> {
+    const turnStartedAt = Date.now()
     const inbound = normalizeInbound(message)
     const isAttachment = !inbound && message.content.type === 'attachment'
     if (!inbound && !isAttachment) return
@@ -914,6 +918,8 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         await saveMessage(chatGuid, 'user', text).catch((err) => logErr('message save failed', err))
     }
 
+    const deadlineAt = turnStartedAt + TURN_WORK_MS
+    const onStage = runStageRecorder(chatGuid, message.id)
     const tChatStart = Date.now()
     const typingHandle = startTypingReTap(space)
     // 👀 on their message when a turn runs long (tools, files). Once the answer
@@ -926,7 +932,9 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     try {
         // Read tools only for chats bound to a user with Google/PayBox connected;
         // everyone else gets the plain conversational path.
-        const toolCtx = await loadImessageToolContext(chatGuid).catch((err) => {
+        await onStage('context')
+        const toolCtx = await withinTurn(deadlineAt, () => loadImessageToolContext(chatGuid)).catch((err) => {
+            if (err instanceof TurnDeadlineExceeded) throw err
             logErr('tool context load failed', err)
             return null
         })
@@ -960,6 +968,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         const runCtx = toolCtx ?? guestToolContext()
         if (tools.length > 0) {
             const toolOpts = {
+                deadlineAt, onStage,
                 gatewayUrl: GATEWAY_URL,
                 apiKey: SHIPYARD_API_KEY,
                 model: SHIPYARD_MODEL,
@@ -998,6 +1007,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         } else {
             replyTainted = full.some((m) => m.googleDerived)
             reply = await chat(full, {
+                deadlineAt, onStage,
                 gatewayUrl: GATEWAY_URL,
                 apiKey: SHIPYARD_API_KEY,
                 model: SHIPYARD_MODEL,
@@ -1010,6 +1020,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 onUsage,
             })
         }
+        await onStage('reply_ready')
         const tChatEnd = Date.now()
         clearTimeout(eyesTimer)
         const recentAfter = await loadHistory(chatGuid, 6).catch(() => [] as HistoryMessage[])
@@ -1032,6 +1043,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         } else {
             answerDelivered = await sendText(space, chatGuid, 'reply', plainReply)
         }
+        await onStage('reply_attempted', answerDelivered ? 'delivered' : 'not_confirmed')
         await settleWorkingTapback(message, eyes, text)
         await saveMessage(chatGuid, 'assistant', plainReply, replyTainted).catch((err) => logErr('message save failed', err))
         // The exact draft, rendered by the server, as its own bubble.
@@ -1115,6 +1127,13 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         // After the reply is out: refresh memory (no-op unless due).
         await updateMemory(chatGuid).catch((err) => logErr('memory update failed', err))
     } catch (err) {
+        if (err instanceof TurnDeadlineExceeded) {
+            await onStage('deadline')
+            await sendText(space, chatGuid, 'error_notice', TURN_DEADLINE_REPLY)
+            await saveMessage(chatGuid, 'assistant', TURN_DEADLINE_REPLY).catch((e) => logErr('message save failed', e))
+            return
+        }
+        await onStage('failed')
         if (photoHistory) await photoHistory
         logErr('gateway call failed', err)
         // Fail closed: Google data never falls back to the normal route.
