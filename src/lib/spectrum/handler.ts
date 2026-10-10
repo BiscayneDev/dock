@@ -1086,7 +1086,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         } else {
             replyTainted = full.some((m) => m.googleDerived)
             reply = await chat(full, {
-                deadlineAt, onStage,
+                deadlineAt, onStage, chatGuid: runCtx.chatGuid,
                 taskClass: classifyUserTurn(text),
                 gatewayUrl: GATEWAY_URL,
                 apiKey: SHIPYARD_API_KEY,
@@ -1227,4 +1227,4 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         clearTimeout(eyesTimer)
         stopTypingReTap(space, typingHandle)
     }
-        }
+}
