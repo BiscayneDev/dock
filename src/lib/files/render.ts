@@ -11,7 +11,7 @@
  */
 
 import PDFDocument from 'pdfkit'
-import { marked, type Token, type Tokens } from 'marked'
+import { Marked, marked, type Token, type Tokens } from 'marked'
 import {
     AlignmentType,
     BorderStyle,
@@ -86,6 +86,34 @@ export function splitTimeRow(text: string): { time: string; rest: string } | nul
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+/** Link targets a shared page may carry. Anything else (javascript:, data:, vbscript:) renders as plain text. */
+export function safeHref(href: string): boolean {
+    // eslint-disable-next-line no-control-regex
+    const h = href.replace(/[\u0000-\u0020]/g, '')
+    return /^(https?:|mailto:|tel:|sms:|#|\/)/i.test(h)
+}
+
+/**
+ * Markdown to HTML for shared pages. The text comes from a model that reads the
+ * web and email, so it is untrusted: raw HTML is shown as text, links are limited
+ * to safe schemes, and images are dropped (no remote fetches from the page).
+ */
+const safe = new Marked({
+    renderer: {
+        html({ text }) {
+            return esc(text)
+        },
+        link({ href, title, tokens }) {
+            const text = this.parser.parseInline(tokens)
+            if (!safeHref(href)) return text
+            return `<a href="${esc(href)}"${title ? ` title="${esc(title)}"` : ''}>${text}</a>`
+        },
+        image({ text }) {
+            return esc(text)
+        },
+    },
+})
 
 /** Inline markdown (bold/italic/code/links) to plain text for PDF/DOCX runs. */
 function plain(text: string): string {
@@ -167,7 +195,7 @@ export function placeLinks(address: string, phone: string): { map: string | null
 }
 
 function renderBlock(name: BlockName, lines: string[]): string {
-    const inline = (t: string) => marked.parseInline(esc(t)) as string
+    const inline = (t: string) => safe.parseInline(t) as string
     if (name === 'facts') {
         const chips = lines.slice(0, 8).map(pair).map((p) => `<div class="fact"><span class="fk">${esc(p.k)}</span><span class="fv">${inline(p.v)}</span></div>`)
         return `<div class="facts">${chips.join('')}</div>`
@@ -222,9 +250,9 @@ const PICK = /^\*{0,2}(?:top )?pick\s*:\s*\*{0,2}\s*/i
 /** Tables get a data-label on every cell so phones can stack each row into a card. */
 export function renderTable(t: Tokens.Table): string {
     const heads = t.header.map((h) => h.text)
-    const head = `<tr>${t.header.map((h) => `<th>${marked.parseInline(h.text)}</th>`).join('')}</tr>`
+    const head = `<tr>${t.header.map((h) => `<th>${safe.parseInline(h.text)}</th>`).join('')}</tr>`
     const rows = t.rows
-        .map((r) => `<tr>${r.map((c, i) => `<td data-label="${esc(heads[i] ?? '')}">${marked.parseInline(c.text)}</td>`).join('')}</tr>`)
+        .map((r) => `<tr>${r.map((c, i) => `<td data-label="${esc(heads[i] ?? '')}">${safe.parseInline(c.text)}</td>`).join('')}</tr>`)
         .join('')
     return `<table class="tbl"><thead>${head}</thead><tbody>${rows}</tbody></table>`
 }
@@ -236,15 +264,15 @@ export function renderHtml(doc: DinghyDoc, opts: HtmlOptions = {}): string {
       for (const t of marked.lexer(seg.text)) {
         if (t.type === 'heading') {
             const h = t as Tokens.Heading
-            body.push(h.depth <= 2 ? `<section class="sec"><h2>${marked.parseInline(h.text)}</h2></section>` : `<h3${DAY_HEAD.test(h.text.trim()) ? ' class="day"' : ''}>${marked.parseInline(h.text)}</h3>`)
+            body.push(h.depth <= 2 ? `<section class="sec"><h2>${safe.parseInline(h.text)}</h2></section>` : `<h3${DAY_HEAD.test(h.text.trim()) ? ' class="day"' : ''}>${safe.parseInline(h.text)}</h3>`)
         } else if (t.type === 'list') {
             const l = t as Tokens.List
             const items = l.items.map((it) => {
-                if (it.task) return `<li class="chk"><label><input type="checkbox"${it.checked ? ' checked' : ''}> <span>${marked.parseInline(it.text)}</span></label></li>`
+                if (it.task) return `<li class="chk"><label><input type="checkbox"${it.checked ? ' checked' : ''}> <span>${safe.parseInline(it.text)}</span></label></li>`
                 const tr = splitTimeRow(it.text)
                 return tr
-                    ? `<div class="row"><span class="t">${esc(tr.time)}</span><span>${marked.parseInline(tr.rest)}</span></div>`
-                    : `<li>${marked.parseInline(it.text)}</li>`
+                    ? `<div class="row"><span class="t">${esc(tr.time)}</span><span>${safe.parseInline(tr.rest)}</span></div>`
+                    : `<li>${safe.parseInline(it.text)}</li>`
             })
             const allRows = items.every((i) => i.startsWith('<div'))
             const isChecklist = l.items.length > 0 && l.items.every((it) => it.task)
@@ -254,8 +282,8 @@ export function renderHtml(doc: DinghyDoc, opts: HtmlOptions = {}): string {
         else if (t.type === 'table') body.push(renderTable(t as Tokens.Table))
         else if (t.type === 'blockquote' && PICK.test((t as Tokens.Blockquote).text.trim())) {
             const q = t as Tokens.Blockquote
-            body.push(`<aside class="pick"><span class="pick-label">top pick</span>${marked.parse(q.text.trim().replace(PICK, ''), { async: false }) as string}</aside>`)
-        } else body.push(marked.parser([t]))
+            body.push(`<aside class="pick"><span class="pick-label">top pick</span>${safe.parse(q.text.trim().replace(PICK, ''), { async: false }) as string}</aside>`)
+        } else body.push(safe.parser([t]))
       }
     }
     const desc = opts.description ?? doc.subtitle ?? 'Made by Dinghy.'
