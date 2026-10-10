@@ -22,7 +22,7 @@ export function egressPolicy(env: Record<string, string | undefined> = process.e
 
 /** Tools whose arguments leave for the open web or a third party. The guard checks these. */
 export function isEgressTool(name: string): boolean {
-  return /^(web_search|web_fetch|twitter_|x_search|x_read_post|x_recent_posts|x_profile|computer_browse|computer_run)$/.test(name) || /^(twitter_|x_)/.test(name)
+  return /^(web_search|web_fetch|find_places|twitter_|x_search|x_read_post|x_recent_posts|x_profile|computer_browse|computer_run)$/.test(name) || /^(twitter_|x_)/.test(name)
 }
 
 /**
