@@ -133,7 +133,7 @@ describe('file links (here.now)', () => {
 
   it('attaches as before when hosting is not set up', async () => {
     const set = fileToolsFor()
-    expect(set.tools.map((t) => t.name)).toEqual(['create_file', 'recall_file'])
+    expect(set.tools.map((t) => t.name)).toEqual(['create_file', 'find_places', 'recall_file'])
     const r = await set.tools[0].execute(doc, ctx)
     expect((r.data as Record<string, unknown>).delivery).toBe('attachment')
     expect(set.files()[0].hosted).toBeUndefined()
@@ -143,7 +143,7 @@ describe('file links (here.now)', () => {
     process.env.HERENOW_API_KEY = 'test-key'
     const { calls } = fakeHereNow()
     const set = fileToolsFor()
-    expect(set.tools.map((t) => t.name)).toEqual(['create_file', 'recall_file', 'revoke_file'])
+    expect(set.tools.map((t) => t.name)).toEqual(['create_file', 'find_places', 'recall_file', 'revoke_file'])
     const r = await set.tools[0].execute(doc, ctx)
     expect((r.data as Record<string, unknown>).delivery).toBe('file_link')
     expect(JSON.stringify(r.data)).not.toContain('here.now')

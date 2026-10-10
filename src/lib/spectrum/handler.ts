@@ -29,6 +29,7 @@ import {
 } from '@/spectrum/store'
 import { verifiedWaitlistBackground } from './background-context'
 import { firstReplyBundleDecision, isGoogleReconnectIntent, FIRST_USE_SUGGESTIONS, FIRST_USE_SUGGESTIONS_NO_GOOGLE, GOOGLE_CONNECT_ASK } from './connect-lines'
+import { wantsPlaces } from '@/lib/places/intent'
 import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsAnotherGoogle, wantsGithub, wantsHealth, wantsWallet, isContactCardRequest, MAX_HISTORY, type Message } from './dinghy'
 import { recordUsage, spendToolFor, type GatewayUsage } from './metering'
 import { allowanceUsedUpMessage, claimLimitNotice, isOverDailyAllowance } from '@/lib/allowance'
@@ -1060,6 +1061,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 volatile: (background ?? '') + '\n\n' + clock,
                 interviewLine: interviewLine ?? undefined,
                 onUsage,
+                ...(wantsPlaces(text) && tools.some((t) => t.name === 'find_places') ? { forceTool: 'find_places' } : {}),
             }
             const r = await chatWithTools(full, toolOpts, tools, runCtx)
             reply = r.reply

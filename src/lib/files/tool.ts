@@ -23,6 +23,9 @@ import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
 import { renderFile, renderHtml, type DinghyDoc, type FileFormat, type RenderedFile } from './render'
 import { publishSite, revokeSite, shareEnabled, type PublishedSite, type SiteFile } from './share'
 import { findFile, rememberFile } from '@/lib/spectrum/plans'
+import { geocodeCached, nearbyEateries, keywords, toPlaces, zoneAt, anchorConfident, looksLikeStreetAddress, geocoderIsPrivate, BudgetUnavailable } from '@/lib/places/osm'
+import { freshPin, roundCoord } from '@/lib/places/pin'
+import { buildPlacesDoc } from '@/lib/places/page'
 
 export const FILES_BUCKET = 'dinghy-files'
 /** Fallback links stay valid for a week. */
@@ -209,6 +212,79 @@ export function fileToolsFor(): FileToolset {
         },
     }
 
+    const findPlaces: Tool = {
+        name: 'find_places',
+        description:
+            'Find real food and drink places near an address, hotel or landmark, with open-now, walking time, address, hours and map links, from OpenStreetMap (free, no key). ' +
+            'Use this FIRST for "where should I eat / get X near Y" asks; do not use web_search for nearby venues. ' +
+            'It makes the options page itself and the link goes out right after your reply, so do not call create_file for it. ' +
+            'Give anchor as a searchable place with the city ("Parkroyal on Pickering, Singapore") and what as the food ("chicken rice"). The local time zone is worked out from the map position. ' +
+            'Open or closed is only reported when the listed hours can be read; otherwise it says hours not listed. Never add hours, ratings or prices the tool did not return. ' +
+            'Never pass a street address as anchor (they are not sent to public map servers): use a landmark, hotel or neighbourhood name, or ask for one. Reply with your pick in one or two lines using only what it returned.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                anchor: { type: 'string', description: 'Where to search around: hotel, address or landmark, with the city' },
+                what: { type: 'string', description: 'The food or kind of place, e.g. "chicken rice", "ramen", "coffee"' },
+                radius_m: { type: 'number', description: 'Search radius in metres, default 1500, max 3000' },
+            },
+            required: ['anchor', 'what'],
+        },
+        async execute(input: unknown, ctx: UserContext): Promise<ToolResult> {
+            const i = (input ?? {}) as Record<string, unknown>
+            const anchor = str(i.anchor).slice(0, 200), what = str(i.what).slice(0, 80)
+            if (!anchor || !what) return { success: false, error: 'anchor and what are required' }
+            const radius = Math.min(3000, Math.max(300, Math.round(typeof i.radius_m === 'number' ? i.radius_m : 1500)))
+            try {
+                // A street address (likely home or work) is never sent to a public geocoder. Use the
+                // user's shared pin if they have one; otherwise ask for a landmark or hotel name.
+                let origin: { lat: number; lon: number; label: string } | null
+                let fromPin = false
+                if (looksLikeStreetAddress(anchor) && !geocoderIsPrivate()) {
+                    const pin = ctx.userId ? await freshPin(ctx.userId) : null
+                    if (!pin) return { success: false, error: 'that looks like a street address, which I do not send to a public map server. Ask them for a landmark, hotel or neighbourhood name instead, or to share a location pin in this chat.' }
+                    // Rounded to ~100 m: the exact spot is not needed to find nearby food and never goes to a public server.
+                    origin = { lat: roundCoord(pin.lat), lon: roundCoord(pin.lon), label: pin.label ?? 'your shared pin' }
+                    fromPin = true
+                } else {
+                    origin = await geocodeCached(anchor)
+                }
+                if (!origin) return { success: false, error: `could not find "${anchor}" on the map; ask for a street address or a nearby landmark` }
+                // Open-now uses the timezone AT the place, derived from its coordinates. Never the user's home zone or UTC.
+                const tz = zoneAt(origin.lat, origin.lon)
+                const confident = fromPin || anchorConfident(anchor, origin.label)
+                const now = new Date()
+                const words = keywords(what)
+                const all = toPlaces(await nearbyEateries(origin, radius), origin, words, now, tz ?? 'UTC', tz === null)
+                const matched = all.filter((p) => p.matched)
+                const strong = matched.filter((p) => !p.chain)
+                const places = (strong.length ? strong : matched.length ? matched : all).slice(0, 6)
+                if (!places.length) return { success: false, error: 'no named food places found in the map data around there' }
+                const unmatchedNote = matched.length ? undefined : `Nothing in the map data is tagged "${what}" within ${radius} m, so these are the nearest eateries instead. Check the menu before you go.`
+                const doc = buildPlacesDoc({ places, what: matched.length ? what : 'food', anchor, tz: tz ?? 'UTC', now, unmatchedNote, resolved: origin.label, lowConfidence: !confident })
+                const made_ = await createFile.execute({ title: doc.title, subtitle: doc.subtitle, body: doc.body, format: 'html', kind: 'file' }, ctx)
+                return {
+                    success: true,
+                    data: {
+                        page: made_.success ? 'will_send_after_reply' : `not made: ${made_.success ? '' : made_.error}`,
+                        matched: matched.length > 0,
+                        searched_around: origin.label,
+                        ...(confident ? {} : { low_confidence: 'The map match for the anchor is weak. Say in your reply which place was searched (searched_around) and ask them to confirm or give a street address.' }),
+                        ...(doc.allUnknown ? { note_hours: 'No listed hours for any of these: say once, up front, that open-now is unknown and to call ahead.' } : {}),
+                        ...(unmatchedNote ? { note: unmatchedNote } : {}),
+                        places: places.map((p) => ({ name: p.name, status: p.status.text, state: p.status.state, walk_min: p.walkMin, distance_m: p.distanceM, address: p.address || undefined, hours: p.hours, cuisine: p.cuisine })),
+                        text_fallback: doc.text,
+                        instruction: 'Reply with your pick and one reason in one or two lines using only these fields. If the page was not made, give this short list in chat and say the page did not go out. Do not call create_file for this.',
+                    },
+                }
+            } catch (err) {
+                if (err instanceof BudgetUnavailable) return { success: false, error: "I couldn't look that up right now (the free map service is busy). Say so in one line and give a short answer from one web search instead; do not retry find_places this turn." }
+                console.error('[dinghy] find_places failed', err instanceof Error ? err.message : err)
+                return { success: false, error: 'the map lookup did not respond; say so and suggest one web search instead' }
+            }
+        },
+    }
+
     const recallFile: Tool = {
         name: 'recall_file',
         description:
@@ -260,7 +336,7 @@ export function fileToolsFor(): FileToolset {
         },
     }
 
-    return { tools: shareEnabled() ? [createFile, recallFile, revokeFile] : [createFile, recallFile], files: () => [...made] }
+    return { tools: shareEnabled() ? [createFile, findPlaces, recallFile, revokeFile] : [createFile, findPlaces, recallFile], files: () => [...made] }
 }
 
 /** Remove "[sent file: x]" markers the model may copy into its reply text. */

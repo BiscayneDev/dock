@@ -5,6 +5,8 @@
  */
 
 import { describeWeatherCode } from '@/lib/tools/weather'
+import { endpoints, limit, looksLikeStreetAddress } from '@/lib/places/osm'
+import { roundCoord } from '@/lib/places/pin'
 
 export interface CardWeather {
     place: string
@@ -38,6 +40,8 @@ async function getJson(url: string, headers?: Record<string, string>): Promise<u
 
 /** Geocode "Miami, FL" style names; the part after the comma picks among hits. */
 export async function geocode(name: string): Promise<{ lat: number; lon: number; label: string } | null> {
+    // A street-looking home place (house number + street) is never sent to a public geocoder.
+    if (looksLikeStreetAddress(name)) return null
     const [place, ...rest] = name.split(',').map((s) => s.trim()).filter(Boolean)
     if (!place) return null
     const hint = rest.join(' ').toLowerCase()
@@ -54,8 +58,11 @@ export async function geocode(name: string): Promise<{ lat: number; lon: number;
 /** Reverse-geocode coordinates to a short town name (best-effort). */
 export async function placeName(lat: number, lon: number): Promise<string | null> {
     try {
+        // Town-level lookup: round to ~100 m, and share the 1 req/s budget with the places lookup.
+        const base = endpoints().nominatim
+        await limit(base)
         const r = (await getJson(
-            `https://nominatim.openstreetmap.org/reverse?format=json&zoom=10&lat=${lat}&lon=${lon}`,
+            `${base}/reverse?format=json&zoom=10&lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`,
             { 'User-Agent': 'dinghy/1.0 (https://www.getdinghy.sh)' }
         )) as { address?: Record<string, string> }
         const a = r.address ?? {}
@@ -76,8 +83,8 @@ export function conditionsNote(w: { code: number; high: number; rain: number | n
 
 export async function cardWeather(lat: number, lon: number, place: string): Promise<CardWeather | null> {
     const params = new URLSearchParams({
-        latitude: String(lat),
-        longitude: String(lon),
+        latitude: String(roundCoord(lat)),
+        longitude: String(roundCoord(lon)),
         current: 'temperature_2m,weather_code,wind_speed_10m,wind_direction_10m',
         daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
         timezone: 'auto',
