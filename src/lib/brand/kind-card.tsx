@@ -35,7 +35,9 @@ const SKY: Record<string, [string, string]> = {
     storm: ['#241F3D', '#5B4F86'], snow: ['#6F89B3', '#C9D8EC'], fog: ['#69758A', '#BCC5D2'],
 }
 const icon = (cls: string) => `data:image/svg+xml;base64,${Buffer.from(skyIcon(cls, 128).replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ')).toString('base64')}`
-const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}...` : s)
+/** Latin text only: a glyph the bundled fonts lack makes Satori try a network font download, so strip those. */
+const latin = (s: string) => s.replace(/[^\u0000-\u024F\u2010-\u2027\u20AC\u2122]/g, '').replace(/\s+/g, ' ').trim()
+const clip = (raw: string, n: number) => { const s = latin(raw); return s.length > n ? `${s.slice(0, n - 1).trimEnd()}...` : s }
 
 /** hsl to hex, because Satori wants plain colours. */
 function hsl(h: number, s: number, l: number): string {
@@ -79,7 +81,7 @@ function weatherCard(lines: string[]): { el: ReactElement; h: number } | null {
             <div style={{ display: 'flex', flexDirection: 'column', height: 560, padding: '52px 60px', color: '#fff', backgroundImage: `linear-gradient(160deg, ${c1}, ${c2})`, position: 'relative' }}>
                 <Brand color="rgba(255,255,255,0.9)" />
                 <div style={{ display: 'flex', marginTop: 56, fontFamily: 'DM Mono', fontSize: 24, letterSpacing: '0.16em', textTransform: 'uppercase' }}>{clip(place, 34)}</div>
-                <div style={{ display: 'flex', marginTop: 10, fontFamily: 'Fraunces', fontSize: 230, lineHeight: 1, letterSpacing: '-0.03em' }}>{now}</div>
+                <div style={{ display: 'flex', marginTop: 10, fontFamily: 'Fraunces', fontSize: 230, lineHeight: 1, letterSpacing: '-0.03em' }}>{clip(now, 14)}</div>
                 <div style={{ display: 'flex', marginTop: 8, fontFamily: 'Schibsted Grotesk', fontSize: 44 }}>{clip(sky ?? '', 30)}</div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={icon(s.cls)} width={280} height={280} alt="" style={{ position: 'absolute', right: 56, top: 190 }} />
@@ -207,7 +209,7 @@ function stayCard(segs: ReturnType<typeof splitBlocks>, photos: CardPhoto[]): { 
                     {area ? <div style={{ display: 'flex', marginTop: 10, fontFamily: 'Schibsted Grotesk', fontSize: 34, opacity: 0.88 }}>{clip(area, 48)}</div> : null}
                 </div>
             </div>
-            {creditText ? <div style={{ display: 'flex', minHeight: creditHeight, padding: '10px 28px', fontFamily: 'Schibsted Grotesk', fontSize: 20, lineHeight: 1.3, color: INK }}>{creditText}</div> : null}
+            {creditText ? <div style={{ display: 'flex', minHeight: creditHeight, padding: '10px 28px', fontFamily: 'Schibsted Grotesk', fontSize: 20, lineHeight: 1.3, color: INK }}>{latin(creditText)}</div> : null}
             <div style={{ display: 'flex', flexDirection: 'column', padding: '40px 56px 0' }}>
                 <div style={{ display: 'flex', alignItems: 'baseline' }}>
                     <div style={{ display: 'flex', fontFamily: 'Fraunces', fontSize: 84, color: INK }}>{clip(price ?? '', 18)}</div>
@@ -288,12 +290,82 @@ function routeCard(lines: string[]): { el: ReactElement; h: number } | null {
     return { el, h: H }
 }
 
-/** PNG for the first weather, scores, stay or route block on the page (in page order), or null when it has none. Photos are the copies the page builder made. */
+function mediaCard(segs: ReturnType<typeof splitBlocks>, photos: CardPhoto[]): { el: ReactElement; h: number } | null {
+    const blk = segs.find((x) => x.kind === 'block' && x.name === 'media')
+    if (!blk || blk.kind !== 'block') return null
+    const rows = blk.lines.map(cells).filter((c) => c[0])
+    if (!rows.length) return null
+    const lead = segs.find((x) => x.kind === 'block' && x.name === 'lead')
+    const pickName = lead && lead.kind === 'block' ? (lead.lines.map(cells).find((c) => c[0]?.toLowerCase() === 'pick')?.[1] ?? '').toLowerCase() : ''
+    const [title, kind, year, rating, by, why, photoPath] = rows.find((r) => pickName && r[0].toLowerCase() === pickName) ?? rows[0]
+    const k = /book|game/i.test(kind ?? '') ? (kind as string).toLowerCase() : 'movie'
+    const photo = photos.find((ph) => ph.path === photoPath && /^image\/(jpeg|png)$/.test(ph.contentType))
+    const c1 = hsl(hue(title), 42, 28), c2 = hsl((hue(title) + 50) % 360, 45, 46)
+    const credit = photo?.credit && photo.license !== 'cover' ? `Photo: ${photo.credit}${photo.license ? `, ${photo.license}` : ''}` : ''
+    const H = 700 + (credit ? Math.ceil(credit.length / 65) * 26 + 20 : 0)
+    const el = (
+        <div style={{ width: W, height: H, display: 'flex', flexDirection: 'column', background: PAPER, padding: '48px 56px 28px' }}>
+            <div style={{ display: 'flex', flex: 1 }}>
+                <div style={{ display: 'flex', width: 320, height: 480, borderRadius: 24, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundImage: `linear-gradient(160deg, ${c1}, ${c2})`, boxShadow: '0 24px 48px rgba(14,26,51,0.3)' }}>
+                    {photo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={dataUri(photo)} width={320} height={480} alt="" style={{ width: 320, height: 480, objectFit: 'cover' }} />
+                    ) : (
+                        <div style={{ display: 'flex', padding: 28, color: '#fff', fontFamily: 'Fraunces', fontSize: 44, lineHeight: 1.1, textAlign: 'center' }}>{clip(title, 28)}</div>
+                    )}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, marginLeft: 48 }}>
+                    <div style={{ display: 'flex', fontFamily: 'DM Mono', fontSize: 24, letterSpacing: '0.14em', textTransform: 'uppercase', color: CORAL }}>{`${k} · pick`}</div>
+                    <div style={{ display: 'flex', marginTop: 14, fontFamily: 'Fraunces', fontSize: 76, lineHeight: 1.04, letterSpacing: '-0.02em', color: INK }}>{clip(title, 30)}</div>
+                    <div style={{ display: 'flex', marginTop: 18, fontFamily: 'Schibsted Grotesk', fontSize: 32, color: MUTE }}>{clip([year, by].filter(Boolean).join(' · '), 40)}</div>
+                    {rating ? (
+                        <div style={{ display: 'flex', marginTop: 22 }}>
+                            <div style={{ display: 'flex', padding: '10px 26px', borderRadius: 40, background: CORAL, color: '#fff', fontFamily: 'Schibsted Grotesk', fontWeight: 600, fontSize: 32 }}>{clip(rating, 16)}</div>
+                        </div>
+                    ) : null}
+                    {why ? <div style={{ display: 'flex', marginTop: 24, fontFamily: 'Schibsted Grotesk', fontSize: 32, lineHeight: 1.35, color: 'rgba(14,26,51,0.8)' }}>{clip(why, 110)}</div> : null}
+                </div>
+            </div>
+            {credit ? <div style={{ display: 'flex', marginTop: 20, fontFamily: 'Schibsted Grotesk', fontSize: 20, lineHeight: 1.3, color: MUTE }}>{latin(credit)}</div> : null}
+            <Foot />
+        </div>
+    )
+    return { el, h: H }
+}
+
+function briefingCard(title: string, subtitle: string | undefined, lines: string[]): { el: ReactElement; h: number } | null {
+    const items = lines.slice(0, 4).map(cells).filter((c) => c[0])
+    if (!items.length) return null
+    const H = 440 + items.length * 150 + 90
+    const el = (
+        <div style={{ width: W, height: H, display: 'flex', flexDirection: 'column', background: PAPER }}>
+            <div style={{ display: 'flex', flexDirection: 'column', position: 'relative', height: 440, padding: '48px 56px', color: '#fff', overflow: 'hidden', backgroundImage: 'linear-gradient(180deg, #27406F, #E2866A 72%, #F4C27A)' }}>
+                <Brand color="rgba(255,255,255,0.92)" />
+                <div style={{ display: 'flex', position: 'absolute', right: -40, bottom: -90, width: 300, height: 300, borderRadius: 300, backgroundImage: 'linear-gradient(180deg, #FFE2A0, #F4A96B)', opacity: 0.9 }} />
+                <div style={{ display: 'flex', marginTop: 70, fontFamily: 'Fraunces', fontSize: 96, lineHeight: 1.02, letterSpacing: '-0.02em' }}>{clip(title, 34)}</div>
+                {subtitle ? <div style={{ display: 'flex', marginTop: 14, fontFamily: 'Schibsted Grotesk', fontSize: 32, opacity: 0.9 }}>{clip(subtitle, 56)}</div> : null}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', padding: '10px 56px 0' }}>
+                {items.map((it, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', height: 150, borderBottom: i < items.length - 1 ? '2px solid rgba(14,26,51,0.1)' : 'none' }}>
+                        <div style={{ display: 'flex', width: 76, fontFamily: 'DM Mono', fontSize: 28, color: CORAL }}>{String(i + 1).padStart(2, '0')}</div>
+                        <div style={{ display: 'flex', flex: 1, fontFamily: 'Schibsted Grotesk', fontSize: 36, lineHeight: 1.3, color: INK }}>{clip(it[3] || it[0], 78)}</div>
+                    </div>
+                ))}
+            </div>
+            <div style={{ display: 'flex', padding: '0 56px', marginTop: 'auto', marginBottom: 28 }}><Foot /></div>
+        </div>
+    )
+    return { el, h: H }
+}
+
+/** PNG for the first weather, scores, stay, route, media or briefing block on the page (in page order), or null when it has none. Photos are the copies the page builder made. */
 export async function renderKindCard(doc: { title: string; subtitle?: string; body: string }, photos: CardPhoto[] = []): Promise<Buffer | null> {
+    if (/[^\u0000-\u024F\u2010-\u2027\u20AC\u2122]/u.test([doc.title, doc.subtitle ?? '', doc.body, ...photos.map((p) => p.credit ?? '')].join(' ').replace(/[\p{Symbol}\p{Mark}]/gu, ''))) return null
     const segs = splitBlocks(doc.body)
-    const seg = segs.find((x) => x.kind === 'block' && ['weather', 'scores', 'stay', 'route'].includes(x.name))
+    const seg = segs.find((x) => x.kind === 'block' && ['weather', 'scores', 'stay', 'route', 'media', 'briefing'].includes(x.name))
     if (!seg || seg.kind !== 'block') return null
-    const built = seg.name === 'weather' ? weatherCard(seg.lines) : seg.name === 'scores' ? scoresCard(doc.title, doc.subtitle, seg.lines) : seg.name === 'stay' ? stayCard(segs, photos) : routeCard(seg.lines)
+    const built = seg.name === 'weather' ? weatherCard(seg.lines) : seg.name === 'scores' ? scoresCard(doc.title, doc.subtitle, seg.lines) : seg.name === 'stay' ? stayCard(segs, photos) : seg.name === 'media' ? mediaCard(segs, photos) : seg.name === 'briefing' ? briefingCard(doc.title, doc.subtitle, seg.lines) : routeCard(seg.lines)
     if (!built) return null
     const res = new ImageResponse(built.el, { width: W, height: built.h, fonts: fonts() })
     return Buffer.from(await res.arrayBuffer())
