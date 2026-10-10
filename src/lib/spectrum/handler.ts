@@ -33,6 +33,7 @@ import { chat, chatWithTools, productFactsFor, wantsGoogle, wantsAnotherGoogle, 
 import { recordUsage, spendToolFor, type GatewayUsage } from './metering'
 import { allowanceUsedUpMessage, claimLimitNotice, isOverDailyAllowance } from '@/lib/allowance'
 import { provisionSpectrumIdentity } from './provision'
+import { classifyUserTurn } from './turn-class'
 import { capabilitiesFor, guestCapabilities, guestToolContext, liveInfoTools, loadImessageToolContext, toolsFor } from './imessage-tools'
 import { reminderToolsFor } from './reminders'
 import { payboxSigningToolsFor } from '@/lib/tools/paybox-signing'
@@ -1043,6 +1044,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         if (tools.length > 0) {
             const toolOpts = {
                 deadlineAt, onStage,
+                taskClass: classifyUserTurn(text),
                 gatewayUrl: GATEWAY_URL,
                 apiKey: SHIPYARD_API_KEY,
                 model: SHIPYARD_MODEL,
@@ -1082,6 +1084,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             replyTainted = full.some((m) => m.googleDerived)
             reply = await chat(full, {
                 deadlineAt, onStage,
+                taskClass: classifyUserTurn(text),
                 gatewayUrl: GATEWAY_URL,
                 apiKey: SHIPYARD_API_KEY,
                 model: SHIPYARD_MODEL,
@@ -1221,4 +1224,4 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         clearTimeout(eyesTimer)
         stopTypingReTap(space, typingHandle)
     }
-}
+        }
