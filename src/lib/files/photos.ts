@@ -149,6 +149,15 @@ const safeUrl = (u: string | undefined, host: RegExp): string | undefined => {
     } catch { return undefined }
 }
 
+/** License labels must agree with the exact published Creative Commons terms. */
+function licenseMatches(license: string, url: string): boolean {
+    const u = new URL(url)
+    if (u.hostname !== 'creativecommons.org' && u.hostname !== 'www.creativecommons.org') return false
+    const match = license.match(/^CC (BY(?:-SA)?) ([0-9.]+)$/)
+    const expected = match ? `/licenses/${match[1].toLowerCase()}/${match[2]}` : license === 'CC0 1.0' ? '/publicdomain/zero/1.0' : license === 'Public domain' ? '/publicdomain/mark/1.0' : ''
+    return !!expected && u.pathname.replace(/\/$/, '') === expected && !u.search && !u.hash
+}
+
 type CommonsMeta = Record<string, { value?: string }>
 async function fromCommons(fetcher: Fetcher, query: string): Promise<{ url: string; credit: string; license: string; sourceUrl?: string; licenseUrl?: string } | null> {
     const q = new URLSearchParams({
@@ -168,7 +177,7 @@ async function fromCommons(fetcher: Fetcher, query: string): Promise<{ url: stri
         const author = clean(md?.Artist?.value ?? '')
         const sourceUrl = safeUrl(ii.descriptionurl, /^commons\.wikimedia\.org$/)
         const licenseUrl = safeUrl(md?.LicenseUrl?.value, /(^|\.)creativecommons\.org$/)
-        if (!author || author.length > 120 || /[\[\]()|]/.test(author) || !sourceUrl || !licenseUrl) continue
+        if (!author || author.length > 120 || /[\[\]()|]/.test(author) || !sourceUrl || !licenseUrl || !licenseMatches(license, licenseUrl)) continue
         return { url: ii.thumburl, credit: author, license, sourceUrl, licenseUrl }
     }
     return null
