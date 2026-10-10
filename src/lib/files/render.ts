@@ -166,7 +166,7 @@ export function splitBlocks(md: string): Segment[] {
     }
     const lines = (md ?? '').split('\n')
     for (let i = 0; i < lines.length; i++) {
-        const open = lines[i].match(/^\s*:::\s*(facts|cost|heads-up|places|place|reply|options|sources|weather|scores|media|stay|route|briefing|gallery)\s*$/i)
+        const open = lines[i].match(/^\s*:::\s*(facts|cost|heads-up|places|place|reply|options|sources|weather|scores|media|stay|route|briefing|gallery|lead|checks)\s*$/i)
         if (open) {
             const end = lines.findIndex((l, j) => j > i && /^\s*:::\s*$/.test(l))
             if (end > i) {
