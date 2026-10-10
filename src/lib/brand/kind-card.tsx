@@ -7,9 +7,9 @@ import { splitBlocks } from '@/lib/files/render'
 
 /**
  * Phone-width preview cards for hosted pages, sent into the chat above the
- * link. Slice 1: weather and scores. Satori draws these (flexbox only), so
+ * link. Weather, scores, stays and routes. Satori draws these (flexbox only), so
  * each kind has its own layout; the data comes from the same pipe lines the
- * page uses. Built from the finished page body only: no network, no photos.
+ * page uses. Built from the finished page body only: no network; photos are vetted local copies only.
  */
 
 const W = 1080
@@ -161,11 +161,139 @@ function scoresCard(title: string, subtitle: string | undefined, lines: string[]
     return { el, h: H }
 }
 
-/** PNG for the first weather or scores block on the page, or null when it has neither. */
-export async function renderKindCard(doc: { title: string; subtitle?: string; body: string }): Promise<Buffer | null> {
-    const seg = splitBlocks(doc.body).find((s) => s.kind === 'block' && (s.name === 'weather' || s.name === 'scores'))
+type CardPhoto = { path: string; bytes: Buffer; contentType: string; credit?: string; license?: string }
+const dataUri = (ph: CardPhoto) => `data:${ph.contentType};base64,${ph.bytes.toString('base64')}`
+
+/** Same rule as the page: confirmed only with a source and a date, everything else shows unverified. */
+export function checkChips(lines: string[]): { t: string; ok: boolean }[] {
+    return lines.slice(0, 3).map(cells).filter((c) => c[0]).map((c) => ({ t: clip(c[0], 34), ok: /^confirmed$/i.test(c[1] ?? '') && !!c[2] && !!c[3] }))
+}
+
+function stayCard(segs: ReturnType<typeof splitBlocks>, photos: CardPhoto[]): { el: ReactElement; h: number } | null {
+    const stay = segs.find((x) => x.kind === 'block' && x.name === 'stay')
+    if (!stay || stay.kind !== 'block') return null
+    const rows = stay.lines.map(cells).filter((c) => c[0])
+    if (!rows.length) return null
+    const get = (n: string) => { const b = segs.find((x) => x.kind === 'block' && x.name === n); return b && b.kind === 'block' ? b.lines : [] }
+    const lead: Record<string, string[]> = {}
+    for (const l of get('lead')) { const [k, ...v] = cells(l); if (k && !lead[k.toLowerCase()]) lead[k.toLowerCase()] = v }
+    const pickName = (lead.pick?.[0] ?? '').toLowerCase()
+    const row = rows.find((r) => pickName && r[0].toLowerCase() === pickName) ?? rows[0]
+    const [name, price, , area, catchTxt, photoPath] = row
+    const photo = photos.find((ph) => ph.path === photoPath && /^image\/(jpeg|png)$/.test(ph.contentType))
+    const beat = lead.beat
+    const chips = checkChips(get('checks'))
+    const [c1, c2] = [hsl(hue(name), 40, 30), hsl((hue(name) + 40) % 360, 45, 50)]
+    const creditText = photo?.credit ? `Photo: ${photo.credit}${photo.license ? `, ${photo.license}` : ''}` : ''
+    const creditHeight = creditText ? Math.ceil(creditText.length / 70) * 26 + 20 : 0
+    const H = 640 + creditHeight + 240 + (chips.length ? 180 : 0) + (beat?.[0] ? 90 : 0) + 90
+    const tag = (t: string, fill: string, color: string) => (
+        <div style={{ display: 'flex', padding: '14px 24px', borderRadius: 40, background: fill, color, fontFamily: 'DM Mono', fontSize: 22, letterSpacing: '0.14em', textTransform: 'uppercase' }}>{t}</div>
+    )
+    const el = (
+        <div style={{ width: W, height: H, display: 'flex', flexDirection: 'column', background: PAPER }}>
+            <div style={{ display: 'flex', position: 'relative', width: W, height: 640, backgroundImage: `linear-gradient(160deg, ${c1}, ${c2})` }}>
+                {photo && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={dataUri(photo)} width={W} height={640} alt="" style={{ position: 'absolute', left: 0, top: 0, width: W, height: 640, objectFit: 'cover' }} />
+                )}
+                <div style={{ display: 'flex', position: 'absolute', left: 0, top: 0, width: W, height: 640, backgroundImage: 'linear-gradient(180deg, rgba(8,15,30,0.3), rgba(8,15,30,0) 35%, rgba(8,15,30,0.85))' }} />
+                <div style={{ display: 'flex', position: 'absolute', left: 44, top: 44, right: 44, justifyContent: 'space-between' }}>
+                    {tag(lead.for?.[0] ? `Made for ${clip(lead.for[0], 16)}` : 'Pick for you', 'rgba(255,255,255,0.92)', INK)}
+                    {lead.care?.[0] ? tag(clip(lead.care[0], 18), CORAL, '#fff') : null}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', position: 'absolute', left: 52, right: 52, bottom: 52, color: '#fff' }}>
+                    <div style={{ display: 'flex', fontFamily: 'Fraunces', fontSize: 92, lineHeight: 1.02, letterSpacing: '-0.02em' }}>{clip(name, 26)}</div>
+                    {area ? <div style={{ display: 'flex', marginTop: 10, fontFamily: 'Schibsted Grotesk', fontSize: 34, opacity: 0.88 }}>{clip(area, 48)}</div> : null}
+                </div>
+            </div>
+            {creditText ? <div style={{ display: 'flex', minHeight: creditHeight, padding: '10px 28px', fontFamily: 'Schibsted Grotesk', fontSize: 20, lineHeight: 1.3, color: INK }}>{creditText}</div> : null}
+            <div style={{ display: 'flex', flexDirection: 'column', padding: '40px 56px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline' }}>
+                    <div style={{ display: 'flex', fontFamily: 'Fraunces', fontSize: 84, color: INK }}>{clip(price ?? '', 18)}</div>
+                </div>
+                {catchTxt ? <div style={{ display: 'flex', marginTop: 8, fontFamily: 'Schibsted Grotesk', fontSize: 32, color: MUTE }}>{clip(`Catch: ${catchTxt}`, 56)}</div> : null}
+                {chips.length ? (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', marginTop: 28 }}>
+                        {chips.map((c, i) => (
+                            <div key={i} style={{ display: 'flex', marginRight: 14, marginBottom: 12, padding: '12px 24px', borderRadius: 40, fontFamily: 'Schibsted Grotesk', fontSize: 28, background: c.ok ? '#DDF1E4' : '#FBE9D0', color: c.ok ? '#14532D' : '#7A3E00' }}>{c.ok ? c.t : `${c.t}: unverified`}</div>
+                        ))}
+                    </div>
+                ) : null}
+                {beat?.[0] ? (
+                    <div style={{ display: 'flex', alignItems: 'center', marginTop: 16, paddingTop: 26, borderTop: '2px solid rgba(14,26,51,0.1)', fontFamily: 'Schibsted Grotesk', fontSize: 30, color: MUTE }}>
+                        <div style={{ display: 'flex', marginRight: 16, fontFamily: 'DM Mono', fontSize: 22, letterSpacing: '0.12em', color: CORAL }}>BEAT</div>
+                        <div style={{ display: 'flex' }}>{clip(`${beat[0]}${beat[1] ? `, ${beat[1]}` : ''}`, 60)}</div>
+                    </div>
+                ) : null}
+                <Foot />
+            </div>
+        </div>
+    )
+    return { el, h: H }
+}
+
+const mins = (t: string): number => {
+    let m = 0
+    const h = t.match(/(\d+(?:\.\d+)?)\s*h/i), n = t.match(/(\d+)\s*m/i)
+    if (h) m += Math.round(parseFloat(h[1]) * 60)
+    if (n) m += parseInt(n[1], 10)
+    return m
+}
+
+export function routeSummary(lines: string[]): { legs: string[][]; eta: string; first: string[]; last: string[]; hidden: number } | null {
+    const all = lines.map(cells).filter((c) => c[0] && c[1])
+    if (!all.length) return null
+    const times = all.map((l) => mins(l[3] ?? ''))
+    const total = times.reduce((a, n) => a + n, 0)
+    const eta = times.every((n) => n > 0) ? (total >= 60 ? `${Math.floor(total / 60)} h ${total % 60 ? `${total % 60} min` : ''}`.trim() : `${total} min`) : `${all.length} ${all.length === 1 ? 'leg' : 'legs'}`
+    return { legs: all.slice(0, 4), eta, first: all[0], last: all[all.length - 1], hidden: Math.max(0, all.length - 4) }
+}
+
+function routeCard(lines: string[]): { el: ReactElement; h: number } | null {
+    const summary = routeSummary(lines)
+    if (!summary) return null
+    const { legs, eta, first, last, hidden } = summary
+    const modes = Array.from(new Set(legs.map((l) => l[2]).filter(Boolean))).join(' + ')
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 520" width="1080" height="520"><path d="M110 350C250 335 330 235 480 228S690 270 790 175 920 118 960 108" stroke="rgba(240,138,104,0.3)" stroke-width="30" fill="none" stroke-linecap="round"/><path d="M110 350C250 335 330 235 480 228S690 270 790 175 920 118 960 108" stroke="#F08A68" stroke-width="9" fill="none" stroke-linecap="round" stroke-dasharray="2 24"/><circle cx="110" cy="350" r="24" fill="#fff"/><circle cx="110" cy="350" r="10" fill="#0E1A33"/><circle cx="960" cy="108" r="28" fill="#F08A68"/><circle cx="960" cy="108" r="10" fill="#fff"/></svg>`
+    const art = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
+    const H = 520 + 40 + legs.length * 118 + 70 + (hidden ? 50 : 0)
+    const el = (
+        <div style={{ width: W, height: H, display: 'flex', flexDirection: 'column', background: PAPER }}>
+            <div style={{ display: 'flex', position: 'relative', width: W, height: 520, backgroundImage: 'linear-gradient(160deg, #16305A, #0E1A33)' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={art} width={W} height={520} alt="" style={{ position: 'absolute', left: 0, top: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', position: 'absolute', left: 52, top: 44, color: '#fff' }}>
+                    <div style={{ display: 'flex', fontFamily: 'Fraunces', fontSize: 130, lineHeight: 1, letterSpacing: '-0.02em' }}>{eta}</div>
+                    <div style={{ display: 'flex', marginTop: 14, fontFamily: 'DM Mono', fontSize: 24, letterSpacing: '0.14em', textTransform: 'uppercase', opacity: 0.75 }}>{clip(modes || 'Route', 30)}</div>
+                </div>
+                <div style={{ display: 'flex', position: 'absolute', left: 52, bottom: 36, fontFamily: 'Schibsted Grotesk', fontSize: 30, color: 'rgba(255,255,255,0.85)' }}>{clip(`${first[0]} to ${last[1]}`, 50)}</div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', padding: '20px 56px 0' }}>
+                {legs.map((l, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', height: 118, borderBottom: i < legs.length - 1 ? '2px solid rgba(14,26,51,0.1)' : 'none' }}>
+                        <div style={{ display: 'flex', width: 26, height: 26, borderRadius: 26, background: CORAL, marginRight: 30 }} />
+                        <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                            <div style={{ display: 'flex', fontFamily: 'Schibsted Grotesk', fontWeight: 600, fontSize: 36, color: INK }}>{clip(`${l[0]} to ${l[1]}`, 36)}</div>
+                            <div style={{ display: 'flex', marginTop: 4, fontFamily: 'Schibsted Grotesk', fontSize: 28, color: MUTE }}>{clip([l[2], l[4]].filter(Boolean).join(' · '), 52)}</div>
+                        </div>
+                        <div style={{ display: 'flex', fontFamily: 'DM Mono', fontSize: 28, color: MUTE }}>{clip(l[3] ?? '', 12)}</div>
+                    </div>
+                ))}
+                {hidden ? <div style={{ display: 'flex', fontFamily: 'Schibsted Grotesk', fontSize: 26, color: MUTE }}>{`+ ${hidden} more ${hidden === 1 ? 'leg' : 'legs'} on the page`}</div> : null}
+                <Foot />
+            </div>
+        </div>
+    )
+    return { el, h: H }
+}
+
+/** PNG for the first weather, scores, stay or route block on the page (in page order), or null when it has none. Photos are the copies the page builder made. */
+export async function renderKindCard(doc: { title: string; subtitle?: string; body: string }, photos: CardPhoto[] = []): Promise<Buffer | null> {
+    const segs = splitBlocks(doc.body)
+    const seg = segs.find((x) => x.kind === 'block' && ['weather', 'scores', 'stay', 'route'].includes(x.name))
     if (!seg || seg.kind !== 'block') return null
-    const built = seg.name === 'weather' ? weatherCard(seg.lines) : scoresCard(doc.title, doc.subtitle, seg.lines)
+    const built = seg.name === 'weather' ? weatherCard(seg.lines) : seg.name === 'scores' ? scoresCard(doc.title, doc.subtitle, seg.lines) : seg.name === 'stay' ? stayCard(segs, photos) : routeCard(seg.lines)
     if (!built) return null
     const res = new ImageResponse(built.el, { width: W, height: built.h, fonts: fonts() })
     return Buffer.from(await res.arrayBuffer())
