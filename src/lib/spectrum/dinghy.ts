@@ -69,7 +69,7 @@ export const AGENCY_LINE =
 // agent that does work for you." Grounding means verify-then-answer, never
 // refuse-or-hedge.
 export const GROUNDING_LINE =
-    'A question is a work order. Do the work to get to the answer: run as many searches as it takes (different wordings, ' +
+    'A question is a work order. Do the work to get to the answer: use focused searches (different wordings, ' +
     'narrower terms, recentDays for anything time-bound), check dates, compare sources, then come back with the answer. ' +
     'For "this week", "today", "latest" or "recently", use the published_date on each result and include only items dated inside that window. ' +
     'An undated result is a lead, not a fact: search again to find a dated source before using it. ' +
@@ -210,7 +210,7 @@ const WEATHER_LINE =
 
 const SEARCH_LINE =
     'For news, scores, prices, hours, recent events or anything that may have changed, call web_search ' +
-    'and answer from the results in a line or two. ' +
+    'and answer from the results. Use observed venue-specific URLs, never a generic search URL as proof of a place or its menu. Do not pad with unsupported venues or addresses. ' +
     GROUNDING_LINE
 
 const NO_SEARCH_LINE =
@@ -489,6 +489,20 @@ function egressRejection(name: string, args: string, tainted: boolean, corpus: R
     return null
 }
 
+export function needsAnswerPage(reply: string): boolean {
+    return reply.split('\n').filter((line) => line.trim()).length > 8 ||
+        (reply.match(/(?:^|\n)\s*\d+[.)]\s+/g)?.length ?? 0) >= 3
+}
+
+const RESEARCH_FINISH =
+    'Research budget is nearly used. Stop searching and finish from the evidence already returned. ' +
+    'Do not invent places, addresses, prices, hours or links. A search-category URL is not a source for a particular venue. ' +
+    'For a comparison or plan, call create_file now with concise :::options and :::sources blocks and a short verdict in chat. ' +
+    'Keep uncertain facts labeled unknown; omit unsupported options rather than pad the list. No new sends or bookings.'
+const PAGE_FINISH =
+    'This answer is too long for chat and no page was made. Call create_file once with this answer, using only supported facts and observed source URLs, then give a short verdict. ' +
+    'If hosting fails, give the useful result in chat and say the page was not made. Never claim a page exists without a successful tool result.'
+
 export async function chatWithTools(
     history: Message[],
     opts: {
@@ -533,6 +547,10 @@ export async function chatWithTools(
     ]
 
     let toolCallCount = 0
+    let successfulSearches = 0
+    let pageAttempted = false
+    let pageRetry = false
+    let completionMode = false
     let tainted = Boolean(opts.startTainted) || history.some((m) => m.googleDerived)
     // Enforced + tainted: private allowlist only, fail closed (throws, never falls back).
     // Shadow: log once per turn what would have gone private, route as before.
@@ -549,6 +567,14 @@ export async function chatWithTools(
     }
     for (let iteration = 1; iteration <= MAX_TOOL_ITERATIONS; iteration++) {
         await opts.onStage?.('gateway', String(iteration))
+        const remaining = opts.deadlineAt === undefined ? Infinity : opts.deadlineAt - Date.now()
+        // The production miss spent ~70s on gateway turns and ~8s searching.
+        // Keep time for synthesis and hosting rather than a fourth search turn.
+        if (!completionMode && successfulSearches > 0 && remaining < 40_000) {
+            completionMode = true
+            messages.push({ role: 'system', content: RESEARCH_FINISH })
+        }
+        const offered = completionMode ? toolDefs.filter((t) => t.function.name !== 'web_search' && (!pageAttempted || t.function.name !== 'create_file')) : toolDefs
         const t0 = Date.now()
         const res = await withinTurn(opts.deadlineAt, (signal) => fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
             signal,
@@ -557,7 +583,7 @@ export async function chatWithTools(
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${opts.apiKey}`,
             },
-            body: JSON.stringify({ ...modelFields(opts.model, routingNow()), messages, tools: toolDefs, stream: false }),
+            body: JSON.stringify({ ...modelFields(opts.model, routingNow()), messages, tools: offered, ...(completionMode && offered.length === 0 ? { tool_choice: 'none' } : {}), stream: false }),
         }))
         if (!res.ok) {
             const body = await withinTurn(opts.deadlineAt, () => res.text()).catch(() => '')
@@ -574,7 +600,14 @@ export async function chatWithTools(
         const calls = msg?.tool_calls ?? []
 
         if (choice?.finish_reason !== 'tool_calls' || calls.length === 0) {
-            return { reply: msg?.content ?? '(no response)', toolCalls: toolCallCount, iterations: iteration, tainted }
+            const reply = msg?.content ?? '(no response)'
+            if (!pageRetry && !pageAttempted && tools.some((t) => t.name === 'create_file') && needsAnswerPage(reply) && iteration < MAX_TOOL_ITERATIONS && (opts.deadlineAt === undefined || opts.deadlineAt - Date.now() >= 20_000)) {
+                pageRetry = true
+                completionMode = true
+                messages.push({ role: 'assistant', content: reply }, { role: 'system', content: PAGE_FINISH })
+                continue
+            }
+            return { reply, toolCalls: toolCallCount, iterations: iteration, tainted }
         }
 
         messages.push({ role: 'assistant', content: msg?.content ?? null, tool_calls: calls })
@@ -582,7 +615,9 @@ export async function chatWithTools(
             toolCallCount++
             const tool = tools.find((t) => t.name === call.function.name)
             let content: string
-            if (!tool) {
+            if (completionMode && (call.function.name === 'web_search' || (pageAttempted && call.function.name === 'create_file'))) {
+                content = JSON.stringify({ error: 'Research budget is complete. Use the sources already returned; finish the answer or create_file. This tool was not run.' })
+            } else if (!tool) {
                 content = JSON.stringify({ error: `unknown tool ${call.function.name}` })
             } else if (egressRejection(call.function.name, call.function.arguments || '', tainted, corpus)) {
                 content = JSON.stringify({ error: egressRejection(call.function.name, call.function.arguments || '', tainted, corpus) })
@@ -591,6 +626,7 @@ export async function chatWithTools(
                     await opts.onStage?.('tool', call.function.name)
                     await assertAccountActive(ctx.userId,ctx.chatGuid)
                     const input = JSON.parse(call.function.arguments || '{}') as unknown
+                    if (call.function.name === 'create_file') pageAttempted = true
                     const result = await withinTurn(opts.deadlineAt, () => Promise.race([
                         tool.execute(input, ctx),
                         new Promise<never>((_, reject) =>
@@ -598,6 +634,12 @@ export async function chatWithTools(
                         ),
                     ]))
                     content = JSON.stringify(result.success ? result.data ?? {} : { error: result.error ?? 'tool failed' })
+                    if (result.success && call.function.name === 'web_search') successfulSearches++
+                    if (result.success && call.function.name === 'create_file' && completionMode && calls.length === 1) {
+                        // Hosting succeeded; the transport already owns the queued link.
+                        // Do not spend another slow gateway call merely announcing it.
+                        return { reply: 'Here you go.', toolCalls: toolCallCount, iterations: iteration, tainted }
+                    }
                     if (isGoogleTool(call.function.name)) {
                         tainted = true
                         addToCorpus(corpus, content)
