@@ -1057,7 +1057,8 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 includeOpener,
                 knownFirstName: knownFirstName ?? undefined,
                 capabilities: { ...(toolCtx ? capabilitiesFor(toolCtx) : guestCapabilities()), spend: true, reminders: true, ...(invitesLeft !== null ? { invitesLeft } : {}) },
-                memory: memoryBlock + (background ?? '') + '\n\n' + clock,
+                memory: memoryBlock,
+                volatile: (background ?? '') + '\n\n' + clock,
                 interviewLine: interviewLine ?? undefined,
                 onUsage,
                 ...(wantsPlaces(text) && tools.some((t) => t.name === 'find_places') ? { forceTool: 'find_places' } : {}),
@@ -1088,7 +1089,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         } else {
             replyTainted = full.some((m) => m.googleDerived)
             reply = await chat(full, {
-                deadlineAt, onStage,
+                deadlineAt, onStage, chatGuid: runCtx.chatGuid,
                 taskClass: classifyUserTurn(text),
                 gatewayUrl: GATEWAY_URL,
                 apiKey: SHIPYARD_API_KEY,
@@ -1097,7 +1098,8 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 facts,
                 includeOpener,
                 knownFirstName: knownFirstName ?? undefined,
-                memory: memoryBlock + (background ?? '') + '\n\n' + clock,
+                memory: memoryBlock,
+                volatile: (background ?? '') + '\n\n' + clock,
                 interviewLine: interviewLine ?? undefined,
                 onUsage,
             })
@@ -1229,4 +1231,4 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         clearTimeout(eyesTimer)
         stopTypingReTap(space, typingHandle)
     }
-        }
+}
