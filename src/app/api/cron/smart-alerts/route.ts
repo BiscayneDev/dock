@@ -1,3 +1,4 @@
+import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 import { telegramEnabled, telegramDisabledResponse } from '@/lib/telegram/enabled'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   for (const user of users) {
+    try { await assertAccountActive(user.id as string) } catch { continue }
     const timezone = (user.timezone as string) ?? 'UTC'
 
     // Skip if in quiet hours
