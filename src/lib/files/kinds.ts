@@ -12,7 +12,7 @@ export const KIND_BLOCKS = ['weather', 'scores', 'media', 'stay', 'route', 'brie
 export type KindBlock = (typeof KIND_BLOCKS)[number]
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-const cells = (line: string): string[] => line.split('|').map((c) => c.trim())
+export const cells = (line: string): string[] => line.split('|').map((c) => c.trim())
 const httpUrl = (u?: string) => (u && /^https?:\/\/[^\s\u0000-\u001f]+$/i.test(u) ? u : '')
 const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, '') } catch { return '' } }
 
@@ -21,7 +21,7 @@ export const LOCAL_IMG = /^img\/[a-z0-9][a-z0-9-]{0,60}\.(?:jpg|jpeg|png|webp)$/
 const img = (p?: string) => (p && LOCAL_IMG.test(p) ? p : '')
 
 /** Stable 0-359 hue from a title, so a card with no photo still gets its own colour. */
-function hue(s: string): number {
+export function hue(s: string): number {
     let h = 0
     for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) % 360
     return h
@@ -31,7 +31,7 @@ function hue(s: string): number {
 const CLOUD = '<path d="M17 38a9 9 0 0 1 1.6-17.9A12 12 0 0 1 41.4 22 8 8 0 0 1 41 38z" fill="#fff"/>'
 const SUN = (x: number, y: number, r: number) => `<g transform="translate(${x} ${y})"><circle r="${r}" fill="#FFD27A"/>${[0, 45, 90, 135, 180, 225, 270, 315].map((a) => `<path d="M0 ${-r - 4}V${-r - 9}" stroke="#FFD27A" stroke-width="3" stroke-linecap="round" transform="rotate(${a})"/>`).join('')}</g>`
 /** Small inline weather icon. No emoji, so it looks the same on every phone. */
-function skyIcon(cls: string, size: number): string {
+export function skyIcon(cls: string, size: number): string {
     const body: Record<string, string> = {
         clear: SUN(32, 32, 11),
         part: `${SUN(40, 22, 8)}<g transform="translate(-4 8)">${CLOUD}</g>`,
@@ -45,7 +45,7 @@ function skyIcon(cls: string, size: number): string {
 }
 
 /** Pick a sky look from the words the model used. */
-function skyOf(sky: string): { cls: string } {
+export function skyOf(sky: string): { cls: string } {
     const s = sky.toLowerCase()
     if (/thunder|storm/.test(s)) return { cls: 'storm' }
     if (/snow|sleet|flurr/.test(s)) return { cls: 'snow' }
@@ -57,7 +57,7 @@ function skyOf(sky: string): { cls: string } {
     return { cls: 'part' }
 }
 
-const num = (s?: string): number | null => {
+export const num = (s?: string): number | null => {
     const m = (s ?? '').match(/-?\d+(?:\.\d+)?/)
     return m ? Number(m[0]) : null
 }
