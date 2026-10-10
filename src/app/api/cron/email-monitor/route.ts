@@ -1,3 +1,4 @@
+import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 import { telegramEnabled, telegramDisabledResponse } from '@/lib/telegram/enabled'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let notifiedCount = 0
 
   for (const user of users) {
+    try { await assertAccountActive(user.id as string) } catch { continue }
     try {
       const tokens = await getDecryptedTokens(user.id as string)
       if (!tokens.google) continue
