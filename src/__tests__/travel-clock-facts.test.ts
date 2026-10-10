@@ -25,7 +25,8 @@ describe('travel corrections', () => {
   })
   it('passes the clock into both chat paths and leaves travel as turn-only context', () => {
     const handler = readFileSync('src/lib/spectrum/handler.ts', 'utf8')
-    expect(handler).toContain('toolCtx.timezone = travelZone.choice.zone')
+    expect(handler).toContain('toolCtx.timezone = cur.zone')
+    expect(handler.indexOf('const home = toolCtx.timezone')).toBeLessThan(handler.indexOf('toolCtx.timezone = cur.zone'))
     expect(handler.match(/\+ clock,/g)).toHaveLength(2)
     expect(handler).toContain('const clock = localClockContext')
   })

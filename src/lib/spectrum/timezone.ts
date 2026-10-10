@@ -12,6 +12,13 @@ export function parseTimezoneIntent(text: string): string | null {
   return m ? m[1].trim().replace(/[.!?]+$/, '').trim() : null
 }
 
+/** Home-zone changes only: an explicit "set/change my timezone" or a "nope, I'm back in X" correction. A bare "I'm in X" is current place (place.ts), not home. */
+export function parseHomeTimezoneIntent(text: string): string | null {
+  const t = text.trim().replace(/[’]/g, "'")
+  const explicitSet = /^(?:please )?(?:remember|note)(?: that)? i(?: am|'m) (?:on|in) /i.test(t) || /^(?:please )?(?:set|change|switch) my (?:time ?zone|mornings)/i.test(t) || /^(?:nope|no|actually)[,.!]\s*i(?: am|'m) (?:now |currently )?back in\b/i.test(t)
+  return explicitSet ? parseTimezoneIntent(text) : null
+}
+
 export function validIanaTimezone(value: string): string | null {
   if (!/^[A-Za-z_]+(?:\/[A-Za-z_+-]+)+$/.test(value)) return null
   try { return new Intl.DateTimeFormat('en-US', { timeZone: value }).resolvedOptions().timeZone }
@@ -101,11 +108,15 @@ export function currentTravelPlace(text: string): string | null {
   return m ? m[1].trim().replace(/\.$/, '') : null
 }
 
-export function localClockContext(zone: string, now: Date = new Date()): string {
+export function localClockContext(zone: string, now: Date = new Date(), away?: { home: string; label: string; source: 'statement' | 'pin' }): string {
   const valid = validIanaTimezone(zone) ?? 'UTC'
   const local = new Intl.DateTimeFormat('en-GB', { timeZone: valid, dateStyle: 'full', timeStyle: 'long' }).format(now)
-  return `Current local clock: ${local}. Timezone: ${valid}. UTC instant: ${now.toISOString()}. ` +
+  const homeValid = away ? validIanaTimezone(away.home) : null
+  const awayNote = away && homeValid && homeValid !== valid
+    ? `The user is away from home: ${away.source === 'pin' ? 'a location they shared' : 'they said they are in'} ${away.label}. Home timezone: ${homeValid} (${new Intl.DateTimeFormat('en-GB', { timeZone: homeValid, weekday: 'short', hour: '2-digit', minute: '2-digit' }).format(now)} there). Use ${valid} for today/tonight/tomorrow and when quoting times; mention home time only when it matters. Home is unchanged. `
+    : ''
+  return awayNote + `Current local clock: ${local}. Timezone: ${valid}. UTC instant: ${now.toISOString()}. ` +
     'Resolve today/tonight/tomorrow in this timezone, not home time. A calendar title or old memory is not a confirmed current itinerary. ' +
     'Do not replace a flight time the user states with another trip or another person\'s calendar event. Verify the same departure place, date and flight before correcting them; if sources conflict, ask rather than announce a new time. ' +
     'Treat the user\'s current location and corrections as the authority over old summaries and assistant replies. Never use your earlier reply as proof.'
-}
+                   }
