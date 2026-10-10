@@ -1,3 +1,4 @@
+import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 import { createHash, randomBytes } from 'crypto'
 import { PayboxClient as PayboxSdk } from '@paybox-sh/sdk'
 import { createServerClient } from '@/lib/supabase/server'
@@ -240,6 +241,7 @@ export async function getPayboxAccessToken(
   tokens: DecryptedTokens,
   userId: string
 ): Promise<string> {
+  await assertAccountActive(userId)
   if (!tokens.expiresAt || !tokens.refreshToken) {
     return tokens.accessToken
   }
