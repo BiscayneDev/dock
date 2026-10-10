@@ -13,7 +13,7 @@ describe('revokeGoogleToken', () => {
         expect(String(init.body)).toBe('token=tok')
     })
     it('treats an already-invalid token as revoked, other errors as failed', async () => {
-        vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 400 })))
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'invalid_token' }), { status: 400 })))
         expect(await revokeGoogleToken('tok')).toBe('revoked')
         vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 500 })))
         expect(await revokeGoogleToken('tok')).toBe('failed')
