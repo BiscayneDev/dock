@@ -1,3 +1,4 @@
+import { assertAccountActive, erasureEnabled, isEraseIntent } from '@/lib/data-portability/erasure-state'
 import { withinTurn, TURN_WORK_MS, TURN_DEADLINE_REPLY, TurnDeadlineExceeded } from './turn-budget'
 import { runStageRecorder } from './run-stage'
 
@@ -396,6 +397,11 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         return
     }
 
+    try { await assertAccountActive(undefined,chatGuid) } catch { return }
+
+    const originalSend=space.send.bind(space)
+    space.send=async (content:string) => { await assertAccountActive(undefined,chatGuid); return originalSend(content) }
+
     // Exactly-once: Spectrum delivery is at-least-once, dedupe on message.id.
     if (message.id) {
         const isNew = await claimInboundDelivery(message.id, chatGuid)
@@ -450,6 +456,15 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
 
     if (!role) {
         await handleGatedMessage(space, chatGuid, text)
+        return
+    }
+
+    // Erasure is confirmed in a signed-in, same-origin flow, never by a
+    // casual yes, a quoted message, a tapback, or an attachment.
+    if (inbound?.kind==='text' && isEraseIntent(text)) {
+        await sendText(space,chatGuid,'reply',erasureEnabled()
+            ? "Data deletion needs a signed-in confirmation. Open your profile to review the deletion warning first. Nothing was deleted by this text."
+            : "Full account deletion isn't enabled yet. 'Forget everything' only clears remembered facts, not your account or history. Nothing was deleted.")
         return
     }
 
@@ -1170,4 +1185,4 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         clearTimeout(eyesTimer)
         stopTypingReTap(space, typingHandle)
     }
-                    }
+        }
