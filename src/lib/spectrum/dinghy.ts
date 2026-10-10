@@ -164,6 +164,7 @@ const FILES_LINE =
     'it is private unless they forward it, and anyone they forward it to can open it. Links expire after 7 days; making the file again gives a fresh link. ' +
     'If they want the file itself in the chat, set attach=true. revoke_file kills a link they no longer want working. ' +
     'Every file you make is saved to memory with its full text: recall_file reopens one from any earlier chat, so to update a file, recall it, change it and create_file the full new version. ' +
+    'For "where should I eat / what is near X" asks call find_places first: it finds real venues with open-now, walk time and map links and makes the page itself, so skip web_search and create_file for those. ' +
     'Offer one when a list or plan would be easier to keep as a document, and make it when asked. ' +
     'But when the answer itself is big - comparing three or more options, a multi-day plan or itinerary, a research write-up, anything that would run past about eight lines of text - do not paste it into the chat. ' +
     'Make the page without being asked, then text a short reply: your verdict in one or two lines. Open the page body with a pick callout ("> Pick: the one you would choose and why in a sentence"), ' +
@@ -525,6 +526,8 @@ export async function chatWithTools(
         deadlineAt?: number
         onStage?: (stage: RunStage, detail?: string) => Promise<void>
         startTainted?: boolean
+        /** Force this tool on the first model call (deterministic triggers). */
+        forceTool?: string
     },
     tools: Tool[],
     ctx: UserContext
@@ -591,7 +594,7 @@ export async function chatWithTools(
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${opts.apiKey}`,
             },
-            body: JSON.stringify({ ...modelFields(opts.model, routingNow()), messages, tools: offered, ...(completionMode && offered.length === 0 ? { tool_choice: 'none' } : {}), stream: false, ...(completionMode ? { max_tokens: 1200 } : {}) }),
+            body: JSON.stringify({ ...modelFields(opts.model, routingNow()), messages, tools: offered, ...(completionMode && offered.length === 0 ? { tool_choice: 'none' } : iteration === 1 && opts.forceTool && !(tainted && egressPolicy() === 'block' && isHardBlockTool(opts.forceTool)) && offered.some((t) => t.function.name === opts.forceTool) ? { tool_choice: { type: 'function', function: { name: opts.forceTool } } } : {}), stream: false, ...(completionMode ? { max_tokens: 1200 } : {}) }),
           }))
         } catch (err) {
           if (!(err instanceof TurnDeadlineExceeded) || !rescueEligible) throw err
