@@ -111,7 +111,7 @@ describe('trimmed history privacy', () => {
   it('retains private routing for old taint omitted from both wire histories', async () => {
     vi.stubEnv('DINGHY_PRIVATE_ROUTE', 'on')
     vi.stubEnv('DINGHY_PRIVATE_PROVIDERS', 'venice-private')
-    const history = [{ role: 'assistant', content: 'OLD_GOOGLE_SECRET', googleDerived: true }, ...Array.from({ length: 12 }, (_, i) => ({ role: 'user', content: `clean ${i}` }))]
+    const history = [{ role: 'assistant' as const, content: 'OLD_GOOGLE_SECRET', googleDerived: true }, ...Array.from({ length: 12 }, (_, i) => ({ role: 'user' as const, content: `clean ${i}` }))]
     const bodies: Record<string, any>[] = []
     vi.stubGlobal('fetch', vi.fn(async (_u: string, init: { body: string }) => { bodies.push(JSON.parse(init.body)); return resp({ content: 'done' }, 'stop') }))
     await chat(history, opts)
