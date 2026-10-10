@@ -1,3 +1,4 @@
+import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 import { telegramEnabled, telegramDisabledResponse } from '@/lib/telegram/enabled'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
@@ -34,6 +35,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const results = await Promise.allSettled(
     recipes.map(async (recipe) => {
       try {
+        await assertAccountActive(recipe.user_id as string)
         const user = recipe.users as unknown as {
           id: string; telegram_id: number; name: string | null; timezone: string
         }
