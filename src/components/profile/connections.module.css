@@ -1,0 +1,16 @@
+.acct { flex-direction: column; align-items: stretch; gap: 8px; }
+.top { display: flex; align-items: center; gap: 14px; }
+.tag {
+  margin-left: 8px; padding: 2px 8px; border-radius: 999px; background: #F1E8D8; color: #0E1A33;
+  font-family: var(--font-dmmono), ui-monospace, monospace; font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; vertical-align: middle;
+}
+.can { margin: 2px 0 0; padding-left: 18px; font-size: 14px; color: rgba(14, 26, 51, 0.8); }
+.can li { margin: 2px 0; }
+.meta { font-size: 12.5px; color: rgba(14, 26, 51, 0.55); }
+.meta a { color: #C8583A; }
+.danger {
+  height: 34px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(200, 88, 58, 0.55); background: transparent;
+  color: #A8442A; font: 500 13px/1 inherit; cursor: pointer; white-space: nowrap;
+}
+.danger:hover { background: #FFF1E8; }
+.foot { margin: 8px 2px 0; font-size: 12.5px; color: rgba(14, 26, 51, 0.5); }

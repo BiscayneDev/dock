@@ -5,6 +5,8 @@ import { createServerClient } from '@/lib/supabase/server'
 import { CoastShell, shellStyles } from '@/components/brand/CoastShell'
 import styles from './profile.module.css'
 import ProfilePanels from '@/components/profile/ProfilePanels'
+import ConnectionsPanel from '@/components/profile/ConnectionsPanel'
+import { listConnections } from '@/lib/profile/connections'
 
 export const metadata: Metadata = {
   title: 'Your profile · Dinghy',
@@ -35,11 +37,11 @@ function formatWhen(iso: string, tz: string): string {
 export default async function ProfilePage({
   searchParams,
 }: {
-  searchParams: Promise<{ connected?: string }>
+  searchParams: Promise<{ connected?: string; disconnected?: string; revoked?: string; disconnect?: string; revoked_login?: string; revoke?: string }>
 }): Promise<React.JSX.Element> {
   const session = await getSession()
   if (!session) redirect('/login')
-  const { connected } = await searchParams
+  const { connected, disconnected, revoked, disconnect, revoked_login, revoke } = await searchParams
 
   const supabase = createServerClient()
   const [{ data: user }, { data: identity }, { data: tokens }] = await Promise.all([
@@ -47,7 +49,8 @@ export default async function ProfilePage({
     supabase.from('spectrum_identities').select('chat_guid, handle').eq('user_id', session.userId).order('bound_at', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('oauth_tokens').select('provider').eq('user_id', session.userId),
   ])
-  const have = new Set(((tokens ?? []) as Array<{ provider: string }>).map((t) => t.provider))
+  const have = new Set(((tokens ?? []) as Array<{ provider: string }>).map((t) => (t.provider.startsWith('google:') ? 'google' : t.provider)))
+  const connections = await listConnections(session.userId).catch(() => ({ accounts: [], capabilities: [], runs: [] }))
   const tz = user?.timezone && user.timezone !== 'UTC' ? (user.timezone as string) : 'America/New_York'
   const chatGuid = (identity?.chat_guid as string | undefined) ?? null
   const phone = formatPhone((identity?.handle as string | undefined) ?? null)
@@ -79,30 +82,13 @@ export default async function ProfilePage({
       <h1 className={styles.title}>{firstName ? <>Hello, <em>{firstName}</em></> : <>Welcome <em>aboard</em></>}</h1>
       <p className={styles.meta}>{phone ? `Signed in as ${phone}` : 'Signed in'}</p>
       {connectedName && <p className={styles.flash}>{connectedName} is connected.</p>}
+      {disconnected && <p className={styles.flash}>{disconnected} disconnected.{revoked === '1' ? ' Access was also ended at the provider.' : ' Remove Dinghy in that app too to end the grant fully.'}</p>}
+      {revoked_login && <p className={styles.flash}>Browser login revoked.</p>}
+      {(disconnect || revoke) && <p className={styles.flash}>Could not do that. Nothing was changed.</p>}
 
       <ProfilePanels />
 
-      <section className={styles.section}>
-        <h2 className={styles.h2}>Connected accounts</h2>
-        <ul className={styles.list}>
-          {ACCOUNTS.map((a) => (
-            <li key={a.provider} className={styles.item}>
-              <div className={styles.grow}>
-                <div className={styles.name}>{a.name}</div>
-                <div className={styles.desc}>{a.desc}</div>
-              </div>
-              {have.has(a.provider) ? <span className={styles.on}>Connected</span> : <a className={styles.connect} href={a.auth}>Connect</a>}
-            </li>
-          ))}
-          <li className={styles.item}>
-            <div className={styles.grow}>
-              <div className={styles.name}>X</div>
-              <div className={styles.desc}>Read posts and accounts. No account needed.</div>
-            </div>
-            <span className={styles.on}>On</span>
-          </li>
-        </ul>
-      </section>
+      <ConnectionsPanel data={connections} tz={tz} connectLinks={ACCOUNTS.filter((a) => !have.has(a.provider)).map((a) => ({ name: a.name, auth: a.auth }))} />
 
       <section className={styles.section}>
         <h2 className={styles.h2}>Upcoming reminders</h2>

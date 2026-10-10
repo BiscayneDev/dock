@@ -1,3 +1,4 @@
+import { revokeGoogleToken } from '@/lib/integrations/revoke'
 import { extraGoogleProvider } from './google-accounts'
 import { google } from 'googleapis'
 import { createServerClient } from '@/lib/supabase/server'
@@ -238,6 +239,19 @@ export async function disconnectGoogleAccount(userId: string, email: string): Pr
       await setPrimaryGoogleAccount(userId, String(next.provider_account_email))
       provider = extraGoogleProvider(target)
     }
+  }
+  // End the grant at Google first (best effort), then drop our copy.
+  const { data: tokenRow } = await supabase
+    .from('oauth_tokens')
+    .select('access_token, refresh_token')
+    .eq('user_id', userId)
+    .eq('provider', provider)
+    .maybeSingle()
+  if (tokenRow) {
+    const raw = (tokenRow.refresh_token ?? tokenRow.access_token) as string | null
+    let plain: string | null = null
+    try { plain = raw ? decryptTokenFromDb(raw) : null } catch { plain = null }
+    await revokeGoogleToken(plain)
   }
   const { error: delErr } = await supabase.from('oauth_tokens').delete().eq('user_id', userId).eq('provider', provider)
   if (delErr) throw new Error(`Failed to disconnect ${target}: ${delErr.message}`)
