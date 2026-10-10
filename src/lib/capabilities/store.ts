@@ -168,6 +168,19 @@ export async function loadCapabilitySecret<T>(
   return { row: pub, secret }
 }
 
+/** Revoke one capability by id, scoped to its owner. Deletes the secret now. Returns rows revoked. */
+export async function revokeCapabilityById(userId: string, id: string): Promise<number> {
+  const { data, error } = await createServerClient()
+    .from('user_capabilities')
+    .update({ revoked_at: new Date().toISOString(), secret_enc: null })
+    .eq('user_id', userId)
+    .eq('id', id)
+    .is('revoked_at', null)
+    .select('id')
+  if (error) throw new Error(`capability revoke failed: ${error.message}`)
+  return (data ?? []).length
+}
+
 /** Revoke by label, or everything of a kind when label is omitted. Deletes the secret now. Returns rows revoked. */
 export async function revokeCapabilities(userId: string, kind: CapabilityKind, label?: string): Promise<number> {
   let q = createServerClient()
@@ -250,4 +263,4 @@ export async function auditEvent(input: {
     detail: input.detail ?? {},
   })
   if (error) console.error('capability audit event failed:', error.message)
-}
+                                                                                                }
