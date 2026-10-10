@@ -1,6 +1,6 @@
 /** Delivery belongs to the current turn's file queue, not model-written links. */
 const HOSTED_URL = /https?:\/\/[a-z0-9-]+\.here\.now\/?[^\s)]*/i
-const MADE_CLAIM = /\b(?:I(?:'ve| have)?|we(?:'ve| have)?)\s+(?:compiled|created|made|prepared|updated|put together)\b[\s\S]*\b(?:document|file|page|pdf|research|comparison)\b/i
+const MADE_CLAIM = /\b(?:I(?:'ve| have)?|we(?:'ve| have)?)\s+(?:compiled|created|made|prepared|updated|put together)\b[\s\S]*\b(?:document|file|page|pdf)\b/i
 const DELIVERY_PROMISE = /\b(?:link|file|page|pdf|document)\b[^.!?\n]{0,100}\b(?:will be sent|after your reply|when you(?:'re| are) ready|once you reply)\b/i
 
 export function needsFileRepair(reply: string): boolean {
