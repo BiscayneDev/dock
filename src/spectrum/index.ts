@@ -19,6 +19,7 @@ import { Spectrum } from 'spectrum-ts'
 import { imessage, nativeContactCard } from '@spectrum-ts/imessage'
 import {
   ensureIdentity,
+  assertSpectrumChatActive,
   isGoogleConnected,
   loadHistory,
   saveMessage,
@@ -27,6 +28,13 @@ import {
   ackResume,
   listUnresumedResumeChats,
 } from './store'
+
+async function guardedSend(space:{send(content:unknown):Promise<unknown>;guid?:string;id?:string},content:unknown):Promise<unknown> {
+  const guid=space.guid || space.id
+  if(!guid && process.env.DINGHY_DATA_ERASURE_ENABLED==='1')throw new Error('Missing delivery owner')
+  if(guid)await assertSpectrumChatActive(guid)
+  return space.send(content)
+}
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
@@ -169,7 +177,7 @@ for await (const [space, message] of app.messages) {
   // On-demand contact card — user asks for it.
   if (CONTACT_CARD_TRIGGERS.some((t) => text.toLowerCase().includes(t))) {
     try {
-      await sp.send(nativeContactCard())
+      await guardedSend(sp,nativeContactCard())
       console.log(`imessage → ${sp.guid}: shared contact card (on request)`)
     } catch (err) {
       console.error('Failed to share contact card:', err instanceof Error ? err.message : String(err))
@@ -181,7 +189,7 @@ for await (const [space, message] of app.messages) {
   if (!onboarded.has(sp.guid)) {
     onboarded.add(sp.guid)
     try {
-      await sp.send(nativeContactCard())
+      await guardedSend(sp,nativeContactCard())
       console.log(`imessage → ${sp.guid}: shared contact card (onboarding)`)
     } catch (err) {
       console.error('Onboarding contact card failed:', err instanceof Error ? err.message : String(err))
@@ -195,13 +203,13 @@ for await (const [space, message] of app.messages) {
     try {
       const link = await createConnectLink(sp.guid, text)
       await saveMessage(sp.guid, 'user', text)
-      await sp.send(
+      await guardedSend(sp,
         `email + calendar aren't connected yet — connect google and i'll take it from there:\n${link}`
       )
       console.log(`imessage → ${sp.guid}: sent google connect link`)
     } catch (err) {
       console.error('Connect link failed:', err instanceof Error ? err.message : String(err))
-      await sp.send("couldn't start the connect flow — try again in a moment.")
+      await guardedSend(sp,"couldn't start the connect flow — try again in a moment.")
     }
     continue
   }
@@ -213,12 +221,12 @@ for await (const [space, message] of app.messages) {
 
   try {
     const reply = await chat(history)
-    await sp.send(reply)
+    await guardedSend(sp,reply)
     await saveMessage(sp.guid, 'assistant', reply)
     console.log(`imessage → ${sp.guid}: ${reply.slice(0, 80)}`)
   } catch (err) {
     console.error('Gateway call failed:', err instanceof Error ? err.message : String(err))
-    await sp.send('Something went wrong on my end. Try again in a moment.')
+    await guardedSend(sp,'Something went wrong on my end. Try again in a moment.')
   }
 }
 
@@ -246,7 +254,7 @@ async function deliverResume(guid: string): Promise<void> {
       console.log(`imessage: ${guid} not cached — resume lease will expire and retry`)
       return
     }
-    await space.send(`google connected ✓\n\n${reply}`)
+    await guardedSend(space,`google connected ✓\n\n${reply}`)
     await ackResume(claimed.id) // ack ONLY after a successful send
     await saveMessage(guid, 'user', claimed.pendingRequest)
     await saveMessage(guid, 'assistant', reply)
