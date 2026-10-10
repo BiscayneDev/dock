@@ -388,16 +388,19 @@ export async function chat(
         onStage?: (stage: RunStage, detail?: string) => Promise<void>
         startTainted?: boolean
         /** For gateway-call telemetry attribution. */
+        volatile?: string
         chatGuid?: string
     }
 ): Promise<string> {
-    const messages = [
+    const baseMessages = [
         {
             role: 'system' as const,
-            content: buildSystemPrompt(opts.facts ?? [], opts.includeOpener ?? false, opts.capabilities ?? false, opts.knownFirstName) + (opts.memory ?? '') + (opts.interviewLine ? ' ' + opts.interviewLine : '') + '\n\n' + STYLE_ANCHOR,
+            content: buildSystemPrompt(opts.facts ?? [], opts.includeOpener ?? false, opts.capabilities ?? false, opts.knownFirstName) + (opts.memory ?? '') + '\n\n' + STYLE_ANCHOR,
         },
-        ...history.map(toWireMessage),
+        ...windowHistory(history).map(toWireMessage),
     ]
+
+    const messages = withVolatileNote(baseMessages, [opts.volatile, opts.interviewLine].filter(Boolean).join('\n\n'))
 
     await opts.onStage?.('gateway')
     const t0 = Date.now()
@@ -438,6 +441,7 @@ export async function chat(
 // hopscotch model) ────────────────────────────────────────────────────────
 
 import type { Tool, UserContext } from '@/lib/llm/types'
+import { windowHistory, withVolatileNote } from './history-window'
 import { classForIteration, hintHeaders, type TaskClass } from './turn-class'
 import { readGatewayUsage, type GatewayUsage } from './metering'
 import { buildCallRow, logGatewayCall, requestedLabel, type CallContext } from './gateway-log'
@@ -547,6 +551,8 @@ export async function chatWithTools(
         deadlineAt?: number
         onStage?: (stage: RunStage, detail?: string) => Promise<void>
         startTainted?: boolean
+        /** Per-turn context that changes every call (clock, background): sent as a late system note so the prompt prefix stays cacheable. */
+        volatile?: string
     },
     tools: Tool[],
     ctx: UserContext
@@ -555,7 +561,7 @@ export async function chatWithTools(
         type: 'function' as const,
         function: { name: t.name, description: t.description, parameters: t.inputSchema },
     }))
-    const messages: Record<string, unknown>[] = [
+    let messages: Record<string, unknown>[] = [
         {
             role: 'system',
             content: buildSystemPrompt(
@@ -563,10 +569,11 @@ export async function chatWithTools(
                 opts.includeOpener ?? false,
                 opts.capabilities ?? { google: Boolean(ctx.tokens.google), wallet: Boolean(ctx.tokens.paybox) },
                 opts.knownFirstName
-            ) + (opts.memory ?? '') + (opts.interviewLine ? ' ' + opts.interviewLine : '') + '\n\n' + STYLE_ANCHOR,
+            ) + (opts.memory ?? '') + '\n\n' + STYLE_ANCHOR,
         },
-        ...history.map(toWireMessage),
+        ...windowHistory(history).map(toWireMessage),
     ]
+    messages = withVolatileNote(messages, [opts.volatile, opts.interviewLine].filter(Boolean).join('\n\n')) as Record<string, unknown>[]
 
     let toolCallCount = 0
     let successfulSearches = 0
@@ -740,4 +747,4 @@ export async function chatWithTools(
         iterations: MAX_TOOL_ITERATIONS + 1,
         tainted,
     }
-    }
+}
