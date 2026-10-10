@@ -5,7 +5,9 @@ import type { LatLon } from './location'
 export function parseTimezoneIntent(text: string): string | null {
   // Accept a current-location correction in its own opening sentence.
   // Do not infer a place from quoted text, past travel or future plans.
-  const current = text.trim().replace(/^(?:nope|no|actually)[,.!]\s*/i, '').split(/[.!?](?:\s|$)/, 1)[0]
+  const explicit = text.trim().replace(/[’]/g, "'").match(/^(?:please )?(?:remember|note)(?: that)? i(?: am|'m) (?:on|in) (?:a |the )?([\p{L} /_+-]{2,80}) time\s?zone(?:[.!]|$)/iu)
+  if (explicit) return explicit[1].trim()
+  const current = text.trim().replace(/[’]/g, "'").replace(/^(?:nope|no|actually)[,.!]\s*/i, '').split(/[.!?](?:\s|$)/, 1)[0]
   const m = current.match(/^(?:i(?: am|'m) (?:now |currently )?(?:back )?in|(?:please )?(?:set|change|switch) my (?:time ?zone|mornings) (?:to|for))\s+([\p{L}\p{N}_/,+. '-]{2,80})[.!?]?$/iu)
   return m ? m[1].trim().replace(/[.!?]+$/, '').trim() : null
 }
@@ -77,4 +79,21 @@ export async function setChatTimezone(chatGuid: string, zone: string): Promise<b
 
 export function timezoneAck(choice: ZoneChoice): string {
   return `Timezone set to ${choice.label} (${choice.zone}). Morning brief at 8am there.`
+}
+
+/** A current travel statement is turn context, not a permanent home-zone change. */
+export function currentTravelPlace(text: string): string | null {
+  const clean = text.replace(/[’]/g, "'")
+  if (/["“”]/.test(clean) || /\b(?:i was|i will|i'm going|i am going)\b/i.test(clean)) return null
+  const m = clean.match(/\bi(?: am|'m) (?:currently |now )?(?:on (?:a |the |my )?(?:work |business )?trip |travell?ing )in ([\p{L} .'-]{2,60})(?:[,!?]|$)/iu)
+  return m ? m[1].trim().replace(/\.$/, '') : null
+}
+
+export function localClockContext(zone: string, now: Date = new Date()): string {
+  const valid = validIanaTimezone(zone) ?? 'UTC'
+  const local = new Intl.DateTimeFormat('en-GB', { timeZone: valid, dateStyle: 'full', timeStyle: 'long' }).format(now)
+  return `Current local clock: ${local}. Timezone: ${valid}. UTC instant: ${now.toISOString()}. ` +
+    'Resolve today/tonight/tomorrow in this timezone, not home time. A calendar title or old memory is not a confirmed current itinerary. ' +
+    'Do not replace a flight time the user states with another trip or another person\'s calendar event. Verify the same departure place, date and flight before correcting them; if sources conflict, ask rather than announce a new time. ' +
+    'Treat the user\'s current location and corrections as the authority over old summaries and assistant replies. Never use your earlier reply as proof.'
 }
