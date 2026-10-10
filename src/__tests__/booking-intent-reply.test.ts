@@ -25,3 +25,12 @@ describe('booking intent stays separate from nearby discovery',()=>{
   expect(r.reply).toContain('No tagged noodles found.');expect(r.reply).not.toContain('Should I book');expect(r.reply).not.toContain('noodle options')
  })
 })
+it('preserves independent tool work in mixed replies', async()=>{
+ const calls=[{id:'p',type:'function',function:{name:'find_places',arguments:'{}'}},{id:'w',type:'function',function:{name:'weather',arguments:'{}'}}]
+ const queue=[{finish_reason:'tool_calls',message:{content:null,tool_calls:calls}},{finish_reason:'stop',message:{content:'The map found alternatives only. Rain tomorrow.'}}]
+ vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,headers:new Headers(),json:async()=>({choices:[queue.shift()]})})))
+ const places={name:'find_places',description:'d',inputSchema:{type:'object',properties:{}},execute:async()=>({success:true,data:{matched:false,page:'will_send_after_reply'}})}
+ const weather={...places,name:'weather',execute:async()=>({success:true,data:{forecast:'Rain'}})}
+ const r=await chatWithTools([{role:'user',content:'noodles around the marina and weather tomorrow'}],{gatewayUrl:'https://gateway.example.test',apiKey:'fictional',model:'m'},[places,weather] as never,{tokens:{}} as never)
+ expect(r.reply).toContain('Rain tomorrow')
+})
