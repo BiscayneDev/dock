@@ -24,7 +24,7 @@ const API_HOST = 'commons.wikimedia.org'
 const API_HOSTS = new Set([API_HOST, 'openlibrary.org'])
 const IMAGE_HOSTS = new Set(['upload.wikimedia.org', 'thumb.wikimedia.org', 'covers.openlibrary.org'])
 
-export interface Photo { path: string; bytes: Buffer; contentType: string; credit: string; license: string }
+export interface Photo { path: string; bytes: Buffer; contentType: string; credit: string; license: string; sourceUrl?: string; licenseUrl?: string }
 export type Fetcher = (url: string, init?: { headers?: Record<string, string>; redirect?: 'error' | 'follow' | 'manual'; signal?: AbortSignal }) => Promise<Response>
 
 const MIN_SIDE = 300
@@ -129,18 +129,46 @@ async function bytesOf(fetcher: Fetcher, url: string): Promise<Buffer> {
     return readCapped(res)
 }
 
-async function fromCommons(fetcher: Fetcher, query: string): Promise<{ url: string; credit: string; license: string } | null> {
+const GENERIC = new Set(['the', 'and', 'for', 'hotel', 'inn', 'resort', 'photo', 'image'])
+const fold = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
+/** True only when every distinctive word of the subject shows up in the file's title, name or categories. */
+export function subjectMatches(subject: string, haystack: string): boolean {
+    const words = fold(subject).split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !GENERIC.has(w))
+    if (!words.length) return false
+    const hay = fold(haystack)
+    return words.every((w) => hay.includes(w))
+}
+
+const safeUrl = (u: string | undefined, host: RegExp): string | undefined => {
+    try {
+        const x = new URL(u ?? '')
+        return x.protocol === 'https:' && host.test(x.hostname) && !/[\s|()]/.test(x.href) ? x.href : undefined
+    } catch { return undefined }
+}
+
+type CommonsMeta = Record<string, { value?: string }>
+async function fromCommons(fetcher: Fetcher, query: string): Promise<{ url: string; credit: string; license: string; sourceUrl?: string; licenseUrl?: string } | null> {
     const q = new URLSearchParams({
-        action: 'query', generator: 'search', gsrsearch: `filetype:bitmap ${query}`, gsrnamespace: '6', gsrlimit: '5',
+        action: 'query', generator: 'search', gsrsearch: `filetype:bitmap ${query}`, gsrnamespace: '6', gsrlimit: '8',
         prop: 'imageinfo', iiprop: 'url|extmetadata|size', iiurlwidth: '960', format: 'json', origin: '*',
     })
     const res = await guarded(fetcher, `https://${API_HOST}/w/api.php?${q}`)
-    const data = (await res.json()) as { query?: { pages?: Record<string, { imageinfo?: { thumburl?: string; width?: number; height?: number; extmetadata?: Record<string, { value?: string }> }[] }> } }
+    const data = (await res.json()) as { query?: { pages?: Record<string, { title?: string; imageinfo?: { thumburl?: string; descriptionurl?: string; width?: number; height?: number; extmetadata?: CommonsMeta }[] }> } }
     for (const page of Object.values(data.query?.pages ?? {})) {
         const ii = page.imageinfo?.[0]
-        const license = strip(ii?.extmetadata?.LicenseShortName?.value ?? '')
+        const md = ii?.extmetadata
+        const license = strip(md?.LicenseShortName?.value ?? '')
         if (!ii?.thumburl || !OK_LICENSE.test(license) || (ii.width ?? 0) < 600) continue
-        return { url: ii.thumburl, credit: strip(ii.extmetadata?.Artist?.value ?? '') || 'Wikimedia Commons', license }
+        const hay = [page.title, md?.ObjectName?.value, md?.Categories?.value].map((v) => strip(v ?? '')).join(' ')
+        if (!subjectMatches(query, hay)) continue
+        return {
+            url: ii.thumburl,
+            credit: strip(md?.Artist?.value ?? '') || 'Wikimedia Commons',
+            license,
+            sourceUrl: safeUrl(ii.descriptionurl, /^commons\.wikimedia\.org$/),
+            licenseUrl: safeUrl(md?.LicenseUrl?.value, /(^|\.)creativecommons\.org$/),
+        }
     }
     return null
 }
@@ -150,26 +178,35 @@ export async function findPhoto(subject: string, kind: 'general' | 'book', fetch
     const name = subject.replace(/\s+/g, ' ').trim().slice(0, 80)
     if (name.length < 3) return null
     try {
-        let url = '', credit = '', license = ''
+        let url = '', credit = '', license = '', sourceUrl: string | undefined, licenseUrl: string | undefined
         if (kind === 'book') {
-            const sr = await guarded(fetcher, `https://openlibrary.org/search.json?${new URLSearchParams({ title: name, limit: '1', fields: 'cover_i' })}`)
-            const cover = ((await sr.json()) as { docs?: { cover_i?: number }[] }).docs?.[0]?.cover_i
+            const sr = await guarded(fetcher, `https://openlibrary.org/search.json?${new URLSearchParams({ title: name, limit: '1', fields: 'cover_i,key,title' })}`)
+            const doc = ((await sr.json()) as { docs?: { cover_i?: number; key?: string; title?: string }[] }).docs?.[0]
+            const cover = doc?.cover_i
+            if (!subjectMatches(name, doc?.title ?? '')) return null
             if (!Number.isInteger(cover) || (cover as number) <= 0) return null
             url = `https://covers.openlibrary.org/b/id/${cover}-L.jpg?default=false`
             credit = 'Open Library'; license = 'cover'
+            sourceUrl = /^\/works\/OL\d+W$/.test(doc?.key ?? '') ? `https://openlibrary.org${doc?.key}` : undefined
         } else {
             const hit = await fromCommons(fetcher, name)
             if (!hit) return null
-            ;({ url, credit, license } = hit)
+            ;({ url, credit, license, sourceUrl, licenseUrl } = hit)
         }
         const bytes = await bytesOf(fetcher, url)
         const kindOf = validateImage(bytes)
         if (!kindOf) return null
         const id = createHash('sha256').update(bytes).digest('hex').slice(0, 12)
-        return { path: `img/p-${id}.${kindOf.ext}`, bytes, contentType: kindOf.type, credit, license }
+        return { path: `img/p-${id}.${kindOf.ext}`, bytes, contentType: kindOf.type, credit, license, sourceUrl, licenseUrl }
     } catch {
         return null
     }
+}
+
+function creditLine(name: string, p: Photo): string {
+    const lic = p.license && p.license !== 'cover' ? (p.licenseUrl ? `[${p.license}](${p.licenseUrl})` : p.license) : ''
+    const src = p.sourceUrl ? `[source](${p.sourceUrl})` : ''
+    return `${name}: ${[p.credit, lic, src].filter(Boolean).join(', ')}`
 }
 
 const FENCE = /^(\s*:::\s*)(media|stay|gallery)(\s*)$/i
@@ -199,7 +236,7 @@ export async function attachPhotos(body: string, opts: { allowed: boolean; fetch
             jobs.push(findPhoto(m[1], 'general', opts.fetcher).then((p) => {
                 if (!p) { lines[idx] = ''; return }
                 photos.push(p)
-                lines[idx] = [p.path, cols[1] ?? m[1], p.credit, p.license].join(' | ')
+                lines[idx] = [p.path, cols[1] ?? m[1], p.credit, p.license, p.sourceUrl ?? '', p.licenseUrl ?? ''].join(' | ')
             }))
         } else {
             const col = block === 'media' ? 6 : 5
@@ -211,7 +248,7 @@ export async function attachPhotos(body: string, opts: { allowed: boolean; fetch
                 photos.push(p)
                 while (cols.length <= col) cols.push('')
                 cols[col] = p.path
-                credits.push(`${cols[0]}: ${p.credit}${p.license && p.license !== 'cover' ? `, ${p.license}` : ''}`)
+                credits.push(creditLine(cols[0], p))
                 lines[idx] = cols.join(' | ')
             }))
         }
