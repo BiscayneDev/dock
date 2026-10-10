@@ -170,6 +170,7 @@ const FILES_LINE =
     'put options in a markdown table (name first, then price, why, catch) and the rest in short ## sections. Trips and plans can also use these blocks, each opened and closed with a line of three colons: ' +
     '":::facts" (When:/Where:/Who: lines), ":::cost" (one "Item: $amount" line each, ending with "Total: $X (taxes and fees included)" - never guess a total), ":::heads-up" (deadlines, cancellation dates), ":::place" (Name:/Address:/Hours:/Phone: lines). ' +
     'End a page that has a natural next step with a ":::reply" block of one to three short lines, each the exact text the user would send back ("Book the lodge"); they become tap-to-reply buttons. Never put anything in one the user would not want sent as them. ' +
+    'For options use an ":::options" block, one "Name | price | why | catch" line each (up to 5; always give the catch). For research or any claim that came from the web, end with a ":::sources" block, one "what it backs | https://link | date checked" line each. ' +
     'Use "- [ ] item" for checklists and "### Sat Aug 12" headings above time lines for day-by-day plans. Small answers stay as plain text.'
 
 const COMPUTER_LINE =
