@@ -10,6 +10,7 @@ import { runStageRecorder } from './run-stage'
  */
 
 import { typing } from 'spectrum-ts'
+import { isDataExportIntent, makeDataExport, canDeliverDataExport } from '@/lib/data-portability/export'
 import {
     ensureIdentity,
     isGoogleConnected,
@@ -449,6 +450,23 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
 
     if (!role) {
         await handleGatedMessage(space, chatGuid, text)
+        return
+    }
+
+    // Deterministic portability command: no model, hosted link, or credentials.
+    if (inbound?.kind === 'text' && isDataExportIntent(text)) {
+        try {
+            if (!(await canDeliverDataExport(chatGuid, senderAddress(message.sender)))) {
+                await sendText(space, chatGuid, 'reply', "Data export isn't available in this chat yet. Nothing was deleted.")
+                return
+            }
+            const file = await makeDataExport(chatGuid)
+            await (space as ContentSender).send(attachment(file.bytes, { name: file.filename, mimeType: 'application/zip' }))
+            await sendText(space, chatGuid, 'reply', "Your data is in the ZIP: readable JSON plus saved files as Markdown. The README lists what is excluded. Nothing was deleted.")
+        } catch (err) {
+            logErr('data export failed', err)
+            await sendText(space, chatGuid, 'error_notice', "I couldn't send a complete export. Nothing was deleted. Try again in a moment; large exports may need a separate download.")
+        }
         return
     }
 
@@ -1152,4 +1170,4 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         clearTimeout(eyesTimer)
         stopTypingReTap(space, typingHandle)
     }
-        }
+                    }
