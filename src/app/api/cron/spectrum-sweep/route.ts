@@ -1,3 +1,4 @@
+import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 /**
  * Spectrum sweep (cron, every minute): retries the outbound queue and
  * delivers pending Google-connect resumes. Stateless replacement for the
@@ -65,6 +66,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     for (const row of await claimOutboxBatch()) {
         try {
+            await assertAccountActive(undefined,row.chat_guid)
             const space = isDemoGuid(row.chat_guid) ? demoSpace(row.chat_guid, { persist: true }) : await im.space.get(row.chat_guid)
             if (row.kind === 'file') {
                 // text is the JSON document; render and send as an attachment.
@@ -103,6 +105,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             return [] as string[]
         })
         for (const guid of resumeChats) {
+            try { await assertAccountActive(undefined,guid) } catch { continue }
             const claimed = await claimPendingResume(guid).catch((err) => {
                 console.error(`resume claim failed (${guid}):`, err instanceof Error ? err.message : String(err))
                 return null
