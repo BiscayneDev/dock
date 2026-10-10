@@ -51,3 +51,8 @@ describe('card fail-closed summaries', () => {
         expect(routeSummary([...lines, 'Stop 5 | Stop 6 | walk | unknown'])).toMatchObject({ eta: '6 legs', hidden: 2 })
     })
 })
+
+it('does not turn ambiguous durations into an ETA', () => {
+    for (const t of ['5-10 min', '5 miles', 'about 5 min', 'unknown']) expect(routeSummary([`A | B | walk | ${t}`])?.eta).toBe('1 leg')
+    expect(routeSummary(['A | B | rail | 1 hour 30 minutes'])?.eta).toBe('1 h 30 min')
+})
