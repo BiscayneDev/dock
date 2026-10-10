@@ -236,11 +236,9 @@ function stayCard(segs: ReturnType<typeof splitBlocks>, photos: CardPhoto[]): { 
 }
 
 const mins = (t: string): number => {
-    let m = 0
-    const h = t.match(/(\d+(?:\.\d+)?)\s*h/i), n = t.match(/(\d+)\s*m/i)
-    if (h) m += Math.round(parseFloat(h[1]) * 60)
-    if (n) m += parseInt(n[1], 10)
-    return m
+    const m = t.trim().match(/^(?:(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)\s*)?(?:(\d+)\s*(?:m|min|mins|minute|minutes))?$/i)
+    if (!m || (!m[1] && !m[2])) return 0
+    return Math.round(Number(m[1] ?? 0) * 60) + Number(m[2] ?? 0)
 }
 
 export function routeSummary(lines: string[]): { legs: string[][]; eta: string; first: string[]; last: string[]; hidden: number } | null {
