@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { attachPhotos, findPhoto, validateImage, type Fetcher } from '@/lib/files/photos'
+import { attachPhotos, findPhoto, subjectMatches, validateImage, type Fetcher } from '@/lib/files/photos'
 
 /** A small but structurally complete JPEG: SOI, APP0, SOF0 with the given size, EOI. */
 const jpeg = (w = 600, h = 400, end = true) => Buffer.concat([
@@ -10,8 +10,8 @@ const jpeg = (w = 600, h = 400, end = true) => Buffer.concat([
 ])
 const JPEG = jpeg()
 const json = (o: unknown) => new Response(JSON.stringify(o), { status: 200 })
-const commons = (license: string, width = 900) => json({
-    query: { pages: { 1: { imageinfo: [{ thumburl: 'https://upload.wikimedia.org/x/boat.jpg', width, extmetadata: { LicenseShortName: { value: license }, Artist: { value: '<a href="x">Sam Example</a>' } } }] } } },
+const commons = (license: string, width = 900, title = 'File:Harbor Skiff at dawn.jpg') => json({
+    query: { pages: { 1: { title: title, imageinfo: [{ thumburl: 'https://upload.wikimedia.org/x/boat.jpg', descriptionurl: 'https://commons.wikimedia.org/wiki/File:Boat.jpg', width, extmetadata: { LicenseShortName: { value: license }, LicenseUrl: { value: 'https://creativecommons.org/licenses/by/4.0' }, Artist: { value: '<a href="x">Sam Example</a>' }, ObjectName: { value: 'Boat' }, Categories: { value: 'Harbor Skiff|Harbor Inn|Boats' } } }] } } },
 })
 const fake = (license = 'CC BY 4.0', img: Buffer | Response = JPEG): { f: Fetcher; calls: string[] } => {
     const calls: string[] = []
@@ -59,7 +59,8 @@ describe('page photos', () => {
         expect(out.photos.length).toBe(2)
         expect(out.body).toMatch(/Thin walls \| img\/p-[0-9a-f]{12}\.jpg \| https:\/\/example\.test\/i/)
         expect(out.body).toMatch(/img\/p-[0-9a-f]{12}\.jpg \| A skiff at dawn \| Sam Example \| CC BY 4\.0/)
-        expect(out.body).toContain('Photo credits: Harbor Inn: Sam Example, CC BY 4.0')
+        expect(out.body).toContain('Photo credits: Harbor Inn: Sam Example, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0), [source](https://commons.wikimedia.org/wiki/File:Boat.jpg)')
+        expect(out.body).toMatch(/Sam Example \| CC BY 4\.0 \| https:\/\/commons\.wikimedia\.org\/wiki\/File:Boat\.jpg \| https:\/\/creativecommons\.org/)
     })
 
     it('does nothing, and makes no request, when the turn is not clean', async () => {
@@ -77,12 +78,28 @@ describe('page photos', () => {
     })
 })
 
+describe('subject match', () => {
+    it('falls back (null) when the top hit is a different subject', async () => {
+        const f: Fetcher = async (u) => (u.includes('commons.wikimedia.org') ? json({ query: { pages: { 1: { title: 'File:Grand Plaza Hotel lobby.jpg', imageinfo: [{ thumburl: 'https://upload.wikimedia.org/x/a.jpg', width: 900, extmetadata: { LicenseShortName: { value: 'CC0' }, Categories: { value: 'Hotels' } } }] } } } }) : new Response(new Uint8Array(JPEG)))
+        expect(await findPhoto('Harbor Inn hotel', 'general', f)).toBeNull()
+    })
+    it('matches on distinctive words, ignoring accents and generic ones', () => {
+        expect(subjectMatches('Café Lumière hotel', 'File:Cafe Lumiere exterior.jpg')).toBe(true)
+        expect(subjectMatches('Harbor Inn hotel', 'File:Grand Plaza.jpg')).toBe(false)
+        expect(subjectMatches('the hotel', 'anything')).toBe(false)
+    })
+    it('skips a book whose top result has a different title', async () => {
+        const f: Fetcher = async () => json({ docs: [{ cover_i: 9, title: 'Another Story' }] })
+        expect(await findPhoto('The Salt Road', 'book', f)).toBeNull()
+    })
+})
+
 describe('book covers', () => {
     it('looks the cover up by search, then fetches only the covers host', async () => {
         const calls: string[] = []
         const f: Fetcher = async (url) => {
             calls.push(url)
-            return url.includes('openlibrary.org/search.json') ? json({ docs: [{ cover_i: 4242 }] }) : new Response(new Uint8Array(JPEG))
+            return url.includes('openlibrary.org/search.json') ? json({ docs: [{ cover_i: 4242, title: 'The Salt Road', key: '/works/OL1W' }] }) : new Response(new Uint8Array(JPEG))
         }
         const p = await findPhoto('The Salt Road', 'book', f)
         expect(p?.credit).toBe('Open Library')
@@ -93,7 +110,7 @@ describe('book covers', () => {
 
 describe('cover redirects', () => {
     const redirect = (to: string) => new Response(null, { status: 302, headers: { location: to } })
-    const search = () => json({ docs: [{ cover_i: 7 }] })
+    const search = () => json({ docs: [{ cover_i: 7, title: 'The Salt Road' }] })
 
     it('follows redirects only into archive.org hosts', async () => {
         const f: Fetcher = async (url) => {
