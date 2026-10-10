@@ -34,6 +34,7 @@ import { recordUsage, spendToolFor, type GatewayUsage } from './metering'
 import { allowanceUsedUpMessage, claimLimitNotice, isOverDailyAllowance } from '@/lib/allowance'
 import { provisionSpectrumIdentity } from './provision'
 import { classifyUserTurn } from './turn-class'
+import { gateTools } from './tool-gating'
 import { capabilitiesFor, guestCapabilities, guestToolContext, liveInfoTools, loadImessageToolContext, toolsFor } from './imessage-tools'
 import { reminderToolsFor } from './reminders'
 import { payboxSigningToolsFor } from '@/lib/tools/paybox-signing'
@@ -1035,9 +1036,11 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
               ? await inviteBalance(chatGuid).then((b) => (b.remaining > 0 ? b.remaining : null)).catch(() => null)
               : null
         const inviteTools = invitesLeft !== null && (role === 'owner' || role === 'member') ? inviteToolsFor(chatGuid, role) : []
-        const tools = toolCtx
+        const allTools = toolCtx
             ? [...toolsFor(toolCtx), ...(actions?.tools ?? []), ...(fileTools?.tools ?? []), spendTool, ...reminderTools, ...inviteTools, ...(toolCtx.tokens.paybox ? payboxSigningToolsFor(chatGuid) : [])]
             : [...liveInfoTools(), spendTool, ...reminderTools, ...inviteTools]
+        const context = [text, ...full.slice(-6).map((m) => String(m.content ?? ''))]
+        const tools = gateTools(allTools, context).active
         const usage: GatewayUsage[] = []
         const onUsage = (u: GatewayUsage) => usage.push(u)
         const runCtx = toolCtx ?? guestToolContext()
