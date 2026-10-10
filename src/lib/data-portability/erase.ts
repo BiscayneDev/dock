@@ -47,7 +47,12 @@ async function allRows(table: string, columns: string, userId: string): Promise<
   for (let start = 0;; start += 500) {
     const { data, error } = await createServerClient().from(table).select(columns).eq('user_id', userId).order('id').range(start,start+499)
     if (error) throw new Error('External cleanup inventory unavailable')
-    rows.push(...(data ?? []))
+    // Dynamic projection strings cannot be inferred by Supabase's select parser.
+    // Verify row shape at the boundary before widening the returned record.
+    for (const row of (data ?? []) as unknown[]) {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error('External cleanup inventory malformed')
+      rows.push(row as Record<string, unknown>)
+    }
     if ((data?.length ?? 0)<500) return rows
   }
 }
@@ -159,4 +164,4 @@ export async function processErasure(): Promise<'off'|'idle'|'complete'|'blocked
     await db.from('dinghy_erasure_jobs').update({status:'blocked',obstacle:tag,lease_until:new Date(Date.now()+3600_000).toISOString()}).eq('id',job.id).eq('lease_token',job.lease_token)
     return 'blocked'
   }
-}
+      }
