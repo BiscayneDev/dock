@@ -13,6 +13,7 @@ export interface FindingEvent {
     summary: string
     start: Date
     allDay: boolean
+    startDate?: string
 }
 export interface FindingMail {
     from: string
@@ -40,12 +41,24 @@ function whenLabel(start: Date, now: Date, tz: string): string {
     return `${label} at ${time}`
 }
 
+export function findingIsUpcoming(event: FindingEvent, now: Date, tz: string): boolean {
+    if (!Number.isFinite(event.start.getTime())) return false
+    if (event.allDay) {
+        // Google timeMin matches an event's END, so an old multi-day trip
+        // can still be returned. Do not label it as a fresh finding.
+        const day = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
+        const date = event.startDate ?? event.start.toISOString().slice(0, 10)
+        return date >= day(now) && date <= day(new Date(now.getTime() + 36 * 3600_000))
+    }
+    return event.start.getTime() >= now.getTime() && event.start.getTime() < now.getTime() + 36 * 3600_000
+}
+
 /** Plain text, or null when there is nothing real to say. */
 export function formatFirstFinding(event: FindingEvent | null, mail: FindingMail | null, now: Date, tz: string): string | null {
     const parts: string[] = []
-    if (event && event.summary.trim()) {
+    if (event && findingIsUpcoming(event, now, tz) && event.summary.trim()) {
         const title = clean(event.summary, 60)
-        parts.push(event.allDay ? `You have "${title}" on your calendar.` : `Your next event is "${title}" ${whenLabel(event.start, now, tz)}.`)
+        parts.push(event.allDay ? `Your calendar lists "${title}" on ${event.startDate ?? event.start.toISOString().slice(0, 10)} (all day).` : `Your next event is "${title}" ${whenLabel(event.start, now, tz)}.`)
     }
     if (mail && mail.subject.trim()) {
         parts.push(`${senderName(mail.from)} emailed you "${clean(mail.subject, 70)}" and it's still unread.`)
@@ -94,11 +107,16 @@ export async function readFirstFinding(
         if (self?.responseStatus === 'declined') continue
         const dt = e.start?.dateTime
         if (dt) {
-            event = { summary: e.summary, start: new Date(dt), allDay: false }
+            const candidate = { summary: e.summary, start: new Date(dt), allDay: false }
+            if (!findingIsUpcoming(candidate, now, tz)) continue
+            event = candidate
             break
         }
         if (e.start?.date) {
-            event = { summary: e.summary, start: new Date(e.start.date), allDay: true }
+            // All-day dates are date-only; preserve the calendar date, not UTC midnight's previous local day.
+            const candidate = { summary: e.summary, start: new Date(e.start.date), startDate: e.start.date, allDay: true }
+            if (!findingIsUpcoming(candidate, now, tz)) continue
+            event = candidate
             break
         }
     }
