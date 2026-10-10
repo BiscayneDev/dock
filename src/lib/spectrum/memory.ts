@@ -26,6 +26,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { embedText, currentEmbeddingModel, googleEmbeddingAllowed } from '@/lib/memory/embeddings'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
 import { googleSafeBody } from './routing'
+import { hintHeaders } from './turn-class'
 import { cleanPlans, isAbsence, loadUpcomingPlans, recentFiles, renderFileLine, renderPlan, savePlans } from './plans'
 
 /**
@@ -209,7 +210,7 @@ async function gatewayJson(system: string, user: string, maxTokens: number, goog
     if (!SHIPYARD_API_KEY) return null
     const res = await fetch(`${GATEWAY_URL}/v1/chat/completions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SHIPYARD_API_KEY}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SHIPYARD_API_KEY}`, ...hintHeaders('background', false) },
         body: JSON.stringify({
             model: SHIPYARD_MODEL,
             messages: [
@@ -461,4 +462,4 @@ export async function forgetMemories(chatGuid: string, match: string): Promise<n
     const { data, error } = await createServerClient().rpc(rpc as string, args)
     if (error) throw new Error(`${rpc} failed: ${error.message}`)
     return (data as number) ?? 0
-    }
+}
