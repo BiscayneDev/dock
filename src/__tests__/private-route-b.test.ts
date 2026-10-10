@@ -11,7 +11,7 @@ const resp = (message: Record<string, unknown>, finish: string) =>
 const call = (name: string, args: Record<string, unknown> = {}) => ({ id: `c_${name}`, type: 'function', function: { name, arguments: JSON.stringify(args) } })
 const tool = (name: string, data: unknown = { ok: true }, spy = vi.fn()): Tool => ({ name, description: name, inputSchema: { type: 'object', properties: {} }, execute: async () => { spy(); return { success: true, data } } })
 const ctx = { tokens: {} } as never
-const opts = { gatewayUrl: 'http://gw', apiKey: 'k', model: 'pinned', routing: { providers: ['hopscotch'], attempt_timeout_ms: 15_000 } }
+const opts = { gatewayUrl: 'http://gw', apiKey: 'k', model: 'pinned', routing: { providers: ['hopscotch'], attempt_timeout_ms: 15_000, max_tier: 'economy' } }
 const MAIL = 'Your reservation at Maison Lune is confirmed for four guests on Friday at 7:30 pm, confirmation code 884213, contact jules@maisonlune.fr'
 
 function run(mode: string, webArgs: Record<string, unknown>, extra: Record<string, string> = {}) {
@@ -54,9 +54,9 @@ describe('stage B turn behavior', () => {
     const r = await p
     expect(r.tainted).toBe(true)
     expect(web).toHaveBeenCalledTimes(1)
-    expect(bodies[0].shipyard).toEqual({ providers: ['hopscotch'], attempt_timeout_ms: 15_000 })
-    expect(bodies[1].shipyard).toEqual({ providers: ['venice-private'], attempt_timeout_ms: 15_000 })
-    expect(bodies[2].shipyard).toEqual({ providers: ['venice-private'], attempt_timeout_ms: 15_000 })
+    expect(bodies[0].shipyard).toEqual({ providers: ['hopscotch'], attempt_timeout_ms: 15_000, max_tier: 'economy' })
+    expect(bodies[1].shipyard).toEqual({ providers: ['venice-private'], attempt_timeout_ms: 15_000, max_tier: 'economy' })
+    expect(bodies[2].shipyard).toEqual({ providers: ['venice-private'], attempt_timeout_ms: 15_000, max_tier: 'economy' })
   })
   it('enforced: a search that copies mail text is rejected and never runs', async () => {
     const { web, p } = run('on', { query: 'confirmed for four guests on Friday at 7:30 pm confirmation code 884213' })
@@ -72,7 +72,7 @@ describe('stage B turn behavior', () => {
     const { bodies, web, p } = run('shadow', { query: 'confirmed for four guests on Friday at 7:30 pm confirmation code 884213' })
     await p
     expect(web).toHaveBeenCalledTimes(1)
-    expect(bodies.every((b) => JSON.stringify(b.shipyard) === JSON.stringify({ providers: ['hopscotch'], attempt_timeout_ms: 15_000 }))).toBe(true)
+    expect(bodies.every((b) => JSON.stringify(b.shipyard) === JSON.stringify({ providers: ['hopscotch'], attempt_timeout_ms: 15_000, max_tier: 'economy' }))).toBe(true)
   })
   it('fail closed: tagged history with no private provider throws before any call', async () => {
     vi.stubEnv('DINGHY_PRIVATE_ROUTE', 'on')
@@ -102,6 +102,6 @@ describe('stage B turn behavior', () => {
     vi.stubGlobal('fetch', vi.fn(async (_u: string, init: { body: string }) => { bodies.push(JSON.parse(init.body)); return resp({ content: 'hey' }, 'stop') }))
     const r = await chatWithTools([{ role: 'user', content: 'hi' }], opts, [tool('weather')], ctx)
     expect(r.tainted).toBe(false)
-    expect(bodies[0].shipyard).toEqual({ providers: ['hopscotch'], attempt_timeout_ms: 15_000 })
+    expect(bodies[0].shipyard).toEqual({ providers: ['hopscotch'], attempt_timeout_ms: 15_000, max_tier: 'economy' })
   })
 })
