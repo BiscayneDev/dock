@@ -242,6 +242,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                                   history,
                                   {
                                       gatewayUrl: GATEWAY_URL,
+                                      taskClass: 'background' as const,
                                       apiKey: SHIPYARD_API_KEY,
                                       model: SHIPYARD_MODEL,
                                       facts,
@@ -254,6 +255,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                           ).reply
                         : await chat(history, {
                               gatewayUrl: GATEWAY_URL,
+                              taskClass: 'background' as const,
                               apiKey: SHIPYARD_API_KEY,
                               model: SHIPYARD_MODEL,
                               facts,
