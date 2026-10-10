@@ -19,7 +19,7 @@ vi.mock('@/lib/tools/gcal', () => ({
   gcalFindFreeTime: { name: 'gcal_find_free_time' },
 }))
 
-import { actionToolsFor, executePendingAction, parseConfirmation, renderProposal } from '@/lib/spectrum/actions'
+import { actionToolsFor, executePendingAction, parseConfirmation, isRepeatedActionConfirmation, renderProposal } from '@/lib/spectrum/actions'
 import type { UserContext } from '@/lib/llm/types'
 
 const ctx = { userId: 'u1', tokens: { google: { access_token: 'x' } } } as unknown as UserContext
@@ -115,5 +115,22 @@ describe('executePendingAction', () => {
   it('says expired when nothing is open', async () => {
     rpcMock.mockResolvedValue({ data: [], error: null })
     expect(await executePendingAction('chat-1', ctx)).toMatch(/expired/)
+  })
+})
+
+
+describe('isRepeatedActionConfirmation', () => {
+  it('absorbs a repeated confirmation after a completed send or invite', () => {
+    for (const done of ['Reply sent.', 'Event created and invites sent.']) {
+      expect(isRepeatedActionConfirmation('y', done)).toBe(true)
+      expect(isRepeatedActionConfirmation('yes', done)).toBe(true)
+      expect(isRepeatedActionConfirmation('n', done)).toBe(true)
+    }
+  })
+  it('preserves answers to questions and actual new tasks', () => {
+    expect(isRepeatedActionConfirmation('y', 'Want me to pull next week?')).toBe(false)
+    expect(isRepeatedActionConfirmation('y', null)).toBe(false)
+    expect(isRepeatedActionConfirmation('Add a different call', 'Event created and invites sent.')).toBe(false)
+    expect(isRepeatedActionConfirmation('yes but change the time', 'Event created and invites sent.')).toBe(false)
   })
 })
