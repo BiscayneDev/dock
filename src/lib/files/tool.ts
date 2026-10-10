@@ -137,7 +137,7 @@ async function host(input: DinghyDoc, format: FileFormat, userId: string, replyL
     for (const p of found.photos) files.push({ path: p.path, bytes: p.bytes, contentType: p.contentType })
     const hosted = await publishSite(files, { title: doc.title, userId })
     // Best effort and clean turns only: a card that fails to draw never blocks the page.
-    const card = photosOk ? await renderKindCard({ title: doc.title, subtitle: doc.subtitle, body: doc.body }).catch(() => null) : null
+    const card = photosOk ? await renderKindCard({ title: doc.title, subtitle: doc.subtitle, body: doc.body }, found.photos).catch(() => null) : null
     return { hosted, pdf, card }
 }
 
