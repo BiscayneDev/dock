@@ -548,6 +548,8 @@ export async function chatWithTools(
 
     let toolCallCount = 0
     let successfulSearches = 0
+    let sourceOnly = true
+    const foundSources: { title: string; url: string }[] = []
     let pageAttempted = false
     let pageRetry = false
     let completionMode = false
@@ -570,21 +572,33 @@ export async function chatWithTools(
         const remaining = opts.deadlineAt === undefined ? Infinity : opts.deadlineAt - Date.now()
         // The production miss spent ~70s on gateway turns and ~8s searching.
         // Keep time for synthesis and hosting rather than a fourth search turn.
-        if (!completionMode && successfulSearches > 0 && remaining < 40_000) {
+        if (!completionMode && successfulSearches > 0 && remaining < 60_000) {
             completionMode = true
             messages.push({ role: 'system', content: RESEARCH_FINISH })
         }
         const offered = completionMode ? toolDefs.filter((t) => t.function.name !== 'web_search' && (!pageAttempted || t.function.name !== 'create_file')) : toolDefs
         const t0 = Date.now()
-        const res = await withinTurn(opts.deadlineAt, (signal) => fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
+        // Bound a post-search generation, not tools or actions. Preserve honest
+        // source-only progress when the gateway stalls, with transport headroom.
+        const rescueEligible = successfulSearches > 0 && sourceOnly && foundSources.length > 0 && opts.deadlineAt !== undefined
+        const callDeadline = rescueEligible ? Math.min(opts.deadlineAt! - 8_000, Date.now() + 25_000) : opts.deadlineAt
+        let res: Response
+        try {
+          res = await withinTurn(callDeadline, (signal) => fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
             signal,
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${opts.apiKey}`,
             },
-            body: JSON.stringify({ ...modelFields(opts.model, routingNow()), messages, tools: offered, ...(completionMode && offered.length === 0 ? { tool_choice: 'none' } : {}), stream: false }),
-        }))
+            body: JSON.stringify({ ...modelFields(opts.model, routingNow()), messages, tools: offered, ...(completionMode && offered.length === 0 ? { tool_choice: 'none' } : {}), stream: false, ...(completionMode ? { max_tokens: 1200 } : {}) }),
+          }))
+        } catch (err) {
+          if (!(err instanceof TurnDeadlineExceeded) || !rescueEligible) throw err
+          await opts.onStage?.('reply_ready', 'source_partial_gateway_timeout')
+          const links = foundSources.slice(0, 3).map(s => `${s.title || 'Source'}: ${s.url}`).join('\n')
+          return { reply: `The search finished, but I didn't finish checking the options. These are source links, not verified recommendations:\n${links}`, toolCalls: toolCallCount, iterations: iteration, tainted }
+        }
         if (!res.ok) {
             const body = await withinTurn(opts.deadlineAt, () => res.text()).catch(() => '')
             throw new Error(`Gateway ${res.status}: ${body || res.statusText}`)
@@ -627,6 +641,7 @@ export async function chatWithTools(
                     await assertAccountActive(ctx.userId,ctx.chatGuid)
                     const input = JSON.parse(call.function.arguments || '{}') as unknown
                     if (call.function.name === 'create_file') pageAttempted = true
+                    if (!['web_search', 'web_fetch'].includes(call.function.name)) sourceOnly = false
                     const result = await withinTurn(opts.deadlineAt, () => Promise.race([
                         tool.execute(input, ctx),
                         new Promise<never>((_, reject) =>
@@ -634,7 +649,18 @@ export async function chatWithTools(
                         ),
                     ]))
                     content = JSON.stringify(result.success ? result.data ?? {} : { error: result.error ?? 'tool failed' })
-                    if (result.success && call.function.name === 'web_search') successfulSearches++
+                    if (result.success && call.function.name === 'web_search') {
+                        successfulSearches++
+                        const hits = (result.data as { results?: { title?: unknown; url?: unknown }[] } | undefined)?.results
+                        for (const hit of Array.isArray(hits) ? hits : []) {
+                            if (typeof hit.url !== 'string') continue
+                            try {
+                                const url = new URL(hit.url)
+                                if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) continue
+                                if (!foundSources.some(s => s.url === hit.url)) foundSources.push({ title: typeof hit.title === 'string' ? hit.title.replace(/[\r\n]/g, ' ').slice(0, 100) : '', url: hit.url })
+                            } catch { /* Invalid source URL is not delivered. */ }
+                        }
+                    }
                     if (result.success && call.function.name === 'create_file' && completionMode && calls.length === 1) {
                         // Hosting succeeded; the transport already owns the queued link.
                         // Do not spend another slow gateway call merely announcing it.
