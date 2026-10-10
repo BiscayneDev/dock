@@ -3,7 +3,7 @@ import { needsFileRepair, fileReply } from '@/lib/files/reply'
 
 describe('current-turn file delivery', () => {
     it('repairs a fabricated new document announcement using an old link', () => {
-        const reply = "I've compiled a document containing research on both vehicles. Here is the link: https://scarlet-palm-znsb.here.now/"
+        const reply = "I've compiled a document containing research on both vehicles. Here is the link: https://old-page-test.here.now/"
         expect(needsFileRepair(reply)).toBe(true)
         expect(fileReply(reply, 0)).not.toContain('here.now')
         expect(fileReply(reply, 1)).toBe('Here you go.')
@@ -15,7 +15,7 @@ describe('current-turn file delivery', () => {
         expect(fileReply('Choose the Bronco if you need the car this year.', 1)).toBe('Choose the Bronco if you need the car this year.')
     })
     it('does not interfere with a requested previous-file link or ordinary research answer', () => {
-        expect(needsFileRepair('Your earlier Singapore page: https://scarlet-palm-znsb.here.now/')).toBe(false)
+        expect(needsFileRepair('Your earlier Singapore page: https://old-page-test.here.now/')).toBe(false)
         expect(needsFileRepair('The Scout is not available yet.')).toBe(false)
         expect(needsFileRepair('I compiled research from these sources.')).toBe(false)
     })
