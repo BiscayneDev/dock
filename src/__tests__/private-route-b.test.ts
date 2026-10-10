@@ -11,7 +11,7 @@ const resp = (message: Record<string, unknown>, finish: string) =>
 const call = (name: string, args: Record<string, unknown> = {}) => ({ id: `c_${name}`, type: 'function', function: { name, arguments: JSON.stringify(args) } })
 const tool = (name: string, data: unknown = { ok: true }, spy = vi.fn()): Tool => ({ name, description: name, inputSchema: { type: 'object', properties: {} }, execute: async () => { spy(); return { success: true, data } } })
 const ctx = { tokens: {} } as never
-const opts = { gatewayUrl: 'http://gw', apiKey: 'k', model: 'pinned', routing: { providers: ['hopscotch'], attempt_timeout_ms: 15_000, max_tier: 'economy' } }
+const opts = { gatewayUrl: 'http://gw', apiKey: 'k', model: 'pinned', routing: { providers: ['hopscotch'], attempt_timeout_ms: 15_000, max_tier: 'economy' as const } }
 const MAIL = 'Your reservation at Maison Lune is confirmed for four guests on Friday at 7:30 pm, confirmation code 884213, contact jules@maisonlune.fr'
 
 function run(mode: string, webArgs: Record<string, unknown>, extra: Record<string, string> = {}) {
