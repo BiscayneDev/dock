@@ -152,7 +152,7 @@ function tokens(md: string): Token[] {
 // ── Components: ":::name" blocks ─────────────────────────────────────────────
 // The model writes plain Markdown; our code draws the components. Unknown block
 // names are left as ordinary text. Blocks never contain raw HTML (all escaped).
-const BLOCK_NAMES = ['facts', 'cost', 'heads-up', 'place', 'reply', 'options', 'sources'] as const
+const BLOCK_NAMES = ['facts', 'cost', 'heads-up', 'place', 'places', 'reply', 'options', 'sources'] as const
 type BlockName = (typeof BLOCK_NAMES)[number]
 type Segment = { kind: 'md'; text: string } | { kind: 'block'; name: BlockName; lines: string[] }
 
@@ -165,7 +165,7 @@ export function splitBlocks(md: string): Segment[] {
     }
     const lines = (md ?? '').split('\n')
     for (let i = 0; i < lines.length; i++) {
-        const open = lines[i].match(/^\s*:::\s*(facts|cost|heads-up|place|reply|options|sources)\s*$/i)
+        const open = lines[i].match(/^\s*:::\s*(facts|cost|heads-up|places|place|reply|options|sources)\s*$/i)
         if (open) {
             const end = lines.findIndex((l, j) => j > i && /^\s*:::\s*$/.test(l))
             if (end > i) {
@@ -185,6 +185,27 @@ export function splitBlocks(md: string): Segment[] {
 function pair(line: string): { k: string; v: string } {
     const m = line.match(/^([^:]{1,28}):\s*(.+)$/)
     return m ? { k: m[1].trim(), v: m[2].trim() } : { k: '', v: line }
+}
+
+/**
+ * Place cards: "Name | state | status text | distance/walk | address | hours | lat,lon | website | phone".
+ * state is open, closed or unknown and drives the badge colour. Map links come from
+ * the coordinates (or the address); website must be plain http(s).
+ */
+function renderPlaces(lines: string[]): string {
+    const cards = lines.slice(0, 8).map((l) => {
+        const [name, state, status, dist, address, hours, ll, site, phone] = cells(l)
+        if (!name) return ''
+        const st = state === 'open' || state === 'closed' ? state : 'unknown'
+        const m = (ll ?? '').match(/^(-?\d{1,3}(?:\.\d+)?),\s*(-?\d{1,3}(?:\.\d+)?)$/)
+        const apple = m ? `https://maps.apple.com/?ll=${m[1]},${m[2]}&q=${encodeURIComponent(name)}` : address ? `https://maps.apple.com/?q=${encodeURIComponent(address)}` : ''
+        const google = m ? `https://www.google.com/maps/search/?api=1&query=${m[1]},${m[2]}` : ''
+        const { tel } = placeLinks('', phone ?? '')
+        const web = site && /^https?:\/\/[^\s\u0000-\u001f]+$/i.test(site) ? site : ''
+        const acts = [apple && `<a href="${esc(apple)}" target="_blank" rel="noopener noreferrer">Apple Maps</a>`, google && `<a href="${esc(google)}" target="_blank" rel="noopener noreferrer">Google Maps</a>`, tel && `<a href="${esc(tel)}">Call</a>`, web && `<a href="${esc(web)}" target="_blank" rel="noopener noreferrer">Website</a>`].filter(Boolean).join('')
+        return `<div class="plc"><div class="plc-top"><span class="plc-name">${esc(name)}</span>${dist ? `<span class="plc-dist">${esc(dist)}</span>` : ''}</div><div class="plc-badge plc-${st}">${esc(status || 'Hours not listed')}</div>${address ? `<div class="pm">${esc(address)}</div>` : ''}${hours ? `<div class="pm plc-hours">${esc(hours)}</div>` : ''}${acts ? `<div class="pa">${acts}</div>` : ''}</div>`
+    })
+    return `<div class="plcs">${cards.join('')}</div>`
 }
 
 /** Safe map and phone links for a place block. */
@@ -266,6 +287,7 @@ function renderBlock(name: BlockName, lines: string[], opts: HtmlOptions = {}): 
     }
     if (name === 'reply') return renderReplies(lines, opts.replyLine)
     if (name === 'options') return renderOptions(lines)
+    if (name === 'places') return renderPlaces(lines)
     if (name === 'sources') return renderSources(lines)
     // place
     const f = Object.fromEntries(lines.map(pair).map((p) => [p.k.toLowerCase(), p.v]))
@@ -284,6 +306,7 @@ export function flattenBlocks(md: string): string {
             if (sg.name === 'heads-up') return `> Heads up: ${sg.lines.join(' ')}`
             if (sg.name === 'reply') return sg.lines.slice(0, 3).map((l) => `- Reply with: ${l.replace(/^[-*]\s+/, '')}`).join('\n')
             if (sg.name === 'options') return sg.lines.slice(0, 5).map((l) => { const [n, p, w, c] = cells(l); return `- ${[n, p, w].filter(Boolean).join(' - ')}${c ? ` (catch: ${c})` : ''}` }).join('\n')
+            if (sg.name === 'places') return sg.lines.slice(0, 8).map((l) => { const [n, , st, d, a, h] = cells(l); return `- ${[n, st, d, a, h && `hours ${h}`].filter(Boolean).join(', ')}` }).join('\n')
             if (sg.name === 'sources') return sg.lines.slice(0, 10).map((l) => { const [w, u, d] = cells(l); return `- ${[w, u, d && `checked ${d}`].filter(Boolean).join(', ')}` }).join('\n')
             return sg.lines.map((l) => `- ${l}`).join('\n')
         })
@@ -390,6 +413,7 @@ h3.day{margin:30px 0 4px;padding-top:14px;border-top:1px solid var(--line);font:
 .replies{margin:22px 0;display:grid;gap:10px}.reply-hint{margin:0;font:500 10px/1 'DM Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}
 .reply{display:flex;align-items:center;gap:14px;padding:14px 18px;border-radius:999px;background:var(--ink);color:var(--paper);text-decoration:none;min-height:52px}.reply-k{font:500 10px/1 'DM Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#F7C196}.reply-t{font-weight:600;font-size:16px;line-height:1.3}
 .reply-off{background:var(--sand);color:var(--ink)}.reply-off .reply-k{color:var(--accent)}
+.plcs{display:grid;gap:12px;margin:18px 0}.plc{padding:16px 18px;border:1px solid var(--line);border-radius:18px;background:var(--paper)}.plc-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}.plc-name{font:500 21px/1.2 Fraunces,Georgia,serif;color:var(--ink)}.plc-dist{font:500 13px/1 'DM Mono',monospace;color:var(--ink);background:var(--sand);padding:6px 10px;border-radius:999px;white-space:nowrap}.plc-badge{display:inline-block;margin:10px 0 6px;font:500 11px/1 'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;border-radius:999px;background:var(--sand);color:var(--ink)}.plc-open{background:#e3f1e6;color:#1f5a2e}.plc-closed{background:#f6e3df;color:#7a2a1d}.plc-hours{font-size:13px;opacity:.8}
 .opts{display:grid;gap:12px;margin:18px 0}.opt{padding:16px 18px;border:1px solid var(--line);border-radius:18px;background:var(--paper)}.opt-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}.opt-name{font:500 21px/1.2 Fraunces,Georgia,serif;color:var(--ink)}.opt-price{font:500 13px/1 'DM Mono',monospace;color:var(--ink);background:var(--sand);padding:6px 10px;border-radius:999px;white-space:nowrap}.opt-why{margin:8px 0 0;color:var(--body)}.opt-catch{margin:8px 0 0;font-size:14px;color:var(--ink)}.opt-catch span{margin-right:8px;font:500 10px/1 'DM Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
 .sources{margin:26px 0 0;padding-top:16px;border-top:1px solid var(--line)}.src-label{display:block;font:500 10px/1 'DM Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}.sources ol{margin:10px 0 0;padding-left:20px;font-size:15px}.src-meta{display:block;font:500 11px/1.5 'DM Mono',monospace;color:var(--mute)}
 code{font:14px 'DM Mono',monospace;background:var(--sand);padding:1px 6px;border-radius:6px}
@@ -411,7 +435,7 @@ h1::after{content:'';display:block;width:56px;height:3px;border-radius:3px;backg
 .sec h2::before{content:counter(sec,decimal-leading-zero);font:500 11px/1 'DM Mono',monospace;letter-spacing:.14em;color:var(--accent);transform:translateY(-.35em)}
 main.card{counter-reset:sec}
 p{max-width:38em}
-.pick,.facts,.opts,.cost,.heads,.place,.sources,.replies,.rows,table.tbl{margin-block:var(--gap)}
+.pick,.facts,.opts,.plcs,.cost,.heads,.place,.sources,.replies,.rows,table.tbl{margin-block:var(--gap)}
 .pick{background:linear-gradient(135deg,var(--sand),var(--paper));border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:var(--r);padding:22px 26px;box-shadow:var(--shadow)}
 .pick p{font:italic 400 22px/1.4 Fraunces,Georgia,serif;margin:10px 0 0}
 .fact,.opt,.cost,.place{border-radius:var(--r);transition:transform .25s var(--ease),box-shadow .25s var(--ease),border-color .25s var(--ease)}
