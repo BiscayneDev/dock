@@ -1056,7 +1056,8 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 includeOpener,
                 knownFirstName: knownFirstName ?? undefined,
                 capabilities: { ...(toolCtx ? capabilitiesFor(toolCtx) : guestCapabilities()), spend: true, reminders: true, ...(invitesLeft !== null ? { invitesLeft } : {}) },
-                memory: memoryBlock + (background ?? '') + '\n\n' + clock,
+                memory: memoryBlock,
+                volatile: (background ?? '') + '\n\n' + clock,
                 interviewLine: interviewLine ?? undefined,
                 onUsage,
             }
@@ -1095,7 +1096,8 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 facts,
                 includeOpener,
                 knownFirstName: knownFirstName ?? undefined,
-                memory: memoryBlock + (background ?? '') + '\n\n' + clock,
+                memory: memoryBlock,
+                volatile: (background ?? '') + '\n\n' + clock,
                 interviewLine: interviewLine ?? undefined,
                 onUsage,
             })
