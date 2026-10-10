@@ -169,10 +169,10 @@ export function fileToolsFor(): FileToolset {
                     return {
                         success: true,
                         data: {
-                            status: 'will_send_after_reply',
+                            status: 'queued_for_delivery',
                             delivery: 'file_link',
                             expires: shortDate(hosted.expiresAt),
-                            note: 'The file link goes out right after your reply. One short line; no link, no contents.',
+                            note: 'The app sends the new link immediately after your assistant message, without waiting for the user. Never reuse a link from history. Give a short verdict, not a delivery promise or link.',
                         },
                     }
                 } catch (err) {
@@ -199,14 +199,14 @@ export function fileToolsFor(): FileToolset {
             return {
                 success: true,
                 data: {
-                    status: 'will_send_after_reply',
+                    status: 'queued_for_delivery',
                     delivery: 'attachment',
                     filename: file.filename,
                     format,
                     ...(hostError ? { page_error: hostError } : {}),
                     note: hostError
                         ? 'The file link did not work this time; the file goes out as an attachment instead. Say so in one short line.'
-                        : 'The file goes out as an attachment right after your reply. Keep the reply to one short line; no link, no contents.',
+                        : 'The app sends the attachment immediately after your assistant message, without waiting for the user. Give a short verdict, not a delivery promise or link.',
                 },
             }
         },
@@ -348,5 +348,5 @@ export function stripFileMarkers(text: string): { text: string; hadMarker: boole
 
 /** One-shot nudge when the model claimed a file without calling create_file. */
 export const FILE_NUDGE =
-    'Note from the Dinghy app: your last reply said a file was sent or updated, but you did not call create_file, so nothing was attached. ' +
+    'Note from the Dinghy app: your last reply claimed a new or updated document, but no file was created this turn. An older link from history is not this document. ' +
     'Call create_file now with the complete, updated document, then reply with one short line. Never write "[sent file: ...]" yourself.'
