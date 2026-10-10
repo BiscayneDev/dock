@@ -17,7 +17,7 @@ create table public.dinghy_erasure_jobs (
 create unique index erasure_one_active on public.dinghy_erasure_jobs(user_id) where status <> 'complete';
 -- Hash fences prevent writes from stale runs without retaining plaintext ids.
 create table public.dinghy_erasure_fences (
- kind text not null check(kind in ('user','chat','phone')),
+ kind text not null check(kind in ('user','chat','phone','telegram')),
  digest text not null,
  expires_at timestamptz not null,
  primary key(kind,digest)
@@ -32,6 +32,14 @@ returns boolean language sql stable security definer set search_path=public as $
  select exists(select 1 from dinghy_erasure_fences where expires_at > now() and
   ((kind='user' and digest=encode(extensions.digest(p_user_id::text,'sha256'),'hex')) or
    (kind='chat' and digest=encode(extensions.digest(p_chat_guid,'sha256'),'hex'))));
+$$;
+
+
+create function public.dinghy_erasure_telegram_blocked(p_telegram_id text)
+returns boolean language sql stable security definer set search_path=public as $$
+ select exists(select 1 from dinghy_erasure_fences where expires_at>now() and kind='telegram'
+ and digest=encode(extensions.digest(p_telegram_id,'sha256'),'hex'))
+ or exists(select 1 from users where telegram_id::text=p_telegram_id and dinghy_erasure_blocked(id,null));
 $$;
 
 create function public.dinghy_erasure_request(p_user_id uuid, p_hash text)
@@ -51,7 +59,7 @@ end;
 $$;
 create function public.dinghy_erasure_confirm(p_user_id uuid,p_job uuid,p_hash text)
 returns boolean language plpgsql security definer set search_path=public as $$
-declare j dinghy_erasure_jobs%rowtype; c text; phone text;
+declare j dinghy_erasure_jobs%rowtype; c text; phone text; telegram text;
 begin
  perform pg_advisory_xact_lock(hashtext('erase:user:'||p_user_id::text));
  select * into j from dinghy_erasure_jobs where id=p_job and user_id=p_user_id for update;
@@ -70,6 +78,8 @@ begin
  for phone in select distinct handle from spectrum_identities where user_id=p_user_id and handle is not null loop
   insert into dinghy_erasure_fences values('phone',encode(extensions.digest(phone,'sha256'),'hex'),'infinity') on conflict do nothing;
  end loop;
+ select telegram_id::text into telegram from users where id=p_user_id;
+ if telegram is not null then insert into dinghy_erasure_fences values('telegram',encode(extensions.digest(telegram,'sha256'),'hex'),'infinity') on conflict do nothing; end if;
  update dinghy_erasure_jobs set chats=j.chats,status='queued',frozen_at=now(),expires_at='infinity' where id=j.id;
  return true;
 end;
@@ -91,6 +101,7 @@ begin
  if exists(select 1 from dinghy_erasure_fences f where f.expires_at>now() and
   ((f.kind='user' and f.digest in(encode(extensions.digest(uid,'sha256'),'hex'),encode(extensions.digest(case when TG_TABLE_NAME='users' then oldr->>'id' else oldr->>'user_id' end,'sha256'),'hex'))) or
    (f.kind='chat' and f.digest in(encode(extensions.digest(chat,'sha256'),'hex'),encode(extensions.digest(oldr->>'chat_guid','sha256'),'hex'))) or
+   (f.kind='telegram' and f.digest=encode(extensions.digest(r->>'telegram_id','sha256'),'hex')) or
    (f.kind='phone' and f.digest=encode(extensions.digest(phone,'sha256'),'hex')))) then
   raise exception 'Account unavailable during data deletion' using errcode='P0001';
  end if;
@@ -131,15 +142,22 @@ $$;
 -- on cascades. It is intentionally limited to explicit ownership keys.
 create function public.dinghy_erasure_finish(p_job uuid)
 returns boolean language plpgsql security definer set search_path=public as $$
-declare j dinghy_erasure_jobs%rowtype; t record; n bigint; phones text[];
+declare j dinghy_erasure_jobs%rowtype; t record; n bigint; phones text[]; telegram text;
 begin
  select * into j from dinghy_erasure_jobs where id=p_job for update;
  if j.id is null or j.status<>'cleaning' or j.lease_until<now() then return false; end if;
+ select telegram_id::text into telegram from users where id=j.user_id;
  perform set_config('dinghy.erasure_cleanup','on',true);
  select coalesce(array_agg(handle),'{}') into phones from spectrum_identities where user_id=j.user_id and handle is not null;
  -- Waitlist admission is verified by the existing bound phone, not an email guess.
  delete from waitlist_admit_queue where email in(select email from waitlist where phone=any(phones));
  delete from waitlist where phone=any(phones);
+ -- Delete known non-cascade child records before their parents. New FK edges
+ -- require live-schema validation; do not rely on unordered catalog iteration.
+ for t in select table_name from information_schema.tables where table_schema='public'
+ and table_name in('recipe_runs','execution_agents','capability_runs','inference_usage') loop
+  execute format('delete from public.%I where user_id=$1',t.table_name) using j.user_id;
+ end loop;
  for t in select distinct table_name,column_name from information_schema.columns col where table_schema='public' and exists(select 1 from information_schema.tables tab where tab.table_schema=col.table_schema and tab.table_name=col.table_name and tab.table_type='BASE TABLE')
  and column_name in('user_id','chat_guid','created_by_chat') and table_name not like 'dinghy_erasure_%'
  and table_name<>'spectrum_identities' loop
@@ -157,6 +175,7 @@ begin
   if n<>0 then raise exception 'Deletion verification failed'; end if;
  end loop;
  update dinghy_erasure_fences set expires_at=now()+interval '30 days' where
+ (kind='telegram' and digest=encode(extensions.digest(telegram,'sha256'),'hex')) or
  (kind='user' and digest=encode(extensions.digest(j.user_id::text,'sha256'),'hex')) or
  (kind='chat' and digest in(select encode(extensions.digest(c,'sha256'),'hex') from unnest(j.chats)c)) or
  (kind='phone' and digest in(select encode(extensions.digest(p,'sha256'),'hex') from unnest(phones)p));
@@ -165,7 +184,7 @@ begin
 end;
 $$;
 do $$ declare f text; begin foreach f in array array[
- 'dinghy_erasure_blocked(uuid,text)','dinghy_erasure_request(uuid,text)','dinghy_erasure_confirm(uuid,uuid,text)','dinghy_erasure_claim()','dinghy_erasure_finish(uuid)','dinghy_erasure_write_guard()'
+ 'dinghy_erasure_telegram_blocked(text)','dinghy_erasure_blocked(uuid,text)','dinghy_erasure_request(uuid,text)','dinghy_erasure_confirm(uuid,uuid,text)','dinghy_erasure_claim()','dinghy_erasure_finish(uuid)','dinghy_erasure_write_guard()'
 ] loop execute format('revoke all on function public.%s from public,anon,authenticated',f);
  execute format('grant execute on function public.%s to service_role',f); end loop; end $$;
 commit;
