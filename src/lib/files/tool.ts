@@ -16,6 +16,7 @@
  * else, so no confirmation step is needed. Forwarding the link is the user's call.
  */
 
+import { dinghyLineFor } from '@/lib/spectrum/line-for-chat'
 import { randomUUID } from 'crypto'
 import { createServerClient } from '@/lib/supabase/server'
 import type { Tool, ToolResult, UserContext } from '@/lib/llm/types'
@@ -105,10 +106,17 @@ async function store(userId: string, file: RenderedFile): Promise<string | null>
     return signed.data?.signedUrl ?? null
 }
 
-async function host(doc: DinghyDoc, format: FileFormat, userId: string): Promise<{ hosted: HostedFile; pdf: RenderedFile | null }> {
+/** Dinghy's line for this chat, so reply buttons can open Messages to it. Never blocks the page. */
+async function replyLineFor(chatGuid: string | undefined): Promise<string | undefined> {
+    if (!chatGuid) return undefined
+    try { return await dinghyLineFor(chatGuid) } catch { return undefined }
+}
+
+async function host(doc: DinghyDoc, format: FileFormat, userId: string, replyLine?: string): Promise<{ hosted: HostedFile; pdf: RenderedFile | null }> {
     const pdf = format === 'pdf' ? await renderFile(doc, 'pdf') : null
     const html = renderHtml(doc, {
         ogImage: fileCardUrl(doc, format === 'pdf' ? 'pdf' : 'page'),
+        ...(replyLine ? { replyLine } : {}),
         ...(pdf ? { download: { href: pdf.filename, label: 'download pdf' } } : {}),
     })
     const files: SiteFile[] = [{ path: 'index.html', bytes: Buffer.from(html, 'utf8'), contentType: 'text/html; charset=utf-8' }]
@@ -150,7 +158,7 @@ export function fileToolsFor(): FileToolset {
             let hostError: string | undefined
             if (wantsPage && shareEnabled()) {
                 try {
-                    const { hosted, pdf } = await host(parsed.doc, parsed.format, ctx.userId)
+                    const { hosted, pdf } = await host(parsed.doc, parsed.format, ctx.userId, await replyLineFor(ctx.chatGuid))
                     const file = pdf ?? (await renderFile(parsed.doc, 'html'))
                     const entry: MadeFile = { ...file, format: parsed.format, kind, title: parsed.doc.title, subtitle: parsed.doc.subtitle, link: null, hosted, markdown: parsed.doc.body }
                     made.push(entry)
