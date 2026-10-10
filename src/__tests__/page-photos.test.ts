@@ -10,7 +10,7 @@ const jpeg = (w = 600, h = 400, end = true) => Buffer.concat([
 ])
 const JPEG = jpeg()
 const json = (o: unknown) => new Response(JSON.stringify(o), { status: 200 })
-const commons = (license: string, width = 900, title = 'File:Harbor Skiff at dawn.jpg') => json({
+const commons = (license: string, width = 900, title = 'File:Harbor Inn and Harbor Skiff at dawn.jpg') => json({
     query: { pages: { 1: { title: title, imageinfo: [{ thumburl: 'https://upload.wikimedia.org/x/boat.jpg', descriptionurl: 'https://commons.wikimedia.org/wiki/File:Boat.jpg', width, extmetadata: { LicenseShortName: { value: license }, LicenseUrl: { value: 'https://creativecommons.org/licenses/by/4.0' }, Artist: { value: '<a href="x">Sam Example</a>' }, ObjectName: { value: 'Boat' }, Categories: { value: 'Harbor Skiff|Harbor Inn|Boats' } } }] } } },
 })
 const fake = (license = 'CC BY 4.0', img: Buffer | Response = JPEG): { f: Fetcher; calls: string[] } => {
@@ -75,6 +75,30 @@ describe('page photos', () => {
         const none: Fetcher = async () => json({ query: { pages: {} } })
         const body = ':::stay\nHarbor Inn | $120 | 8.8 | Old town | Thin walls | | \n:::'
         expect((await attachPhotos(body, { allowed: true, fetcher: none })).body).toBe(body)
+    })
+})
+
+describe('fail-closed attribution', () => {
+    const one = (md: Record<string, { value: string }>, desc: string | null = 'https://commons.wikimedia.org/wiki/File:A.jpg') => async (u: string) =>
+        u.includes('commons.wikimedia.org') ? json({ query: { pages: { 1: { title: 'File:Harbor Skiff.jpg', imageinfo: [{ thumburl: 'https://upload.wikimedia.org/x/a.jpg', descriptionurl: desc ?? undefined, width: 900, extmetadata: md }] } } } }) : new Response(new Uint8Array(JPEG))
+    const good = { LicenseShortName: { value: 'CC BY 4.0' }, LicenseUrl: { value: 'https://creativecommons.org/licenses/by/4.0' }, Artist: { value: 'Sam Example' } }
+    it('accepts complete metadata', async () => { expect(await findPhoto('Harbor Skiff', 'general', one(good))).not.toBeNull() })
+    it('skips a missing or odd author', async () => {
+        expect(await findPhoto('Harbor Skiff', 'general', one({ ...good, Artist: { value: '' } }))).toBeNull()
+        expect(await findPhoto('Harbor Skiff', 'general', one({ ...good, Artist: { value: 'A [x](https://e.test)' } }))).toBeNull()
+    })
+    it('skips a missing source or license link', async () => {
+        expect(await findPhoto('Harbor Skiff', 'general', one(good, null))).toBeNull()
+        expect(await findPhoto('Harbor Skiff', 'general', one({ ...good, LicenseUrl: { value: '' } }))).toBeNull()
+    })
+    it('allows only exact licences', async () => {
+        for (const l of ['CC BY 4.0 International', 'CC BY-NC 4.0', 'CC BY-SA', 'GFDL', 'CC BY 4.0x']) expect(await findPhoto('Harbor Skiff', 'general', one({ ...good, LicenseShortName: { value: l } }))).toBeNull()
+        expect(await findPhoto('Harbor Skiff', 'general', one({ ...good, LicenseShortName: { value: 'CC BY-SA 3.0' } }))).not.toBeNull()
+    })
+    it('does not match on categories alone', async () => {
+        expect(await findPhoto('Harbor Skiff', 'general', one({ ...good, Categories: { value: 'Other' } }))).not.toBeNull()
+        const f: Fetcher = async (u) => (u.includes('commons.wikimedia.org') ? json({ query: { pages: { 1: { title: 'File:Lobby.jpg', imageinfo: [{ thumburl: 'https://upload.wikimedia.org/x/a.jpg', descriptionurl: 'https://commons.wikimedia.org/wiki/File:L.jpg', width: 900, extmetadata: { ...good, Categories: { value: 'Harbor Skiff' } } }] } } } }) : new Response(new Uint8Array(JPEG)))
+        expect(await findPhoto('Harbor Skiff', 'general', f)).toBeNull()
     })
 })
 
