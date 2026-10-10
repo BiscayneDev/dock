@@ -1,3 +1,5 @@
+import { sandboxOwnerTag } from '@/lib/data-portability/owner-tag'
+import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 /**
  * Dinghy's computer: a persistent per-user sandbox (E2B microVM), with an
  * in-memory mock as the default provider so the whole app boots and the
@@ -52,7 +54,7 @@ export interface ComputerSessionRow {
 
 /** Minimal provider interface — two impls: E2BManager and MockManager. */
 export interface ComputerProvider {
-  start(): Promise<{ sandboxId: string }>
+  start(userId?: string): Promise<{ sandboxId: string }>
   stop(sandboxId: string): Promise<void>
   /** Pause (keeps files, processes and memory). Throws if it cannot. */
   pause(sandboxId: string): Promise<void>
@@ -89,7 +91,7 @@ export class MockManager implements ComputerProvider {
     this.paused.add(sandboxId)
   }
 
-  async start(): Promise<{ sandboxId: string }> {
+  async start(userId?: string): Promise<{ sandboxId: string }> {
     const sandboxId = `mock-${Math.random().toString(36).slice(2, 10)}`
     this.sandboxes.set(sandboxId, true)
     return { sandboxId }
@@ -149,9 +151,11 @@ export class E2BManager implements ComputerProvider {
     return shipyardSandboxEnvs()
   }
 
-  async start(): Promise<{ sandboxId: string }> {
+  async start(userId?: string): Promise<{ sandboxId: string }> {
     const Sandbox = await this.sdk()
-    const opts = { timeoutMs: SANDBOX_TIMEOUT_MS, envs: this.sandboxEnvs() }
+    if (!userId) throw new Error('Sandbox owner required')
+    await assertAccountActive(userId)
+    const opts = { timeoutMs: SANDBOX_TIMEOUT_MS, envs: this.sandboxEnvs(), metadata: { dinghy_owner: sandboxOwnerTag(userId), purpose: 'dinghy-computer' } }
     // E2B_TEMPLATE: prebuilt template with Chromium + browser-use baked in
     // (scripts/build-e2b-template.mjs). Unset = E2B's default base image.
     const template = process.env.E2B_TEMPLATE
@@ -272,7 +276,7 @@ export async function getOrStart(
     return { session: { ...session, status: 'running', last_activity_at: wasSleeping ? now : session.last_activity_at }, resumed: wasSleeping }
   }
 
-  const { sandboxId } = await provider.start()
+  const { sandboxId } = await provider.start(userId)
   const now = new Date().toISOString()
   const { data: created, error } = await supabase
     .from('computer_sessions')
@@ -289,7 +293,7 @@ export async function replaceDeadSandbox(
   supabase: Supabase = createServerClient(),
   provider: ComputerProvider = getProvider()
 ): Promise<string> {
-  const { sandboxId } = await provider.start()
+  const { sandboxId } = await provider.start(session.user_id)
   const { error } = await supabase
     .from('computer_sessions')
     .update({ sandbox_id: sandboxId, status: 'running' })
