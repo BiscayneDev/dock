@@ -1,3 +1,4 @@
+import { unmatchedPlacesReply } from '@/lib/places/intent'
 import { needsFileRepair } from '@/lib/files/reply'
 import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 import { withinTurn, TurnDeadlineExceeded } from './turn-budget'
@@ -165,6 +166,7 @@ const FILES_LINE =
     'it is private unless they forward it, and anyone they forward it to can open it. Links expire after 7 days; making the file again gives a fresh link. Never claim a new document was created without a successful create_file call in this turn, and never use a historical file URL as the new document. ' +
     'If they want the file itself in the chat, set attach=true. revoke_file kills a link they no longer want working. ' +
     'Every file you make is saved to memory with its full text: recall_file reopens one from any earlier chat, so to update a file, recall it, change it and create_file the full new version. ' +
+    'For restaurant booking or reservation asks, preserve that intent. Ask only missing party size and preferred time, not whether they want a booking. find_places is nearby discovery, not reservation availability or payment; open-now hours do not prove availability on a future date. Do not claim a reservation or payment happened without a successful authorized result. ' +
     'For "where should I eat / what is near X" asks call find_places first: it finds real venues with open-now, walk time and map links and makes the page itself, so skip web_search and create_file for those. ' +
     'Offer one when a list or plan would be easier to keep as a document, and make it when asked. ' +
     'But when the answer itself is big - comparing three or more options, a multi-day plan or itinerary, a research write-up, anything that would run past about eight lines of text - do not paste it into the chat. ' +
@@ -583,6 +585,7 @@ export async function chatWithTools(
     ]
     messages = withVolatileNote(messages, [opts.volatile, opts.interviewLine].filter(Boolean).join('\n\n')) as Record<string, unknown>[]
 
+    let placesMismatch: string | null = null
     let toolCallCount = 0
     let successfulSearches = 0
     let sourceOnly = true
@@ -660,7 +663,7 @@ export async function chatWithTools(
         const calls = msg?.tool_calls ?? []
 
         if (choice?.finish_reason !== 'tool_calls' || calls.length === 0) {
-            const reply = msg?.content ?? '(no response)'
+            const reply = placesMismatch ?? msg?.content ?? '(no response)'
             if (!pageRetry && !pageAttempted && tools.some((t) => t.name === 'create_file') && (needsAnswerPage(reply) || needsFileRepair(reply)) && iteration < MAX_TOOL_ITERATIONS && (opts.deadlineAt === undefined || opts.deadlineAt - Date.now() >= 20_000)) {
                 pageRetry = true
                 completionMode = true
@@ -695,6 +698,7 @@ export async function chatWithTools(
                         ),
                     ]))
                     content = JSON.stringify(result.success ? result.data ?? {} : { error: result.error ?? 'tool failed' })
+                    if (result.success && call.function.name === 'find_places') placesMismatch = unmatchedPlacesReply(result.data)
                     if (result.success && call.function.name === 'web_search') {
                         successfulSearches++
                         const hits = (result.data as { results?: { title?: unknown; url?: unknown }[] } | undefined)?.results
@@ -750,7 +754,7 @@ export async function chatWithTools(
     reportUsage(opts.onUsage, res, data, opts.model, Date.now() - tFinal)
     await logGatewayCall(buildCallRow(synthCtx, 'ok', tFinal, res, data))
     return {
-        reply: data.choices?.[0]?.message?.content ?? '(no response)',
+        reply: placesMismatch ?? data.choices?.[0]?.message?.content ?? '(no response)',
         toolCalls: toolCallCount,
         iterations: MAX_TOOL_ITERATIONS + 1,
         tainted,
