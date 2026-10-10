@@ -1,3 +1,5 @@
+import { sandboxOwnerTag } from '@/lib/data-portability/owner-tag'
+import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 /**
  * Remote-browser login for a site (slice 4, PR B).
  *
@@ -38,7 +40,7 @@ export interface LoginSandbox {
 }
 
 export interface LoginProvider {
-  create(): Promise<LoginSandbox>
+  create(userId?:string): Promise<LoginSandbox>
   connect(id: string): Promise<LoginSandbox>
 }
 
@@ -79,10 +81,12 @@ function wrap(sbx: E2BSandbox): LoginSandbox {
 export function e2bLoginProvider(): LoginProvider {
   const template = process.env.E2B_LOGIN_TEMPLATE || 'dinghy-login'
   return {
-    async create() {
+    async create(userId) {
+      if(!userId) throw new Error('Sandbox owner required')
+      await assertAccountActive(userId)
       const { Sandbox } = await import('e2b')
       // No envs on purpose: nothing from Dinghy goes into the login sandbox.
-      const sbx = await Sandbox.create(template, { timeoutMs: LOGIN_SANDBOX_TIMEOUT_MS, metadata: { purpose: 'browser-login' } })
+      const sbx = await Sandbox.create(template, { timeoutMs: LOGIN_SANDBOX_TIMEOUT_MS, metadata: { purpose: 'browser-login', dinghy_owner: sandboxOwnerTag(userId) } })
       return wrap(sbx as unknown as E2BSandbox)
     },
     async connect(id) {
@@ -144,7 +148,7 @@ export async function startLogin(token: string, provider: LoginProvider = e2bLog
 
   let sandbox: LoginSandbox | null = null
   try {
-    sandbox = await provider.create()
+    sandbox = await provider.create(attempt.user_id)
     const password = vncPassword()
     for (const step of loginStartCommands(`https://${site}/`, password)) {
       const r = await sandbox.run(step.cmd, { background: step.background, timeoutMs: 60_000 })
