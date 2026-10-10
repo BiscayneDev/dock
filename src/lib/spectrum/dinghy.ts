@@ -1,3 +1,4 @@
+import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 import { withinTurn, TurnDeadlineExceeded } from './turn-budget'
 import type { RunStage } from './run-stage'
 
@@ -586,6 +587,7 @@ export async function chatWithTools(
             } else {
                 try {
                     await opts.onStage?.('tool', call.function.name)
+                    await assertAccountActive(ctx.userId,ctx.chatGuid)
                     const input = JSON.parse(call.function.arguments || '{}') as unknown
                     const result = await withinTurn(opts.deadlineAt, () => Promise.race([
                         tool.execute(input, ctx),
@@ -629,4 +631,4 @@ export async function chatWithTools(
         iterations: MAX_TOOL_ITERATIONS + 1,
         tainted,
     }
-    }
+}
