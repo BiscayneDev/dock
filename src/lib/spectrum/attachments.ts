@@ -11,6 +11,7 @@
  * dictation to cover that for now).
  */
 
+import { hintHeaders } from './turn-class'
 import { extractText } from 'unpdf'
 import { readGatewayUsage, type GatewayUsage } from './metering'
 
@@ -81,7 +82,7 @@ export async function describeImage(dataUrl: string, opts: GatewayOpts): Promise
     const t0 = Date.now()
     const res = await fetchFn(`${opts.gatewayUrl}/v1/chat/completions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.apiKey}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.apiKey}`, ...hintHeaders('lookup', false) },
         body: JSON.stringify({
             model: opts.model,
             max_tokens: 300,
