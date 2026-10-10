@@ -17,6 +17,7 @@ describe('current-turn file delivery', () => {
     it('does not interfere with a requested previous-file link or ordinary research answer', () => {
         expect(needsFileRepair('Your earlier Singapore page: https://scarlet-palm-znsb.here.now/')).toBe(false)
         expect(needsFileRepair('The Scout is not available yet.')).toBe(false)
+        expect(needsFileRepair('I compiled research from these sources.')).toBe(false)
     })
     it('keeps marker repair and blocks unsupported updated-file claims', () => {
         expect(needsFileRepair('[sent file: cars.pdf]')).toBe(true)
