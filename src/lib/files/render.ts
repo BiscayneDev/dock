@@ -27,6 +27,7 @@ import {
 import { dmMono500, frauncesDisplay, frauncesItalic, schibsted400, schibsted600 } from '@/lib/brand/static-fonts'
 import { paper } from '@/lib/brand/tokens'
 import { anchorSvg, sunriseSvg } from '@/lib/brand/scene'
+import { KIND_BLOCKS, KINDS_CSS, LOCAL_IMG, renderKind, type KindBlock } from '@/lib/files/kinds'
 
 export type FileFormat = 'pdf' | 'docx' | 'html' | 'csv' | 'md'
 
@@ -152,7 +153,7 @@ function tokens(md: string): Token[] {
 // ── Components: ":::name" blocks ─────────────────────────────────────────────
 // The model writes plain Markdown; our code draws the components. Unknown block
 // names are left as ordinary text. Blocks never contain raw HTML (all escaped).
-const BLOCK_NAMES = ['facts', 'cost', 'heads-up', 'place', 'places', 'reply', 'options', 'sources'] as const
+const BLOCK_NAMES = ['facts', 'cost', 'heads-up', 'place', 'places', 'reply', 'options', 'sources', ...KIND_BLOCKS] as const
 type BlockName = (typeof BLOCK_NAMES)[number]
 type Segment = { kind: 'md'; text: string } | { kind: 'block'; name: BlockName; lines: string[] }
 
@@ -165,7 +166,7 @@ export function splitBlocks(md: string): Segment[] {
     }
     const lines = (md ?? '').split('\n')
     for (let i = 0; i < lines.length; i++) {
-        const open = lines[i].match(/^\s*:::\s*(facts|cost|heads-up|places|place|reply|options|sources)\s*$/i)
+        const open = lines[i].match(/^\s*:::\s*(facts|cost|heads-up|places|place|reply|options|sources|weather|scores|media|stay|route|briefing|gallery)\s*$/i)
         if (open) {
             const end = lines.findIndex((l, j) => j > i && /^\s*:::\s*$/.test(l))
             if (end > i) {
@@ -289,6 +290,7 @@ function renderBlock(name: BlockName, lines: string[], opts: HtmlOptions = {}): 
     if (name === 'options') return renderOptions(lines)
     if (name === 'places') return renderPlaces(lines)
     if (name === 'sources') return renderSources(lines)
+    if ((KIND_BLOCKS as readonly string[]).includes(name)) return renderKind(name as KindBlock, lines)
     // place
     const f = Object.fromEntries(lines.map(pair).map((p) => [p.k.toLowerCase(), p.v]))
     const title = f['name'] ?? lines[0] ?? 'Place'
@@ -308,6 +310,7 @@ export function flattenBlocks(md: string): string {
             if (sg.name === 'options') return sg.lines.slice(0, 5).map((l) => { const [n, p, w, c] = cells(l); return `- ${[n, p, w].filter(Boolean).join(' - ')}${c ? ` (catch: ${c})` : ''}` }).join('\n')
             if (sg.name === 'places') return sg.lines.slice(0, 8).map((l) => { const [n, , st, d, a, h] = cells(l); return `- ${[n, st, d, a, h && `hours ${h}`].filter(Boolean).join(', ')}` }).join('\n')
             if (sg.name === 'sources') return sg.lines.slice(0, 10).map((l) => { const [w, u, d] = cells(l); return `- ${[w, u, d && `checked ${d}`].filter(Boolean).join(', ')}` }).join('\n')
+            if ((KIND_BLOCKS as readonly string[]).includes(sg.name)) return sg.lines.map((l) => `- ${cells(l).filter((c) => c && !LOCAL_IMG.test(c)).join(' - ')}`).join('\n')
             return sg.lines.map((l) => `- ${l}`).join('\n')
         })
         .join('\n')
@@ -418,6 +421,7 @@ h3.day{margin:30px 0 4px;padding-top:14px;border-top:1px solid var(--line);font:
 .sources{margin:26px 0 0;padding-top:16px;border-top:1px solid var(--line)}.src-label{display:block;font:500 10px/1 'DM Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}.sources ol{margin:10px 0 0;padding-left:20px;font-size:15px}.src-meta{display:block;font:500 11px/1.5 'DM Mono',monospace;color:var(--mute)}
 code{font:14px 'DM Mono',monospace;background:var(--sand);padding:1px 6px;border-radius:6px}
 hr{border:0;border-top:1px solid var(--line);margin:32px 0}
+${KINDS_CSS}
 .dl{margin:14px 0 0;font:500 11px/1 'DM Mono',monospace;letter-spacing:.14em;text-transform:uppercase}.dl a{text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:8px 14px;display:inline-block}
 .foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;max-width:720px;margin:0 auto;padding:36px 24px 44px;font:500 10px 'DM Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}.foot a{color:inherit;text-decoration:none}
 @media (max-width:600px){table.tbl,table.tbl tbody,table.tbl tr,table.tbl td{display:block;width:100%}table.tbl thead{display:none}table.tbl tr{margin:12px 0;padding:6px 14px;border:1px solid var(--line);border-radius:16px}table.tbl td{border:0;padding:6px 0}table.tbl td::before{content:attr(data-label);display:block;font:500 10px/1.6 'DM Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}table.tbl td:first-child{font:500 19px/1.3 Fraunces,Georgia,serif;color:var(--ink)}table.tbl td:first-child::before{display:none}.band{height:220px}.card{margin-top:-52px;padding:28px 22px 26px}h1{font-size:36px}h2{font-size:24px}body{font-size:16px}.row{grid-template-columns:84px 1fr}}
