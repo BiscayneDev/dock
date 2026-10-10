@@ -530,7 +530,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             const resolved = stated.kind === 'at' ? await resolvePlaceTimezone(stated.place).catch(() => null) : null
             if (stated.kind === 'home' || resolved?.kind === 'one') {
                 await saveMessage(chatGuid, 'user', text).catch(() => {})
-                const reply = stated.kind === 'home' ? 'Welcome back. Back on your home time.' : travelAck(resolved!.kind === 'one' ? resolved.choice.label : '', (await loadImessageToolContext(chatGuid).catch(() => null))?.timezone ?? 'UTC')
+                const reply = stated.kind === 'home' ? 'Welcome back. Back on your home time.' : travelAck(resolved?.kind === 'one' ? resolved.choice.label : '', (await loadImessageToolContext(chatGuid).catch(() => null))?.timezone ?? 'UTC')
                 await sendText(space, chatGuid, 'reply', reply)
                 await saveMessage(chatGuid, 'assistant', reply).catch(() => {})
                 return
@@ -1006,7 +1006,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             if (!stated) {
                 const uid = await briefableUserId(chatGuid).catch(() => null)
                 const p = uid ? await freshPin(uid).catch(() => null) : null
-                const z = p ? await withinTurn(deadlineAt, () => resolvePinTimezone(p)).catch(() => null) : null
+                const z = p ? await withinTurn(deadlineAt, () => resolvePinTimezone({ lat: p.lat, lon: p.lon, label: p.label ?? undefined })).catch(() => null) : null
                 if (p && z) pin = { zone: z, label: p.label ?? z.split('/').pop()!.replaceAll('_', ' '), observedAt: p.observedAt }
             }
             const cur = chooseCurrentPlace({ home, stated, pin, now: Date.now() })
@@ -1221,4 +1221,4 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         clearTimeout(eyesTimer)
         stopTypingReTap(space, typingHandle)
     }
-            }
+}
