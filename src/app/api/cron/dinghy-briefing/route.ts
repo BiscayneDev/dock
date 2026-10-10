@@ -40,6 +40,7 @@ import { BRIEF_JSON_SPEC, cardDate, cardTime, parseBriefReply, sendBrief } from 
 import { briefLocation } from '@/lib/spectrum/location'
 import { cardWeather } from '@/lib/weather/brief-weather'
 import { toPlainText } from '@/lib/spectrum/plain-text'
+import { decideBrief, lastTextByChat, LIVE_CONVERSATION_MS } from '@/lib/spectrum/proactive-gate'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -47,8 +48,7 @@ export const maxDuration = 300
 
 const OWNER_DOMAIN = '@biscayneventures.xyz'
 
-// The hourly cron fires at minute 0; each user gets the 8am local run.
-const BRIEFING_HOUR = 8
+// The hourly cron fires at minute 0; the morning window (8-9am local) lives in proactive-gate.ts.
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
     if (request.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -77,10 +77,41 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         waitlistCount = null
     }
 
-    const results = { briefings: 0, skipped: 0, errors: 0 }
+    const results = { briefings: 0, skipped: 0, errors: 0, deferred: 0 }
+
+    // Quiet by default, step 1: decide who is due from cheap rows (timezone,
+    // quiet hours, a text in the last few minutes) BEFORE decrypting any
+    // token or touching Google. Two batched reads cover every user.
+    const userIds = [...new Set((identities ?? []).map((r) => r.user_id as string))]
+    const { data: userRows } = userIds.length
+        ? await supabase.from('users').select('id, timezone, quiet_hours_start, quiet_hours_end').in('id', userIds)
+        : { data: [] as { id: string; timezone: string | null; quiet_hours_start: string | null; quiet_hours_end: string | null }[] }
+    const usersById = new Map((userRows ?? []).map((u) => [u.id as string, u]))
+    const recentSince = new Date(Date.now() - LIVE_CONVERSATION_MS).toISOString()
+    const { data: recentTexts } = await supabase
+        .from('spectrum_messages')
+        .select('chat_guid, created_at')
+        .eq('role', 'user')
+        .gte('created_at', recentSince)
+        .limit(1000)
+    const lastText = lastTextByChat((recentTexts ?? []) as { chat_guid: string; created_at: string }[])
 
     for (const row of identities ?? []) {
         const chatGuid = row.chat_guid as string
+        {
+            const u = usersById.get(row.user_id as string)
+            const tz = u?.timezone && u.timezone !== 'UTC' ? u.timezone : 'America/New_York'
+            const forced = (await briefingForceKey(row.user_id as string).catch(() => null)) !== null
+            const lastAt = lastText.get(chatGuid)
+            const decision = decideBrief({
+                localHour: getCurrentHour(tz),
+                forced,
+                inQuietHours: isInQuietHours(u?.quiet_hours_start ?? null, u?.quiet_hours_end ?? null, tz),
+                sinceLastUserTextMs: lastAt ? Date.now() - lastAt : null,
+            })
+            if (decision.act === 'skip') { results.skipped++; continue }
+            if (decision.act === 'wait') { results.deferred++; continue }
+        }
         // Set once this run owns the day's generation; cleared when the brief is queued.
         let held: { userId: string; localDay: string; key: string } | null = null
         try {
@@ -123,11 +154,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                     timezone
                 )
             ) {
-                results.skipped++
-                continue
-            }
-            const hour = getCurrentHour(timezone)
-            if (!forced && hour !== BRIEFING_HOUR) {
                 results.skipped++
                 continue
             }

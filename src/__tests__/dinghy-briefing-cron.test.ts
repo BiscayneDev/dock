@@ -50,6 +50,7 @@ const chatWithTools = vi.fn()
 const recordUsage = vi.fn()
 const spaceSend = vi.fn()
 const forceKey = vi.fn()
+const recentTexts: { chat_guid: string; created_at: string }[] = []
 
 vi.mock('@/lib/supabase/server', () => ({
   createServerClient: () => ({
@@ -80,6 +81,9 @@ vi.mock('@/lib/supabase/server', () => ({
       q.select = () => q
       q.not = () => Promise.resolve({ data: [{ chat_guid: 'chat-1', user_id: 'u1' }] })
       q.eq = () => q
+      q.in = () => Promise.resolve({ data: [{ id: 'u1', timezone: 'America/New_York', quiet_hours_start: null, quiet_hours_end: null }] })
+      q.gte = () => q
+      q.limit = () => Promise.resolve({ data: recentTexts })
       q.maybeSingle = () => Promise.resolve({ data: null })
       return q
     },
@@ -136,10 +140,27 @@ beforeEach(() => {
   db.claims.clear()
   db.outbox.length = 0
   db.failEnqueue = null
+  recentTexts.length = 0
   forceKey.mockResolvedValue(null)
   chatWithTools.mockResolvedValue({ reply: 'good morning' })
   recordUsage.mockResolvedValue(undefined)
   spaceSend.mockResolvedValue(undefined)
+})
+
+describe('dinghy-briefing cron: quiet by default', () => {
+  it('holds the brief while the user is mid-conversation: no claim, no model call', async () => {
+    recentTexts.push({ chat_guid: 'chat-1', created_at: new Date().toISOString() })
+    const res = await run()
+    expect(res).toMatchObject({ briefings: 0, deferred: 1 })
+    expect(chatWithTools).not.toHaveBeenCalled()
+    expect(db.claims.size).toBe(0)
+  })
+
+  it('brief-me-now still goes through mid-conversation', async () => {
+    recentTexts.push({ chat_guid: 'chat-1', created_at: new Date().toISOString() })
+    forceKey.mockResolvedValue('2026-10-01T12:00:00Z')
+    expect((await run()).briefings).toBe(1)
+  })
 })
 
 describe('dinghy-briefing cron: claim before the model call', () => {
