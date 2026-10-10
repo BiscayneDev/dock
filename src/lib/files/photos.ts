@@ -25,12 +25,51 @@ const API_HOSTS = new Set([API_HOST, 'openlibrary.org'])
 const IMAGE_HOSTS = new Set(['upload.wikimedia.org', 'thumb.wikimedia.org', 'covers.openlibrary.org'])
 
 export interface Photo { path: string; bytes: Buffer; contentType: string; credit: string; license: string }
-export type Fetcher = (url: string, init?: { headers?: Record<string, string>; redirect?: 'error' | 'follow' | 'manual' }) => Promise<Response>
+export type Fetcher = (url: string, init?: { headers?: Record<string, string>; redirect?: 'error' | 'follow' | 'manual'; signal?: AbortSignal }) => Promise<Response>
 
-const sniff = (b: Buffer): { ext: string; type: string } | null => {
-    if (b.length > 12 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return { ext: 'jpg', type: 'image/jpeg' }
-    if (b.length > 12 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return { ext: 'png', type: 'image/png' }
-    if (b.length > 12 && b.subarray(0, 4).toString() === 'RIFF' && b.subarray(8, 12).toString() === 'WEBP') return { ext: 'webp', type: 'image/webp' }
+const MIN_SIDE = 300
+const MAX_SIDE = 8000
+
+/**
+ * Structural check, not just a header peek: walks the file to find its real
+ * dimensions and its end marker, so a truncated file, an HTML page with a magic
+ * number glued on front, or a decompression-bomb size is refused. Returns null
+ * for anything that is not a complete JPEG, PNG or WebP of a sensible size.
+ */
+export function validateImage(b: Buffer): { ext: string; type: string; w: number; h: number } | null {
+    const ok = (ext: string, type: string, w: number, h: number) => (w >= MIN_SIDE && h >= MIN_SIDE * 0.5 && w <= MAX_SIDE && h <= MAX_SIDE ? { ext, type, w, h } : null)
+    if (b.length > 24 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) {
+        let i = 2
+        let dims: [number, number] | null = null
+        while (i + 4 < b.length) {
+            if (b[i] !== 0xff) { i++; continue }
+            const m = b[i + 1]
+            if (m === 0xff) { i++; continue }
+            if (m === 0xd9) break
+            if (m === 0xd8 || (m >= 0xd0 && m <= 0xd7) || m === 0x01) { i += 2; continue }
+            const len = b.readUInt16BE(i + 2)
+            if (len < 2) return null
+            if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) { dims = [b.readUInt16BE(i + 7), b.readUInt16BE(i + 5)]; break }
+            if (m === 0xda) break
+            i += 2 + len
+        }
+        const tail = b.subarray(Math.max(0, b.length - 4))
+        const ended = tail.includes(Buffer.from([0xff, 0xd9]))
+        return dims && ended ? ok('jpg', 'image/jpeg', dims[0], dims[1]) : null
+    }
+    if (b.length > 33 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+        if (b.subarray(12, 16).toString() !== 'IHDR') return null
+        const iend = b.subarray(b.length - 12).toString('latin1').includes('IEND')
+        return iend ? ok('png', 'image/png', b.readUInt32BE(16), b.readUInt32BE(20)) : null
+    }
+    if (b.length > 30 && b.subarray(0, 4).toString() === 'RIFF' && b.subarray(8, 12).toString() === 'WEBP') {
+        if (b.readUInt32LE(4) + 8 !== b.length) return null
+        const fmt = b.subarray(12, 16).toString()
+        if (fmt === 'VP8X') return ok('webp', 'image/webp', 1 + b.readUIntLE(24, 3), 1 + b.readUIntLE(27, 3))
+        if (fmt === 'VP8 ') return ok('webp', 'image/webp', b.readUInt16LE(26) & 0x3fff, b.readUInt16LE(28) & 0x3fff)
+        if (fmt === 'VP8L' && b[20] === 0x2f) { const v = b.readUInt32LE(21); return ok('webp', 'image/webp', (v & 0x3fff) + 1, ((v >> 14) & 0x3fff) + 1) }
+        return null
+    }
     return null
 }
 
@@ -42,9 +81,30 @@ const OK_LICENSE = /^(CC0|CC BY(?:-SA)? [0-9.]+|Public domain|PD)/i
 async function guarded(fetcher: Fetcher, url: string, headers?: Record<string, string>): Promise<Response> {
     const u = new URL(url)
     if (u.protocol !== 'https:' || (!API_HOSTS.has(u.hostname) && !IMAGE_HOSTS.has(u.hostname))) throw new Error('host not allowed')
-    const res = await fetcher(url, { redirect: 'error', headers: { 'User-Agent': UA, ...(headers ?? {}) } })
+    const res = await fetcher(url, { redirect: 'error', signal: AbortSignal.timeout(TIMEOUT_MS), headers: { 'User-Agent': UA, ...(headers ?? {}) } })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     return res
+}
+
+/** Read a response body, stopping as soon as it passes the byte cap. */
+async function readCapped(res: Response): Promise<Buffer> {
+    if (Number(res.headers.get('content-length') ?? 0) > MAX_BYTES) throw new Error('too large')
+    if (!res.body) {
+        const whole = Buffer.from(await res.arrayBuffer())
+        if (whole.length > MAX_BYTES) throw new Error('too large')
+        return whole
+    }
+    const reader = res.body.getReader()
+    const chunks: Buffer[] = []
+    let total = 0
+    for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        total += value.length
+        if (total > MAX_BYTES) { await reader.cancel().catch(() => {}); throw new Error('too large') }
+        chunks.push(Buffer.from(value))
+    }
+    return Buffer.concat(chunks)
 }
 
 /** Open Library covers redirect into the Internet Archive (up to three hops, archive hosts only). */
@@ -54,23 +114,19 @@ async function bytesOf(fetcher: Fetcher, url: string): Promise<Buffer> {
     let res: Response
     if (new URL(url).hostname === 'covers.openlibrary.org') {
         let cur = url
-        res = await fetcher(cur, { redirect: 'manual', headers: { 'User-Agent': UA } })
+        res = await fetcher(cur, { redirect: 'manual', signal: AbortSignal.timeout(TIMEOUT_MS), headers: { 'User-Agent': UA } })
         for (let hop = 0; hop < 3 && res.status >= 300 && res.status < 400; hop++) {
             const loc = res.headers.get('location')
             const next = loc ? new URL(loc, cur) : null
             if (!next || next.protocol !== 'https:' || !ARCHIVE.test(next.hostname)) throw new Error('redirect not allowed')
             cur = next.toString()
-            res = await fetcher(cur, { redirect: 'manual', headers: { 'User-Agent': UA } })
+            res = await fetcher(cur, { redirect: 'manual', signal: AbortSignal.timeout(TIMEOUT_MS), headers: { 'User-Agent': UA } })
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
     } else {
         res = await guarded(fetcher, url)
     }
-    const len = Number(res.headers.get('content-length') ?? 0)
-    if (len > MAX_BYTES) throw new Error('too large')
-    const buf = Buffer.from(await res.arrayBuffer())
-    if (buf.length > MAX_BYTES) throw new Error('too large')
-    return buf
+    return readCapped(res)
 }
 
 async function fromCommons(fetcher: Fetcher, query: string): Promise<{ url: string; credit: string; license: string } | null> {
@@ -107,7 +163,7 @@ export async function findPhoto(subject: string, kind: 'general' | 'book', fetch
             ;({ url, credit, license } = hit)
         }
         const bytes = await bytesOf(fetcher, url)
-        const kindOf = sniff(bytes)
+        const kindOf = validateImage(bytes)
         if (!kindOf) return null
         const id = createHash('sha256').update(bytes).digest('hex').slice(0, 12)
         return { path: `img/p-${id}.${kindOf.ext}`, bytes, contentType: kindOf.type, credit, license }
