@@ -73,3 +73,8 @@ describe('card fail-closed summaries', () => {
 it('omits previews instead of corrupting non-Latin names', async () => {
     expect(await renderKindCard({ title: '東京', body: ':::media\n東京 | movie | 2021 | 4.5 | Example | Quiet |\n:::' })).toBeNull()
 })
+
+it('does not turn ambiguous durations into an ETA', () => {
+    for (const t of ['5-10 min', '5 miles', 'about 5 min', 'unknown']) expect(routeSummary([`A | B | walk | ${t}`])?.eta).toBe('1 leg')
+    expect(routeSummary(['A | B | rail | 1 hour 30 minutes'])?.eta).toBe('1 h 30 min')
+})
