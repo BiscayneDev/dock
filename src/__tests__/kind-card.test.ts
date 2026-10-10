@@ -38,6 +38,24 @@ describe('renderKindCard', () => {
         expect(await renderKindCard({ title: 'x', body: ':::route\nonly one cell\n:::' })).toBeNull()
         expect(await renderKindCard({ title: 'x', body: ':::stay\n\n:::' })).toBeNull()
     })
+    it('renders media and briefing cards', async () => {
+        const media = ':::media\nNight Ferry | movie | 2021 | 7.4 | J. Director | Tight and quiet. | img/p-abc123.png\n:::'
+        const photo = { path: 'img/p-abc123.png', bytes: Buffer.from(TINY_PNG, 'base64'), contentType: 'image/png' }
+        const m = await renderKindCard({ title: 'Film night', body: media }, [photo])
+        const m2 = await renderKindCard({ title: 'Film night', body: media })
+        const b = await renderKindCard({ title: 'Calm water, two items', subtitle: 'Sat Oct 10', body: ':::briefing\nDock fee vote Tuesday | Harbor Gazette | today | Council votes on the dock fee. | https://example.test/a\n:::' })
+        for (const x of [m, m2, b]) expect(x && [...x.subarray(0, 4)]).toEqual(PNG)
+    }, 90000)
+    it('strips glyphs the bundled fonts lack instead of fetching fonts', async () => {
+        const calls: string[] = []
+        const orig = globalThis.fetch
+        globalThis.fetch = (async (u: unknown) => { calls.push(String(u)); throw new Error('no network in test') }) as typeof fetch
+        try {
+            const b = await renderKindCard({ title: 'Reads', body: ':::media\nNight Ferry | movie | 2021 | \u2605 4.5 \ud83c\udfac | J. Director | Quiet \u2605 |\n:::' })
+            expect(b && [...b.subarray(0, 4)]).toEqual(PNG)
+        } finally { globalThis.fetch = orig }
+        expect(calls).toEqual([])
+    }, 60000)
 })
 
 describe('card fail-closed summaries', () => {
@@ -50,4 +68,8 @@ describe('card fail-closed summaries', () => {
         expect(routeSummary(lines)).toMatchObject({ eta: '25 min', hidden: 1, last: ['Stop 4', 'Stop 5', 'walk', '5 min', 'flat'] })
         expect(routeSummary([...lines, 'Stop 5 | Stop 6 | walk | unknown'])).toMatchObject({ eta: '6 legs', hidden: 2 })
     })
+})
+
+it('omits previews instead of corrupting non-Latin names', async () => {
+    expect(await renderKindCard({ title: '東京', body: ':::media\n東京 | movie | 2021 | 4.5 | Example | Quiet |\n:::' })).toBeNull()
 })
