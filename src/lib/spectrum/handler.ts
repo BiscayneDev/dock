@@ -56,6 +56,7 @@ import {
     GATE_WELCOME,
     type BetaRole,
 } from './beta-gate'
+import { earlierUserText, loadActiveRuns, steerNote } from './active-run'
 import { claimInboundDelivery, enqueueOutbox, markOutboxFailed, markOutboxSent, type OutboxKind } from './outbox'
 import { briefableUserId, handleMuteIntent } from './briefing'
 import { isLocationAttachment, parseLocation, saveUserLocation } from './location'
@@ -629,7 +630,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
     if (includeOpener && role === 'owner') {
         await markOpenerAsked(chatGuid).catch((err) => logErr('interview opener mark failed', err))
     }
-    const interviewLine =
+    let interviewLine: string | null =
         history.length > 0 && role === 'owner'
             ? await interviewDirective(chatGuid, history[0]?.content ?? '', text, await verifiedWaitlistFirstName(senderAddress(message.sender), chatGuid)).catch((err) => {
                   logErr('interview step failed', err)
@@ -887,6 +888,12 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         return
     }
 
+    // Steer while working: an earlier text from this chat may still be running in
+    // its own invocation. Tell this turn so it answers only the new message.
+    const activeRuns = await loadActiveRuns(chatGuid, message.id)
+    const steer = steerNote(activeRuns, earlierUserText(history, text))
+    if (steer) interviewLine = interviewLine ? `${interviewLine} ${steer}` : steer
+
     const full: Message[] = [
         ...history,
         { role: 'user', content: withReplyContext(text, replyTo), ...(inboundImage ? { images: [inboundImage.dataUrl] } : {}) },
@@ -1024,7 +1031,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         const tChatEnd = Date.now()
         clearTimeout(eyesTimer)
         const recentAfter = await loadHistory(chatGuid, 6).catch(() => [] as HistoryMessage[])
-        const threaded = shouldThread({ replyTo }, recentAfter, text)
+        const threaded = activeRuns.length > 0 || shouldThread({ replyTo }, recentAfter, text)
         // A bare URL on the reply's last line goes out as its own rich-link
         // bubble so the preview card unfurls (articles, bookings, pages).
         // iMessage shows markdown as raw asterisks: send and store plain text.
@@ -1144,4 +1151,4 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         clearTimeout(eyesTimer)
         stopTypingReTap(space, typingHandle)
     }
-}
+        }
