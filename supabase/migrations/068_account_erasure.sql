@@ -10,6 +10,7 @@ create table public.dinghy_erasure_jobs (
  requested_at timestamptz not null default now(),
  frozen_at timestamptz,
  lease_until timestamptz,
+ lease_token uuid,
  completed_at timestamptz,
  obstacle text,
  provider_notes text[] not null default '{}'
@@ -133,19 +134,29 @@ begin
   delete from dinghy_erasure_fences where expires_at<now();
   return null;
  end if;
- update dinghy_erasure_jobs set status='cleaning',lease_until=now()+interval '10 minutes',obstacle=null where id=j.id;
+ update dinghy_erasure_jobs set status='cleaning',lease_until=now()+interval '10 minutes',lease_token=gen_random_uuid(),obstacle=null where id=j.id;
+ select * into j from dinghy_erasure_jobs where id=j.id;
  return to_jsonb(j);
+end;
+$$;
+
+create function public.dinghy_erasure_heartbeat(p_job uuid,p_lease uuid)
+returns boolean language plpgsql security definer set search_path=public as $$
+begin
+ update dinghy_erasure_jobs set lease_until=now()+interval '10 minutes'
+ where id=p_job and lease_token=p_lease and status='cleaning' and lease_until>now();
+ return found;
 end;
 $$;
 
 -- Dynamic owner-column coverage catches new tables instead of silently relying
 -- on cascades. It is intentionally limited to explicit ownership keys.
-create function public.dinghy_erasure_finish(p_job uuid)
+create function public.dinghy_erasure_finish(p_job uuid,p_lease uuid)
 returns boolean language plpgsql security definer set search_path=public as $$
 declare j dinghy_erasure_jobs%rowtype; t record; n bigint; phones text[]; telegram text;
 begin
  select * into j from dinghy_erasure_jobs where id=p_job for update;
- if j.id is null or j.status<>'cleaning' or j.lease_until<now() then return false; end if;
+ if j.id is null or j.status<>'cleaning' or j.lease_token is distinct from p_lease or (j.lease_until is null or j.lease_until<now()) then return false; end if;
  select telegram_id::text into telegram from users where id=j.user_id;
  perform set_config('dinghy.erasure_cleanup','on',true);
  select coalesce(array_agg(handle),'{}') into phones from spectrum_identities where user_id=j.user_id and handle is not null;
@@ -174,17 +185,17 @@ begin
   else execute format('select count(*) from public.%I where %I=any($1)',t.table_name,t.column_name) into n using j.chats; end if;
   if n<>0 then raise exception 'Deletion verification failed'; end if;
  end loop;
- update dinghy_erasure_fences set expires_at=now()+interval '30 days' where
+ update dinghy_erasure_fences set expires_at=now()+interval '7 days' where
  (kind='telegram' and digest=encode(extensions.digest(telegram,'sha256'),'hex')) or
  (kind='user' and digest=encode(extensions.digest(j.user_id::text,'sha256'),'hex')) or
  (kind='chat' and digest in(select encode(extensions.digest(c,'sha256'),'hex') from unnest(j.chats)c)) or
  (kind='phone' and digest in(select encode(extensions.digest(p,'sha256'),'hex') from unnest(phones)p));
- update dinghy_erasure_jobs set user_id=null,chats='{}',status='complete',lease_until=null,completed_at=now(),obstacle=null where id=j.id;
+ update dinghy_erasure_jobs set user_id=null,chats='{}',status='complete',lease_until=null,lease_token=null,completed_at=now(),obstacle=null where id=j.id;
  return true;
 end;
 $$;
 do $$ declare f text; begin foreach f in array array[
- 'dinghy_erasure_telegram_blocked(text)','dinghy_erasure_blocked(uuid,text)','dinghy_erasure_request(uuid,text)','dinghy_erasure_confirm(uuid,uuid,text)','dinghy_erasure_claim()','dinghy_erasure_finish(uuid)','dinghy_erasure_write_guard()'
+ 'dinghy_erasure_telegram_blocked(text)','dinghy_erasure_blocked(uuid,text)','dinghy_erasure_request(uuid,text)','dinghy_erasure_confirm(uuid,uuid,text)','dinghy_erasure_claim()','dinghy_erasure_finish(uuid,uuid)','dinghy_erasure_heartbeat(uuid,uuid)','dinghy_erasure_write_guard()'
 ] loop execute format('revoke all on function public.%s from public,anon,authenticated',f);
  execute format('grant execute on function public.%s to service_role',f); end loop; end $$;
 commit;
