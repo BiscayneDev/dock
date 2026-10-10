@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react'
 import { ImageResponse } from 'next/og'
 import { MARK_PNG } from './card-art'
 import { dmMono500, frauncesDisplay, schibsted400, schibsted600 } from './static-fonts'
@@ -60,7 +61,7 @@ const Foot = () => (
     </div>
 )
 
-function weatherCard(lines: string[]): { el: JSX.Element; h: number } | null {
+function weatherCard(lines: string[]): { el: ReactElement; h: number } | null {
     const [place, now, sky, hi, lo, wind, rain] = cells(lines[0] ?? '')
     if (!place || !now) return null
     const s = skyOf(sky ?? '')
@@ -116,7 +117,7 @@ function weatherCard(lines: string[]): { el: JSX.Element; h: number } | null {
     return { el, h: H }
 }
 
-function scoresCard(title: string, subtitle: string | undefined, lines: string[]): { el: JSX.Element; h: number } | null {
+function scoresCard(title: string, subtitle: string | undefined, lines: string[]): { el: ReactElement; h: number } | null {
     const games = lines.slice(0, 4).map(cells).filter((g) => g[0] && g[2])
     if (!games.length) return null
     const H = 330 + games.length * 250 + 90
