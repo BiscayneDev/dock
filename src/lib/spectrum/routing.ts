@@ -18,6 +18,7 @@ export interface RoutingPrefs {
     providers?: string[]
     /** Requires gateway attempt-timeout support; preserves Jev quality floor. */
     attempt_timeout_ms?: number
+    max_tier?: 'economy'
 }
 
 export function routingEnabled(): boolean {
@@ -37,7 +38,7 @@ export function routingFor(): RoutingPrefs | undefined {
 
 /** Request model + body extension for a gateway call. */
 export function modelFields(pinned: string, routing: RoutingPrefs | undefined): { model: string; shipyard?: RoutingPrefs } {
-    return routing ? { model: 'auto', shipyard: { ...routing, attempt_timeout_ms: 15_000 } } : { model: pinned }
+    return routing ? { model: 'auto', shipyard: { ...routing, attempt_timeout_ms: 15_000, max_tier: 'economy' } } : { model: pinned }
 }
 
 /**
