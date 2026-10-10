@@ -1,3 +1,4 @@
+import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 import { Octokit } from '@octokit/rest'
 import { createServerClient } from '@/lib/supabase/server'
 import { encryptTokenForDb, decryptTokenFromDb } from '@/lib/crypto'
@@ -100,6 +101,7 @@ export async function storeGithubTokens(
 }
 
 export async function getDecryptedGithubTokens(userId: string): Promise<DecryptedTokens | null> {
+  await assertAccountActive(userId)
   const supabase = createServerClient()
 
   const { data, error } = await supabase
