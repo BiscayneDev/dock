@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { attachPhotos, findPhoto, type Fetcher } from '@/lib/files/photos'
+import { attachPhotos, findPhoto, validateImage, type Fetcher } from '@/lib/files/photos'
 
-const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(40, 1)])
+/** A small but structurally complete JPEG: SOI, APP0, SOF0 with the given size, EOI. */
+const jpeg = (w = 600, h = 400, end = true) => Buffer.concat([
+    Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]), Buffer.from('JFIF\0'), Buffer.alloc(9, 0),
+    Buffer.from([0xff, 0xc0, 0x00, 0x11, 0x08, h >> 8, h & 255, w >> 8, w & 255, 0x03, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1]),
+    Buffer.from([0xff, 0xda, 0x00, 0x08, 1, 1, 0, 0, 0x3f, 0, 1, 2, 3]),
+    ...(end ? [Buffer.from([0xff, 0xd9])] : []),
+])
+const JPEG = jpeg()
 const json = (o: unknown) => new Response(JSON.stringify(o), { status: 200 })
 const commons = (license: string, width = 900) => json({
     query: { pages: { 1: { imageinfo: [{ thumburl: 'https://upload.wikimedia.org/x/boat.jpg', width, extmetadata: { LicenseShortName: { value: license }, Artist: { value: '<a href="x">Sam Example</a>' } } }] } } },
@@ -107,5 +114,54 @@ describe('cover redirects', () => {
         }
         expect(await findPhoto('The Salt Road', 'book', f)).toBeNull()
         expect(calls.some((c) => c.includes('evil.example.test'))).toBe(false)
+    })
+})
+
+
+describe('validateImage', () => {
+    it('accepts a complete jpeg and reads its size', () => {
+        expect(validateImage(jpeg(800, 500))).toMatchObject({ ext: 'jpg', w: 800, h: 500 })
+    })
+    it('refuses a truncated jpeg, a tiny one, a huge one and html with a jpeg header glued on', () => {
+        expect(validateImage(jpeg(600, 400, false))).toBeNull()
+        expect(validateImage(jpeg(100, 80))).toBeNull()
+        expect(validateImage(jpeg(20000, 20000))).toBeNull()
+        expect(validateImage(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('<html><script>x</script></html>'.padEnd(60))]))).toBeNull()
+    })
+    it('checks png and webp structure', () => {
+        const png = (w: number, h: number, end = true) => {
+            const ihdr = Buffer.alloc(25)
+            ihdr.writeUInt32BE(13, 0); ihdr.write('IHDR', 4); ihdr.writeUInt32BE(w, 8); ihdr.writeUInt32BE(h, 12)
+            return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), ihdr, Buffer.alloc(8, 7), ...(end ? [Buffer.from([0, 0, 0, 0]), Buffer.from('IEND'), Buffer.alloc(4)] : [Buffer.alloc(12, 1)])])
+        }
+        expect(validateImage(png(640, 480))).toMatchObject({ ext: 'png', w: 640, h: 480 })
+        expect(validateImage(png(640, 480, false))).toBeNull()
+        const webp = (len: number) => {
+            const b = Buffer.alloc(40)
+            b.write('RIFF', 0); b.writeUInt32LE(len, 4); b.write('WEBP', 8); b.write('VP8X', 12)
+            b.writeUIntLE(699, 24, 3); b.writeUIntLE(449, 27, 3)
+            return b
+        }
+        expect(validateImage(webp(32))).toMatchObject({ ext: 'webp', w: 700, h: 450 })
+        expect(validateImage(webp(5000))).toBeNull()
+    })
+})
+
+describe('byte cap and timeout', () => {
+    it('stops reading a body that runs past the cap', async () => {
+        let pulled = 0
+        const stream = new ReadableStream<Uint8Array>({
+            pull(c) { pulled += 1; c.enqueue(new Uint8Array(1_000_000)); if (pulled > 50) c.close() },
+        })
+        const f: Fetcher = async (u) => (u.includes('commons.wikimedia.org') ? commons('CC BY 4.0') : new Response(stream, { status: 200 }))
+        expect(await findPhoto('Harbor Skiff', 'general', f)).toBeNull()
+        expect(pulled).toBeLessThan(10)
+    })
+    it('passes an abort signal on every request', async () => {
+        const seen: (AbortSignal | undefined)[] = []
+        const f: Fetcher = async (u, init) => { seen.push(init?.signal); return u.includes('commons.wikimedia.org') ? commons('CC BY 4.0') : new Response(new Uint8Array(JPEG)) }
+        await findPhoto('Harbor Skiff', 'general', f)
+        expect(seen.length).toBe(2)
+        expect(seen.every(Boolean)).toBe(true)
     })
 })
