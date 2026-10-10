@@ -535,7 +535,7 @@ export async function chatWithTools(
     tools: Tool[],
     ctx: UserContext
 ): Promise<ToolChatResult> {
-    const toolDefs = tools.map((t) => ({
+    const defsNow = () => tools.map((t) => ({
         type: 'function' as const,
         function: { name: t.name, description: t.description, parameters: t.inputSchema },
     }))
@@ -582,6 +582,7 @@ export async function chatWithTools(
             completionMode = true
             messages.push({ role: 'system', content: RESEARCH_FINISH })
         }
+        const toolDefs = defsNow()
         const offered = completionMode ? toolDefs.filter((t) => t.function.name !== 'web_search' && (!pageAttempted || t.function.name !== 'create_file')) : toolDefs
         const t0 = Date.now()
         // Bound a post-search generation, not tools or actions. Preserve honest
@@ -693,7 +694,7 @@ export async function chatWithTools(
         signal,
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.apiKey}`, ...hintHeaders(opts.taskClass && classForIteration(opts.taskClass, 2), false) },
-        body: JSON.stringify({ ...modelFields(opts.model, routingNow()), messages, tools: toolDefs, tool_choice: 'none', stream: false }),
+        body: JSON.stringify({ ...modelFields(opts.model, routingNow()), messages, tools: defsNow(), tool_choice: 'none', stream: false }),
     }))
     if (!res.ok) throw new Error(`Gateway ${res.status}: ${res.statusText}`)
     const data = (await withinTurn(opts.deadlineAt, () => res.json())) as {
