@@ -14,6 +14,7 @@ const upload = vi.fn()
 const createSignedUrl = vi.fn()
 const { rememberFile, findFile } = vi.hoisted(() => ({ rememberFile: vi.fn(async (...args: unknown[]) => void args), findFile: vi.fn() }))
 vi.mock('@/lib/spectrum/plans', () => ({ rememberFile, findFile }))
+vi.mock('@/lib/spectrum/line-for-chat', () => ({ dinghyLineFor: vi.fn(async () => '+16286297000') }))
 vi.mock('@/lib/supabase/server', () => ({
   createServerClient: () => ({ from: () => db, storage: { from: () => ({ upload, createSignedUrl }) } }),
 }))
