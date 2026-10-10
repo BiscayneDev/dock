@@ -32,7 +32,7 @@ export async function resolvePlaceTimezone(place: string): Promise<ZoneResolutio
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=100&language=en&format=json`
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 8000)
-  let hits: Array<{ name: string; admin1?: string; country?: string; timezone?: string }>
+  let hits: Array<{ name: string; admin1?: string; country?: string; timezone?: string; population?: number; feature_code?: string }>
   try {
     const res = await fetch(url, { signal: controller.signal })
     if (!res.ok) return { kind: 'none' }
@@ -50,6 +50,18 @@ export async function resolvePlaceTimezone(place: string): Promise<ZoneResolutio
     choices.push({ zone, label: [hit.name, hit.admin1, hit.country].filter(Boolean).join(', ') })
   }
   if (choices.length === 1) return { kind: 'one', choice: choices[0] }
+  // Use max per zone, not a sum: the service can return the same city twice.
+  // A strong population lead or a sole national capital breaks a namesake tie.
+  if (choices.length > 1) {
+    const ranked = choices.map(choice => {
+      const sameZone = matches.filter(hit => validIanaTimezone(hit.timezone!) === choice.zone)
+      return { choice, population: Math.max(0, ...sameZone.map(hit => hit.population ?? 0)), capital: sameZone.some(hit => hit.feature_code === 'PPLC') }
+    }).sort((a, b) => b.population - a.population || Number(b.capital) - Number(a.capital))
+    const [top, next] = ranked
+    const populationLead = top.population >= 100_000 && top.population >= Math.max(1, next.population) * 10
+    const capitalLead = top.capital && ranked.filter(hit => hit.capital).length === 1 && top.population > 0 && next.population === 0
+    if (populationLead || capitalLead) return { kind: 'one', choice: top.choice }
+  }
   if (choices.length > 1) return { kind: 'ambiguous', choices }
   return { kind: 'none' }
 }

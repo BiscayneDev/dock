@@ -28,6 +28,30 @@ describe('explicit timezone changes', () => {
     expect(await resolvePlaceTimezone('Paris, France')).toEqual({ kind: 'one', choice: { zone: 'Europe/Paris', label: 'Paris, France' } })
     expect((await resolvePlaceTimezone('Paris, Spain')).kind).toBe('none')
   })
+  it('resolves dominant Singapore rather than a tiny namesake in another zone', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ results: [
+      { name: 'Singapore', country: 'South Africa', timezone: 'Africa/Johannesburg' },
+      { name: 'Singapore', country: 'Singapore', timezone: 'Asia/Singapore', population: 5638700, feature_code: 'PPLC' },
+      { name: 'Singapore', country: 'Singapore', timezone: 'Asia/Singapore', population: 5638676, feature_code: 'PCLI' },
+    ] }) })))
+    expect(await resolvePlaceTimezone('Singapore')).toEqual({ kind: 'one', choice: { zone: 'Asia/Singapore', label: 'Singapore, Singapore' } })
+    expect((await resolvePlaceTimezone('Singapore, South Africa')).kind).toBe('one')
+  })
+  it('keeps comparable populations ambiguous and does not inflate duplicate hits', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ results: [
+      { name: 'Example', timezone: 'Europe/Paris', population: 200000 },
+      { name: 'Example', timezone: 'Europe/Paris', population: 200000 },
+      { name: 'Example', timezone: 'America/Chicago', population: 150000 },
+    ] }) })))
+    expect((await resolvePlaceTimezone('Example')).kind).toBe('ambiguous')
+  })
+  it('uses a sole populated national capital when namesakes lack population', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ results: [
+      { name: 'Example', timezone: 'Europe/Paris', population: 50000, feature_code: 'PPLC' },
+      { name: 'Example', timezone: 'America/Chicago' },
+    ] }) })))
+    expect((await resolvePlaceTimezone('Example')).kind).toBe('one')
+  })
   it('does not guess on failure or a non-IANA forecast zone', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })))
     expect(await resolvePlaceTimezone('Paris')).toEqual({ kind: 'none' })
