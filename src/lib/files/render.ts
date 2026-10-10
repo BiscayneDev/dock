@@ -152,7 +152,7 @@ function tokens(md: string): Token[] {
 // ── Components: ":::name" blocks ─────────────────────────────────────────────
 // The model writes plain Markdown; our code draws the components. Unknown block
 // names are left as ordinary text. Blocks never contain raw HTML (all escaped).
-const BLOCK_NAMES = ['facts', 'cost', 'heads-up', 'place', 'reply'] as const
+const BLOCK_NAMES = ['facts', 'cost', 'heads-up', 'place', 'reply', 'options', 'sources'] as const
 type BlockName = (typeof BLOCK_NAMES)[number]
 type Segment = { kind: 'md'; text: string } | { kind: 'block'; name: BlockName; lines: string[] }
 
@@ -165,7 +165,7 @@ export function splitBlocks(md: string): Segment[] {
     }
     const lines = (md ?? '').split('\n')
     for (let i = 0; i < lines.length; i++) {
-        const open = lines[i].match(/^\s*:::\s*(facts|cost|heads-up|place|reply)\s*$/i)
+        const open = lines[i].match(/^\s*:::\s*(facts|cost|heads-up|place|reply|options|sources)\s*$/i)
         if (open) {
             const end = lines.findIndex((l, j) => j > i && /^\s*:::\s*$/.test(l))
             if (end > i) {
@@ -215,6 +215,36 @@ function renderReplies(lines: string[], line?: string): string {
     return `<div class="replies"><p class="reply-hint">${line ? 'Tap to open Messages with this ready to send' : 'You can text me'}</p>${items.join('')}</div>`
 }
 
+
+const cells = (line: string): string[] => line.split('|').map((c) => c.trim())
+
+/** Option cards: "Name | price | why | catch" per line, up to 5. The catch is shown on purpose. */
+function renderOptions(lines: string[]): string {
+    const cards = lines.slice(0, 5).map((l) => {
+        const [name, price, why, notes] = cells(l)
+        if (!name) return ''
+        return `<div class="opt"><div class="opt-top"><span class="opt-name">${esc(name)}</span>${price ? `<span class="opt-price">${esc(price)}</span>` : ''}</div>${why ? `<p class="opt-why">${esc(why)}</p>` : ''}${notes ? `<p class="opt-catch"><span>Catch</span>${esc(notes)}</p>` : ''}</div>`
+    })
+    return `<div class="opts">${cards.join('')}</div>`
+}
+
+const hostOf = (url: string): string => {
+    try { return new URL(url).hostname.replace(/^www\./, '') } catch { return '' }
+}
+
+/** Sources: "What it backs | https://link | date" per line. Each claim shows where it came from and when. */
+function renderSources(lines: string[]): string {
+    const rows = lines.slice(0, 10).map((l) => {
+        const [what, url, date] = cells(l)
+        if (!what) return ''
+        const ok = !!url && /^https?:\/\/[^\s\u0000-\u001f]+$/i.test(url)
+        const label = ok ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(what)}</a>` : esc(what)
+        const meta = [ok ? hostOf(url) : '', date ? `checked ${date}` : ''].filter(Boolean).join(' · ')
+        return `<li>${label}${meta ? `<span class="src-meta">${esc(meta)}</span>` : ''}</li>`
+    })
+    return `<div class="sources"><span class="src-label">sources</span><ol>${rows.join('')}</ol></div>`
+}
+
 function renderBlock(name: BlockName, lines: string[], opts: HtmlOptions = {}): string {
     const inline = (t: string) => safe.parseInline(t) as string
     if (name === 'facts') {
@@ -235,6 +265,8 @@ function renderBlock(name: BlockName, lines: string[], opts: HtmlOptions = {}): 
         return `<aside class="heads"><span class="heads-label">heads up</span>${lines.map((l) => `<p>${inline(l)}</p>`).join('')}</aside>`
     }
     if (name === 'reply') return renderReplies(lines, opts.replyLine)
+    if (name === 'options') return renderOptions(lines)
+    if (name === 'sources') return renderSources(lines)
     // place
     const f = Object.fromEntries(lines.map(pair).map((p) => [p.k.toLowerCase(), p.v]))
     const title = f['name'] ?? lines[0] ?? 'Place'
@@ -251,6 +283,8 @@ export function flattenBlocks(md: string): string {
             if (sg.kind === 'md') return sg.text
             if (sg.name === 'heads-up') return `> Heads up: ${sg.lines.join(' ')}`
             if (sg.name === 'reply') return sg.lines.slice(0, 3).map((l) => `- Reply with: ${l.replace(/^[-*]\s+/, '')}`).join('\n')
+            if (sg.name === 'options') return sg.lines.slice(0, 5).map((l) => { const [n, p, w, c] = cells(l); return `- ${[n, p, w].filter(Boolean).join(' - ')}${c ? ` (catch: ${c})` : ''}` }).join('\n')
+            if (sg.name === 'sources') return sg.lines.slice(0, 10).map((l) => { const [w, u, d] = cells(l); return `- ${[w, u, d && `checked ${d}`].filter(Boolean).join(', ')}` }).join('\n')
             return sg.lines.map((l) => `- ${l}`).join('\n')
         })
         .join('\n')
@@ -356,6 +390,8 @@ h3.day{margin:30px 0 4px;padding-top:14px;border-top:1px solid var(--line);font:
 .replies{margin:22px 0;display:grid;gap:10px}.reply-hint{margin:0;font:500 10px/1 'DM Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}
 .reply{display:flex;align-items:center;gap:14px;padding:14px 18px;border-radius:999px;background:var(--ink);color:var(--paper);text-decoration:none;min-height:52px}.reply-k{font:500 10px/1 'DM Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#F7C196}.reply-t{font-weight:600;font-size:16px;line-height:1.3}
 .reply-off{background:var(--sand);color:var(--ink)}.reply-off .reply-k{color:var(--accent)}
+.opts{display:grid;gap:12px;margin:18px 0}.opt{padding:16px 18px;border:1px solid var(--line);border-radius:18px;background:var(--paper)}.opt-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}.opt-name{font:500 21px/1.2 Fraunces,Georgia,serif;color:var(--ink)}.opt-price{font:500 13px/1 'DM Mono',monospace;color:var(--ink);background:var(--sand);padding:6px 10px;border-radius:999px;white-space:nowrap}.opt-why{margin:8px 0 0;color:var(--body)}.opt-catch{margin:8px 0 0;font-size:14px;color:var(--ink)}.opt-catch span{margin-right:8px;font:500 10px/1 'DM Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+.sources{margin:26px 0 0;padding-top:16px;border-top:1px solid var(--line)}.src-label{display:block;font:500 10px/1 'DM Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}.sources ol{margin:10px 0 0;padding-left:20px;font-size:15px}.src-meta{display:block;font:500 11px/1.5 'DM Mono',monospace;color:var(--mute)}
 code{font:14px 'DM Mono',monospace;background:var(--sand);padding:1px 6px;border-radius:6px}
 hr{border:0;border-top:1px solid var(--line);margin:32px 0}
 .dl{margin:14px 0 0;font:500 11px/1 'DM Mono',monospace;letter-spacing:.14em;text-transform:uppercase}.dl a{text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:8px 14px;display:inline-block}
