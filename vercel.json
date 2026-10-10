@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/dinghy-briefing",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/data-erasure",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

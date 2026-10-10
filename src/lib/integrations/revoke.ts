@@ -18,7 +18,11 @@ export async function revokeGoogleToken(token: string | null | undefined): Promi
             signal: AbortSignal.timeout(5000),
         })
         // 400 invalid_token means it is already revoked or expired: nothing left to end.
-        if (res.ok || res.status === 400) return 'revoked'
+        if (res.ok) return 'revoked'
+        if (res.status === 400) {
+            const body = await res.json().catch(() => null) as { error?: string } | null
+            if (body?.error === 'invalid_token') return 'revoked'
+        }
         return 'failed'
     } catch {
         return 'failed'

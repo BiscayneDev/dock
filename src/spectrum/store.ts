@@ -279,3 +279,10 @@ export async function loadFacts(): Promise<DinghyFact[]> {
   factsCache = { facts, at: Date.now() }
   return facts
 }
+
+
+export async function assertSpectrumChatActive(chatGuid:string):Promise<void> {
+  if(process.env.DINGHY_DATA_ERASURE_ENABLED!=='1')return
+  const {data,error}=await db().rpc('dinghy_erasure_blocked',{p_user_id:null,p_chat_guid:chatGuid})
+  if(error || data!==false)throw new Error('Account unavailable during data deletion')
+                             }

@@ -1,3 +1,4 @@
+import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 /**
  * Hosted Dinghy files on here.now.
  *
@@ -80,6 +81,7 @@ async function call<T>(path: string, init: RequestInit): Promise<T> {
 
 /** Publish files as one Site; returns its link. Throws on any failure. */
 export async function publishSite(files: SiteFile[], opts: { title: string; userId: string }): Promise<PublishedSite> {
+    await assertAccountActive(opts.userId)
     if (!shareEnabled()) throw new Error('hosted files are not set up')
     const ttl = ttlSeconds()
     const created = await call<CreateResponse>('/publish', {
@@ -127,7 +129,7 @@ export async function revokeSite(link: string, userId: string): Promise<{ url: s
     if (!shareEnabled()) throw new Error('hosted files are not set up')
     const slug = slugFrom(link)
     if (!slug) throw new Error('not a Dinghy file link')
-    const { data: saved, error } = await createServerClient().from('dinghy_files').select('id').eq('user_id', userId).eq('url', `https://${slug}.here.now/`).is('deleted_at', null).limit(1).maybeSingle()
+    const { data: saved, error } = await createServerClient().from('dinghy_files').select('id').eq('user_id', userId).eq('url', `https://${slug}.here.now/`).limit(1).maybeSingle()
     if (error) throw new Error('Could not verify file ownership')
     let site: SiteDetails
     try { site = await call<SiteDetails>(`/publish/${encodeURIComponent(slug)}`, { method: 'GET' }) } catch (err) {
@@ -138,4 +140,41 @@ export async function revokeSite(link: string, userId: string): Promise<{ url: s
     if (site.displayDescription !== ownerLine(ownerTag(userId))) throw new Error('not one of your files')
     await call(`/publish/${encodeURIComponent(slug)}`, { method: 'DELETE' })
     return { url: site.siteUrl, ...(site.displayName ? { title: site.displayName } : {}) }
+}
+
+/** Provider inventory independent of dinghy_files. Includes staged/orphan pages.
+ * Contract verified from https://here.now/openapi.json (listSites).
+ */
+export async function listOwnedSites(userId: string): Promise<string[]> {
+    if (!shareEnabled()) throw new Error('hosted_inventory_unavailable')
+    const links: string[] = [], seen = new Set<string>()
+    let cursor: string | null = null
+    do {
+        const q = new URLSearchParams({ scope: 'all', limit: '100' })
+        if (cursor) q.set('cursor', cursor)
+        const page = await call<{ scope?: string; publishes?: Array<{ slug: string; siteUrl: string; ownership?: string; displayDescription?: string | null }>; nextCursor?: string | null }>(`/publishes?${q}`, { method: 'GET' })
+        if (page.scope !== 'all' || !Array.isArray(page.publishes) || !('nextCursor' in page)) throw new Error('hosted_inventory_schema_changed')
+        for (const s of page.publishes) {
+            if (s.ownership !== 'owned' || s.displayDescription !== ownerLine(ownerTag(userId))) continue
+            if (slugFrom(s.siteUrl) !== s.slug) throw new Error('hosted_inventory_invalid_link')
+            links.push(s.siteUrl)
+        }
+        cursor = page.nextCursor ?? null
+        if (cursor && seen.has(cursor)) throw new Error('hosted_inventory_cursor_loop')
+        if (cursor) seen.add(cursor)
+    } while (cursor)
+    return [...new Set(links)]
+}
+/** Re-verify provider ownership, not a DB row, immediately before removing an orphan. */
+export async function revokeOwnedSite(link: string, userId: string): Promise<void> {
+    const slug = slugFrom(link)
+    if (!slug) throw new Error('hosted_inventory_invalid_link')
+    let site: SiteDetails
+    try { site = await call<SiteDetails>(`/publish/${encodeURIComponent(slug)}`, {method:'GET'}) }
+    catch(e) { if(e instanceof Error && / 404$/.test(e.message)) return; throw e }
+    if(site.displayDescription !== ownerLine(ownerTag(userId))) throw new Error('hosted_owner_mismatch')
+    await call(`/publish/${encodeURIComponent(slug)}`, {method:'DELETE'})
+    try { await call(`/publish/${encodeURIComponent(slug)}`, {method:'GET'}) }
+    catch(e) { if(e instanceof Error && / 404$/.test(e.message)) return; throw e }
+    throw new Error('hosted_delete_unverified')
 }

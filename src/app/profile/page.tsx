@@ -1,3 +1,5 @@
+import DataErasurePanel from '@/components/profile/DataErasurePanel'
+import { erasureEnabled } from '@/lib/data-portability/erasure-state'
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth/session'
@@ -87,6 +89,7 @@ export default async function ProfilePage({
       {(disconnect || revoke) && <p className={styles.flash}>Could not do that. Nothing was changed.</p>}
 
       <ProfilePanels />
+      {erasureEnabled() && <DataErasurePanel />}
 
       <ConnectionsPanel data={connections} tz={tz} connectLinks={ACCOUNTS.filter((a) => !have.has(a.provider)).map((a) => ({ name: a.name, auth: a.auth }))} />
 

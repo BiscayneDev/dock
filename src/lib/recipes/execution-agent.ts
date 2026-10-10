@@ -1,3 +1,4 @@
+import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 import { createServerClient } from '@/lib/supabase/server'
 import { runAgentLoop } from '@/lib/llm/agent-loop'
 import { executionAgentTools } from '@/lib/tools/index'
@@ -218,6 +219,8 @@ export async function executeRecipe(
   statusOverride?: string,
   runnerId?: string
 ): Promise<void> {
+  await assertAccountActive(runnerId ?? recipe.user_id)
+
   const supabase = createServerClient()
   const effectiveRunnerId = runnerId ?? recipe.user_id
 

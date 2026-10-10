@@ -1,3 +1,4 @@
+import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 import { revokeGoogleToken } from '@/lib/integrations/revoke'
 import { extraGoogleProvider } from './google-accounts'
 import { google } from 'googleapis'
@@ -112,6 +113,7 @@ export async function getAuthedClient(
   tokens: DecryptedTokens,
   userId: string
 ): Promise<InstanceType<typeof google.auth.OAuth2>> {
+  await assertAccountActive(userId)
   const client = getOAuth2Client()
 
   client.setCredentials({

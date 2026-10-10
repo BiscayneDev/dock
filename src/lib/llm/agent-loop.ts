@@ -1,3 +1,4 @@
+import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 import { getLLMProvider, type LLMProviderName } from './index'
 import { logger } from '@/lib/logger'
 import type {
@@ -49,6 +50,7 @@ async function executeWithTimeout(
   input: unknown,
   ctx: UserContext
 ): Promise<ToolResult> {
+  await assertAccountActive(ctx.userId,ctx.chatGuid)
   const timeoutPromise = new Promise<never>((_, reject) => {
     setTimeout(() => reject(new Error(`Tool timed out after ${TOOL_TIMEOUT_MS / 1000}s`)), TOOL_TIMEOUT_MS)
   })

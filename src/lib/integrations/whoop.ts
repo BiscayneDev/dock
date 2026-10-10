@@ -1,3 +1,4 @@
+import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 import { createServerClient } from '@/lib/supabase/server'
 import { encryptTokenForDb } from '@/lib/crypto'
 import { logger } from '@/lib/logger'
@@ -97,6 +98,7 @@ export async function getWhoopAccessToken(
   tokens: DecryptedTokens,
   userId: string
 ): Promise<string> {
+  await assertAccountActive(userId)
   if (tokens.expiresAt && tokens.refreshToken) {
     const expiresAt = new Date(tokens.expiresAt)
     const fiveMinFromNow = new Date(Date.now() + 5 * 60 * 1000)

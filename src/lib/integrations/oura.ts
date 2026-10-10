@@ -1,3 +1,4 @@
+import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 import { createServerClient } from '@/lib/supabase/server'
 import { encryptTokenForDb, decryptTokenFromDb } from '@/lib/crypto'
 import { logger } from '@/lib/logger'
@@ -96,6 +97,7 @@ export async function getOuraAccessToken(
   tokens: DecryptedTokens,
   userId: string
 ): Promise<string> {
+  await assertAccountActive(userId)
   // Check if token needs refresh (within 5 minutes of expiry)
   if (tokens.expiresAt && tokens.refreshToken) {
     const expiresAt = new Date(tokens.expiresAt)

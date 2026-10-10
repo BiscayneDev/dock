@@ -1,3 +1,4 @@
+import { assertTelegramActive } from '@/lib/data-portability/erasure-state'
 const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`
 
 // MarkdownV2 requires escaping these characters
@@ -108,6 +109,8 @@ interface TelegramApiResponse {
 }
 
 async function callTelegramApi(method: string, body: Record<string, unknown>): Promise<TelegramApiResponse> {
+  if(typeof body.chat_id==='number' || typeof body.chat_id==='string') await assertTelegramActive(String(body.chat_id))
+
   const response = await fetch(`${TELEGRAM_API}/${method}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

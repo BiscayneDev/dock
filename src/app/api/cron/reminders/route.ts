@@ -1,3 +1,4 @@
+import { assertAccountActive } from '@/lib/data-portability/erasure-state'
 import { telegramEnabled, telegramDisabledResponse } from '@/lib/telegram/enabled'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
@@ -70,6 +71,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let firedCount = 0
 
   for (const reminder of reminders) {
+    try { await assertAccountActive(reminder.user_id as string) } catch { continue }
     const user = userMap.get(reminder.user_id as string)
     if (!user) continue
 
