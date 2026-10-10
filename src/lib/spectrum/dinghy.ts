@@ -387,6 +387,8 @@ export async function chat(
         deadlineAt?: number
         onStage?: (stage: RunStage, detail?: string) => Promise<void>
         startTainted?: boolean
+        /** For gateway-call telemetry attribution. */
+        chatGuid?: string
     }
 ): Promise<string> {
     const messages = [
@@ -399,6 +401,7 @@ export async function chat(
 
     await opts.onStage?.('gateway')
     const t0 = Date.now()
+    const logCtx: CallContext = { chatGuid: opts.chatGuid, source: 'chat', requestedModel: requestedLabel(opts.model, (opts.startTainted || history.some((m) => m.googleDerived)) && privateRouteEnforced() ? privateRouting() : opts.routing), privateRoute: (opts.startTainted || history.some((m) => m.googleDerived)) && privateRouteEnforced(), promptChars: JSON.stringify(messages).length, deadlineAt: opts.deadlineAt }
     const res = await withinTurn(opts.deadlineAt, (signal) => fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
         signal,
         method: 'POST',
@@ -408,19 +411,24 @@ export async function chat(
             ...hintHeaders(opts.taskClass, false),
         },
         body: JSON.stringify({ ...modelFields(opts.model, (opts.startTainted || history.some((m) => m.googleDerived)) && privateRouteEnforced() ? privateRouting() : opts.routing), messages, stream: false }),
-    }))
+    })).catch(async (err) => {
+        await logGatewayCall(buildCallRow(logCtx, err instanceof TurnDeadlineExceeded ? 'deadline' : 'error', t0))
+        throw err
+    })
 
     if (!res.ok) {
+        await logGatewayCall(buildCallRow(logCtx, 'http_error', t0, res))
         const body = await withinTurn(opts.deadlineAt, () => res.text()).catch(() => '')
         throw new Error(`Gateway ${res.status}: ${body || res.statusText}`)
     }
 
-    const data = (await withinTurn(opts.deadlineAt, () => res.json())) as {
+    const data = (await readJsonLogged(opts.deadlineAt, res, logCtx, t0)) as {
         model?: string
         usage?: { prompt_tokens?: number; completion_tokens?: number }
         choices: { message: { content: string | null } }[]
     }
     reportUsage(opts.onUsage, res, data, opts.model, Date.now() - t0)
+    await logGatewayCall(buildCallRow(logCtx, 'ok', t0, res, data))
 
     return data.choices?.[0]?.message?.content ?? '(no response)'
 }
@@ -432,6 +440,14 @@ export async function chat(
 import type { Tool, UserContext } from '@/lib/llm/types'
 import { classForIteration, hintHeaders, type TaskClass } from './turn-class'
 import { readGatewayUsage, type GatewayUsage } from './metering'
+import { buildCallRow, logGatewayCall, requestedLabel, type CallContext } from './gateway-log'
+async function readJsonLogged(deadlineAt: number | undefined, res: Response, ctx: CallContext, t0: number): Promise<unknown> {
+    try { return await withinTurn(deadlineAt, () => res.json()) }
+    catch (err) {
+        await logGatewayCall(buildCallRow(ctx, err instanceof TurnDeadlineExceeded ? 'deadline' : 'error', t0, res))
+        throw err
+    }
+}
 import { isGoogleTool, modelFields, privateRouteEnforced, privateRouteShadow, privateRouting, type RoutingPrefs } from './routing'
 import { addToCorpus, egressPolicy, EGRESS_BLOCK_MESSAGE, EGRESS_REJECT_MESSAGE, emptyCorpus, findLeak, isEgressTool, isHardBlockTool } from './egress-guard'
 import { invitesPromptLine } from './user-invites'
@@ -573,6 +589,10 @@ export async function chatWithTools(
         }
         return opts.routing
     }
+    const loopCtx = (iteration: number, toolsOffered: number): CallContext => ({
+        chatGuid: ctx.chatGuid, source: 'tool_loop', iteration, requestedModel: requestedLabel(opts.model, routingNow()), toolsOffered,
+        promptChars: JSON.stringify(messages).length, privateRoute: tainted && privateRouteEnforced(), deadlineAt: opts.deadlineAt,
+    })
     for (let iteration = 1; iteration <= MAX_TOOL_ITERATIONS; iteration++) {
         await opts.onStage?.('gateway', String(iteration))
         const remaining = opts.deadlineAt === undefined ? Infinity : opts.deadlineAt - Date.now()
@@ -602,21 +622,24 @@ export async function chatWithTools(
             body: JSON.stringify({ ...modelFields(opts.model, routingNow()), messages, tools: offered, ...(completionMode && offered.length === 0 ? { tool_choice: 'none' } : {}), stream: false, ...(completionMode ? { max_tokens: 1200 } : {}) }),
           }))
         } catch (err) {
+          await logGatewayCall(buildCallRow(loopCtx(iteration, offered.length), err instanceof TurnDeadlineExceeded ? 'deadline' : 'error', t0))
           if (!(err instanceof TurnDeadlineExceeded) || !rescueEligible) throw err
           await opts.onStage?.('reply_ready', 'source_partial_gateway_timeout')
           const links = foundSources.slice(0, 3).map(s => `${s.title || 'Source'}: ${s.url}`).join('\n')
           return { reply: `The search finished, but I didn't finish checking the options. These are source links, not verified recommendations:\n${links}`, toolCalls: toolCallCount, iterations: iteration, tainted }
         }
         if (!res.ok) {
+            await logGatewayCall(buildCallRow(loopCtx(iteration, offered.length), 'http_error', t0, res))
             const body = await withinTurn(opts.deadlineAt, () => res.text()).catch(() => '')
             throw new Error(`Gateway ${res.status}: ${body || res.statusText}`)
         }
-        const data = (await withinTurn(opts.deadlineAt, () => res.json())) as {
+        const data = (await readJsonLogged(opts.deadlineAt, res, loopCtx(iteration, offered.length), t0)) as {
             model?: string
-            usage?: { prompt_tokens?: number; completion_tokens?: number }
+            usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } }
             choices: { finish_reason: string; message: { content: string | null; tool_calls?: GatewayToolCall[] } }[]
         }
         reportUsage(opts.onUsage, res, data, opts.model, Date.now() - t0)
+        await logGatewayCall(buildCallRow(loopCtx(iteration, offered.length), 'ok', t0, res, data))
         const choice = data.choices?.[0]
         const msg = choice?.message
         const calls = msg?.tool_calls ?? []
@@ -690,23 +713,31 @@ export async function chatWithTools(
     // Loop exhausted: ask for a plain-text answer without tools.
     await opts.onStage?.('synthesis')
     const tFinal = Date.now()
+    const synthCtx: CallContext = { ...loopCtx(MAX_TOOL_ITERATIONS + 1, defsNow().length), source: 'synthesis' }
     const res = await withinTurn(opts.deadlineAt, (signal) => fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
         signal,
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.apiKey}`, ...hintHeaders(opts.taskClass && classForIteration(opts.taskClass, 2), false) },
         body: JSON.stringify({ ...modelFields(opts.model, routingNow()), messages, tools: defsNow(), tool_choice: 'none', stream: false }),
-    }))
-    if (!res.ok) throw new Error(`Gateway ${res.status}: ${res.statusText}`)
-    const data = (await withinTurn(opts.deadlineAt, () => res.json())) as {
+    })).catch(async (err) => {
+        await logGatewayCall(buildCallRow(synthCtx, err instanceof TurnDeadlineExceeded ? 'deadline' : 'error', tFinal))
+        throw err
+    })
+    if (!res.ok) {
+        await logGatewayCall(buildCallRow(synthCtx, 'http_error', tFinal, res))
+        throw new Error(`Gateway ${res.status}: ${res.statusText}`)
+    }
+    const data = (await readJsonLogged(opts.deadlineAt, res, synthCtx, tFinal)) as {
         model?: string
         usage?: { prompt_tokens?: number; completion_tokens?: number }
         choices: { message: { content: string | null } }[]
     }
     reportUsage(opts.onUsage, res, data, opts.model, Date.now() - tFinal)
+    await logGatewayCall(buildCallRow(synthCtx, 'ok', tFinal, res, data))
     return {
         reply: data.choices?.[0]?.message?.content ?? '(no response)',
         toolCalls: toolCallCount,
         iterations: MAX_TOOL_ITERATIONS + 1,
         tainted,
     }
-}
+    }
