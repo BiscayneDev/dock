@@ -62,7 +62,7 @@ import { earlierUserText, loadActiveRuns, steerNote } from './active-run'
 import { claimInboundDelivery, enqueueOutbox, markOutboxFailed, markOutboxSent, type OutboxKind } from './outbox'
 import { briefableUserId, handleMuteIntent } from './briefing'
 import { isLocationAttachment, parseLocation, saveUserLocation } from './location'
-import { parseTimezoneIntent, resolvePlaceTimezone, resolvePinTimezone, setChatTimezone, timezoneAck } from './timezone'
+import { currentTravelPlace, localClockContext, parseTimezoneIntent, resolvePlaceTimezone, resolvePinTimezone, setChatTimezone, timezoneAck } from './timezone'
 import { describeImage, readInboundAttachment, type InboundAttachmentContent } from './attachments'
 import { sendLink, splitStandaloneUrl, type LinkSender } from './links'
 import {
@@ -978,6 +978,14 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         })
         // Right model for the task: Shipyard's Jev judges each call's tier
         // (routing.ts). Dinghy only pins the provider allowlist.
+        // Stated travel overrides the home zone for this turn only. Do not
+        // rewrite the permanent morning timezone from a work-trip aside.
+        const travelPlace = currentTravelPlace(text)
+        if (toolCtx && travelPlace) {
+            const travelZone = await withinTurn(deadlineAt, () => resolvePlaceTimezone(travelPlace)).catch(() => null)
+            if (travelZone?.kind === 'one') toolCtx.timezone = travelZone.choice.zone
+        }
+        const clock = localClockContext(toolCtx?.timezone ?? 'UTC')
         const routing = routingFor()
         let reply: string
         let replyTainted = false
@@ -1015,7 +1023,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 includeOpener,
                 knownFirstName: knownFirstName ?? undefined,
                 capabilities: { ...(toolCtx ? capabilitiesFor(toolCtx) : guestCapabilities()), spend: true, reminders: true, ...(invitesLeft !== null ? { invitesLeft } : {}) },
-                memory: memoryBlock + (background ?? ''),
+                memory: memoryBlock + (background ?? '') + '\n\n' + clock,
                 interviewLine: interviewLine ?? undefined,
                 onUsage,
             }
@@ -1053,7 +1061,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
                 facts,
                 includeOpener,
                 knownFirstName: knownFirstName ?? undefined,
-                memory: memoryBlock + (background ?? ''),
+                memory: memoryBlock + (background ?? '') + '\n\n' + clock,
                 interviewLine: interviewLine ?? undefined,
                 onUsage,
             })
@@ -1185,4 +1193,4 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         clearTimeout(eyesTimer)
         stopTypingReTap(space, typingHandle)
     }
-        }
+    }

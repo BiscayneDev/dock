@@ -91,7 +91,7 @@ export function renderMemoryBlock(m: MemoryContext): string {
     return (
         '\n\n' +
         parts.join('\n\n') +
-        '\n\nUse this only when it helps; do not recite it. If it conflicts with what they say now, trust what they say now.'
+        '\n\nUse this only when it helps; do not recite it. If it conflicts with what they say now, trust what they say now. Historical summaries and earlier assistant replies are not live flight/calendar evidence. Verify dates, departure place, ownership and local timezone before treating a remembered trip as current.'
     )
 }
 

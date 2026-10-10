@@ -38,11 +38,11 @@ export async function storeFirstLook(phone: string, status: Exclude<FirstLookSta
 export async function claimFirstLook(phone: string): Promise<string | null> {
   const db = createServerClient()
   const { data: row, error } = await db.from('waitlist').select('id, first_look_text')
-    .eq('phone', phone).eq('first_look_status', 'ready').not('first_look_text', 'is', null).limit(1).maybeSingle()
+    .eq('phone', phone).eq('first_look_status', 'ready').gte('first_look_at', new Date(Date.now() - 2 * 3600_000).toISOString()).not('first_look_text', 'is', null).limit(1).maybeSingle()
   if (error || !row?.first_look_text) return null
   const { data: claimed, error: claimErr } = await db.from('waitlist')
     .update({ first_look_status: 'sent', first_look_text: null, first_look_at: new Date().toISOString() })
-    .eq('id', row.id).eq('first_look_status', 'ready').select('id')
+    .eq('id', row.id).eq('first_look_status', 'ready').gte('first_look_at', new Date(Date.now() - 2 * 3600_000).toISOString()).select('id')
   if (claimErr || !claimed?.length) return null
   return row.first_look_text as string
 }

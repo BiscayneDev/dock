@@ -141,6 +141,7 @@ export const gcalListEvents: Tool = {
           calendarId: parsed.calendarId,
           timeMin: parsed.timeMin,
           timeMax: parsed.timeMax,
+          timeZone: ctx.timezone,
           maxResults: parsed.maxResults,
           singleEvents: true,
           orderBy: 'startTime',
@@ -157,12 +158,12 @@ export const gcalListEvents: Tool = {
           meetLink: e.hangoutLink,
         }))
 
-        return { success: true, data: { count: events.length, events } }
+        return { success: true, data: { queriedAt: new Date().toISOString(), timezone: ctx.timezone, timeMin: parsed.timeMin, timeMax: parsed.timeMax, count: events.length, events } }
       }
 
       // All calendars
-      const events = await listEventsFromAllCalendars(cal, parsed.timeMin, parsed.timeMax, parsed.maxResults)
-      return { success: true, data: { count: events.length, events } }
+      const events = await listEventsFromAllCalendars(cal, parsed.timeMin, parsed.timeMax, parsed.maxResults, ctx.timezone)
+      return { success: true, data: { queriedAt: new Date().toISOString(), timezone: ctx.timezone, timeMin: parsed.timeMin, timeMax: parsed.timeMax, count: events.length, events } }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       return { success: false, error: msg }
