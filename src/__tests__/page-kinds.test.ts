@@ -71,3 +71,31 @@ describe('page kinds', () => {
         expect(md).not.toContain('|')
     })
 })
+
+describe('lead and checks blocks', () => {
+    const md = ':::lead\nfor | Alex\nfocus | family\npick | Harbor Inn | Step-free, two rooms, $2,680\nbeat | Pine Lodge | farther from town\ncare | walker access | under $3,200\n:::\n\n:::checks\nStep-free route | confirmed | hotel policy page | Oct 10\nConnecting rooms | maybe | | \nPool <b>hours</b> | Confirmed | front desk |\n:::'
+    it('renders the pick, focus, beaten option and care chips', () => {
+        const h = page(md)
+        expect(h).toContain('Made for Alex')
+        expect(h).toContain('Built around family fit')
+        expect(h).toContain('Harbor Inn')
+        expect(h).toContain('Pine Lodge')
+        expect(h).toContain('walker access')
+    })
+    it('shows only an exact "confirmed" as confirmed and escapes text', () => {
+        const h = page(md)
+        expect(h.match(/class="ck-ok"/g)?.length).toBe(1)
+        expect(h).toContain('ck-no')
+        expect(h).toContain('checked Oct 10')
+        expect(h).not.toContain('<b>hours</b>')
+    })
+    it('drops a lead with no pick', () => {
+        expect(page(':::lead\nfor | Alex\n:::')).not.toContain('class="ld"')
+    })
+})
+
+ it('confirmation requires both source and date', () => {
+    const h = page(':::checks\nA | confirmed | source | date\nB | confirmed | | date\nC | confirmed | source |\n:::')
+    expect(h.match(/class="ck-ok"/g)).toHaveLength(1)
+    expect(h.match(/class="ck-no"/g)).toHaveLength(2)
+ })
