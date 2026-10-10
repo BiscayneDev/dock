@@ -1,3 +1,4 @@
+import { fileReply } from '@/lib/files/reply'
 import { assertAccountActive, erasureEnabled, isEraseIntent } from '@/lib/data-portability/erasure-state'
 import { withinTurn, TURN_WORK_MS, TURN_DEADLINE_REPLY, TurnDeadlineExceeded } from './turn-budget'
 import { runStageRecorder } from './run-stage'
@@ -40,7 +41,7 @@ import { capabilitiesFor, guestCapabilities, guestToolContext, liveInfoTools, lo
 import { reminderToolsFor } from './reminders'
 import { payboxSigningToolsFor } from '@/lib/tools/paybox-signing'
 import { EMPTY_MEMORY, loadMemoryContext, renderMemoryBlock, updateMemory } from './memory'
-import { FILE_NUDGE, fileToolsFor, stripFileMarkers, type MadeFile } from '@/lib/files/tool'
+import { fileToolsFor, stripFileMarkers, type MadeFile } from '@/lib/files/tool'
 import { hostedHistoryLine, sendFileWithPreview, sendHostedFile } from '@/lib/files/send'
 import { actionToolsFor, cancelPendingActions, executePendingActionDetailed, hasPendingAction, takeLooseProposal, parseConfirmation, isRepeatedActionConfirmation, renderProposal, sendConfirmedReaction } from './actions'
 import { GATEWAY_URL, SHIPYARD_API_KEY, SHIPYARD_MODEL } from './config'
@@ -1068,20 +1069,7 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
             replyTainted = Boolean(r.tainted)
             toolCalls = r.toolCalls
             iterations = r.iterations
-            // The model sometimes writes a "[sent file: x]" marker instead of
-            // calling create_file. Give it one retry to actually make the file.
-            if (stripFileMarkers(reply).hadMarker && (fileTools?.files().length ?? 0) === 0) {
-                const retry = await chatWithTools(
-                    [...full, { role: 'assistant', content: reply }, { role: 'user', content: FILE_NUDGE }],
-                    toolOpts,
-                    tools,
-                    runCtx
-                )
-                reply = retry.reply
-                replyTainted = replyTainted || Boolean(retry.tainted)
-                toolCalls += retry.toolCalls
-                iterations += retry.iterations
-            }
+            reply = fileReply(reply, fileTools?.files().length ?? 0)
             const cleaned = stripFileMarkers(reply)
             const made = fileTools?.files().length ?? 0
             reply = cleaned.text || (made > 0 ? 'here you go.' : "I couldn't make that file just now. Ask me again in a moment.")
@@ -1231,4 +1219,4 @@ export async function handleSpectrumMessage(space: InboundSpace, message: Inboun
         clearTimeout(eyesTimer)
         stopTypingReTap(space, typingHandle)
     }
-}
+                }
