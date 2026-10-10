@@ -383,6 +383,8 @@ export async function chat(
         onUsage?: (u: GatewayUsage) => void
         /** Task-aware Shipyard routing for this turn (routing.ts); unset = pinned model. */
         routing?: RoutingPrefs
+        /** Router hint (turn-class.ts): what this turn is. Sent as headers only. */
+        taskClass?: TaskClass
         deadlineAt?: number
         onStage?: (stage: RunStage, detail?: string) => Promise<void>
         startTainted?: boolean
@@ -404,6 +406,7 @@ export async function chat(
         headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${opts.apiKey}`,
+            ...hintHeaders(opts.taskClass, false),
         },
         body: JSON.stringify({ ...modelFields(opts.model, (opts.startTainted || history.some((m) => m.googleDerived)) && privateRouteEnforced() ? privateRouting() : opts.routing), messages, stream: false }),
     }))
@@ -428,6 +431,7 @@ export async function chat(
 // hopscotch model) ────────────────────────────────────────────────────────
 
 import type { Tool, UserContext } from '@/lib/llm/types'
+import { classForIteration, hintHeaders, type TaskClass } from './turn-class'
 import { readGatewayUsage, type GatewayUsage } from './metering'
 import { isGoogleTool, modelFields, privateRouteEnforced, privateRouteShadow, privateRouting, type RoutingPrefs } from './routing'
 import { addToCorpus, egressPolicy, EGRESS_BLOCK_MESSAGE, EGRESS_REJECT_MESSAGE, emptyCorpus, findLeak, isEgressTool, isHardBlockTool } from './egress-guard'
@@ -522,6 +526,8 @@ export async function chatWithTools(
         onUsage?: (u: GatewayUsage) => void
         /** Task-aware Shipyard routing for this turn (routing.ts); unset = pinned model. */
         routing?: RoutingPrefs
+        /** Router hint (turn-class.ts): what this turn is. Sent as headers only. */
+        taskClass?: TaskClass
         /** The turn already holds Google data (tagged history, cron that reads Google): private route from the first call. */
         deadlineAt?: number
         onStage?: (stage: RunStage, detail?: string) => Promise<void>
@@ -532,7 +538,7 @@ export async function chatWithTools(
     tools: Tool[],
     ctx: UserContext
 ): Promise<ToolChatResult> {
-    const toolDefs = tools.map((t) => ({
+    const defsNow = () => tools.map((t) => ({
         type: 'function' as const,
         function: { name: t.name, description: t.description, parameters: t.inputSchema },
     }))
@@ -579,6 +585,7 @@ export async function chatWithTools(
             completionMode = true
             messages.push({ role: 'system', content: RESEARCH_FINISH })
         }
+        const toolDefs = defsNow()
         const offered = completionMode ? toolDefs.filter((t) => t.function.name !== 'web_search' && (!pageAttempted || t.function.name !== 'create_file')) : toolDefs
         const t0 = Date.now()
         // Bound a post-search generation, not tools or actions. Preserve honest
@@ -593,6 +600,7 @@ export async function chatWithTools(
             headers: {
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${opts.apiKey}`,
+                ...hintHeaders(opts.taskClass && classForIteration(opts.taskClass, iteration), true),
             },
             body: JSON.stringify({ ...modelFields(opts.model, routingNow()), messages, tools: offered, ...(completionMode && offered.length === 0 ? { tool_choice: 'none' } : iteration === 1 && opts.forceTool && !(tainted && egressPolicy() === 'block' && isHardBlockTool(opts.forceTool)) && offered.some((t) => t.function.name === opts.forceTool) ? { tool_choice: { type: 'function', function: { name: opts.forceTool } } } : {}), stream: false, ...(completionMode ? { max_tokens: 1200 } : {}) }),
           }))
@@ -688,8 +696,8 @@ export async function chatWithTools(
     const res = await withinTurn(opts.deadlineAt, (signal) => fetch(`${opts.gatewayUrl}/v1/chat/completions`, {
         signal,
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.apiKey}` },
-        body: JSON.stringify({ ...modelFields(opts.model, routingNow()), messages, tools: toolDefs, tool_choice: 'none', stream: false }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.apiKey}`, ...hintHeaders(opts.taskClass && classForIteration(opts.taskClass, 2), false) },
+        body: JSON.stringify({ ...modelFields(opts.model, routingNow()), messages, tools: defsNow(), tool_choice: 'none', stream: false }),
     }))
     if (!res.ok) throw new Error(`Gateway ${res.status}: ${res.statusText}`)
     const data = (await withinTurn(opts.deadlineAt, () => res.json())) as {
