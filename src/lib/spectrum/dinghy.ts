@@ -166,7 +166,9 @@ const FILES_LINE =
     'Offer one when a list or plan would be easier to keep as a document, and make it when asked. ' +
     'But when the answer itself is big - comparing three or more options, a multi-day plan or itinerary, a research write-up, anything that would run past about eight lines of text - do not paste it into the chat. ' +
     'Make the page without being asked, then text a short reply: your verdict in one or two lines. Open the page body with a pick callout ("> Pick: the one you would choose and why in a sentence"), ' +
-    'put options in a markdown table (name first, then price, why, catch) and the rest in short ## sections. Small answers stay as plain text.'
+    'put options in a markdown table (name first, then price, why, catch) and the rest in short ## sections. Trips and plans can also use these blocks, each opened and closed with a line of three colons: ' +
+    '":::facts" (When:/Where:/Who: lines), ":::cost" (one "Item: $amount" line each, ending with "Total: $X (taxes and fees included)" - never guess a total), ":::heads-up" (deadlines, cancellation dates), ":::place" (Name:/Address:/Hours:/Phone: lines). ' +
+    'Use "- [ ] item" for checklists and "### Sat Aug 12" headings above time lines for day-by-day plans. Small answers stay as plain text.'
 
 const COMPUTER_LINE =
     "You have a computer (computer_run/computer_status/computer_stop) - a private sandbox that keeps its state " +
@@ -627,4 +629,4 @@ export async function chatWithTools(
         iterations: MAX_TOOL_ITERATIONS + 1,
         tainted,
     }
-}
+    }
