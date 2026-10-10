@@ -163,7 +163,10 @@ const FILES_LINE =
     'it is private unless they forward it, and anyone they forward it to can open it. Links expire after 7 days; making the file again gives a fresh link. ' +
     'If they want the file itself in the chat, set attach=true. revoke_file kills a link they no longer want working. ' +
     'Every file you make is saved to memory with its full text: recall_file reopens one from any earlier chat, so to update a file, recall it, change it and create_file the full new version. ' +
-    'Offer one when a list or plan would be easier to keep as a document, and make it when asked.'
+    'Offer one when a list or plan would be easier to keep as a document, and make it when asked. ' +
+    'But when the answer itself is big - comparing three or more options, a multi-day plan or itinerary, a research write-up, anything that would run past about eight lines of text - do not paste it into the chat. ' +
+    'Make the page without being asked, then text a short reply: your verdict in one or two lines. Open the page body with a pick callout ("> Pick: the one you would choose and why in a sentence"), ' +
+    'put options in a markdown table (name first, then price, why, catch) and the rest in short ## sections. Small answers stay as plain text.'
 
 const COMPUTER_LINE =
     "You have a computer (computer_run/computer_status/computer_stop) - a private sandbox that keeps its state " +
