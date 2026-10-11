@@ -292,3 +292,5 @@ describe('dinghy-briefing cron: failure windows never produce a second brief', (
     expect(res.skipped).toBe(1)
   })
 })
+
+it('scheduled briefing declares only actual read capabilities, no phantom link sender',async()=>{await run();expect(chatWithTools.mock.calls[0][1].capabilities).toEqual({google:true,wallet:false,googleReadOnly:true,googleConnect:false})})

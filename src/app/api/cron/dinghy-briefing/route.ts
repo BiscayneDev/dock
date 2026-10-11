@@ -223,6 +223,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                     facts,
                     // The briefing is Google data by definition: private route from the first call.
                     startTainted: true,
+                    capabilities: {google:true,wallet:false,googleReadOnly:true,googleConnect:false},
                     onUsage: (u: GatewayUsage) => usage.push(u),
                 },
                 IMESSAGE_READ_TOOLS,

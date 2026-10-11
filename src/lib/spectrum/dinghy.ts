@@ -144,6 +144,9 @@ const NO_WALLET_LINE =
 
 export interface PromptCapabilities {
     google: boolean
+    /** False on scheduled read-only work with no connect-link sender. */
+    googleConnect?: boolean
+    googleReadOnly?: boolean
     /** Names the connected Google accounts when there are several. */
     googleAccounts?: string
     wallet: boolean
@@ -302,8 +305,11 @@ export function buildSystemPrompt(
     const caps: PromptCapabilities =
         typeof toolsAvailable === 'boolean' ? { google: toolsAvailable, wallet: false } : toolsAvailable
     let prompt = BASE_PROMPT
-    prompt += ' ' + (caps.google ? TOOLS_EMAIL_LINE : NO_TOOLS_EMAIL_LINE)
-    if (caps.google || caps.computer) prompt += ' ' + GOOGLE_CONNECT_LINE
+    let emailLine=caps.google ? TOOLS_EMAIL_LINE : NO_TOOLS_EMAIL_LINE
+    if(caps.googleReadOnly)emailLine=emailLine.replace('You can draft emails and replies (email_send, email_reply) and invites (gcal_create_event with attendees); those only become drafts the user confirms with y, so never say anything was sent. Events on their own calendar with no attendees are created immediately. ','This run can only read email and calendar; it cannot draft, send or change events. ')
+    if(caps.googleConnect===false)emailLine=emailLine.replace('call google_connect.', 'say which reads failed and that a refresh is needed. This run cannot send a connect link. Never promise a link was sent or is about to be sent.')
+    prompt += ' ' + emailLine
+    if ((caps.google || caps.computer)&&caps.googleConnect!==false) prompt += ' ' + GOOGLE_CONNECT_LINE
     if (caps.google) prompt += ' ' + BRIEFING_LINE
     if (caps.google && caps.googleAccounts) prompt += ' ' + caps.googleAccounts
     prompt += ' ' + (caps.wallet ? WALLET_LINE : NO_WALLET_LINE)
