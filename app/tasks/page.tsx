@@ -15,6 +15,10 @@ import {
   AGENT_LABELS,
   PRIORITY_CONFIG,
 } from "@/lib/tasks"
+import AgentInbox from "@/components/tasks/AgentInbox"
+
+type TasksView = "board" | "inbox"
+const TASKS_VIEW_STORAGE_KEY = "dock:tasks-view"
 
 const COLUMN_COLORS: Record<Column, string> = {
   backlog: "#6366f1",
@@ -450,6 +454,7 @@ export default function TasksPage() {
   const [budgetError, setBudgetError] = useState<string | null>(null)
   const [quoteRail, setQuoteRail] = useState<"shipusd" | "usdc">("shipusd")
   const [demoMode, setDemoMode] = useState(false)
+  const [view, setViewState] = useState<TasksView>("board")
   const [, setTick] = useState(0)
   const tasksSnapshotRef = useRef<string>("")
 
@@ -501,6 +506,24 @@ export default function TasksPage() {
     const interval = setInterval(() => setTick((n) => n + 1), 15_000)
     return () => clearInterval(interval)
   }, [])
+
+  // Board is the default; the chosen view is remembered per browser.
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(TASKS_VIEW_STORAGE_KEY) === "inbox") setViewState("inbox")
+    } catch {
+      // storage unavailable: stay on Board
+    }
+  }, [])
+
+  const setView = (next: TasksView) => {
+    setViewState(next)
+    try {
+      window.localStorage.setItem(TASKS_VIEW_STORAGE_KEY, next)
+    } catch {
+      // ignore
+    }
+  }
 
   const onDragEnd = async (result: DropResult) => {
     const { draggableId, destination } = result
@@ -834,11 +857,36 @@ export default function TasksPage() {
             Vic delegates. Agents execute.
           </p>
         </div>
-        {lastUpdated && (
-          <p className="text-xs text-zinc-600 pb-1">
-            Updated {timeAgo(lastUpdated)}
-          </p>
-        )}
+        <div className="flex items-center gap-4 pb-1">
+          <div
+            role="tablist"
+            aria-label="Tasks view"
+            className="flex gap-1 rounded-lg p-1"
+            style={{ background: "#0d0d12", border: "1px solid #1c1c25" }}
+          >
+            {(["board", "inbox"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                role="tab"
+                aria-selected={view === v}
+                onClick={() => setView(v)}
+                className="rounded-md px-3 py-1 text-xs font-medium transition-colors"
+                style={{
+                  background: view === v ? "#17171f" : "transparent",
+                  color: view === v ? "#e9eaf0" : "#62657a",
+                }}
+              >
+                {v === "board" ? "Board" : "Inbox"}
+              </button>
+            ))}
+          </div>
+          {lastUpdated && (
+            <p className="text-xs text-zinc-600">
+              Updated {timeAgo(lastUpdated)}
+            </p>
+          )}
+        </div>
       </div>
 
       <section className="rounded-xl border border-zinc-800 bg-[#111118] p-4 space-y-3">
@@ -868,6 +916,9 @@ export default function TasksPage() {
         </div>
       </section>
 
+      {view === "inbox" ? (
+        <AgentInbox tasks={tasks} onRefresh={() => fetchTasks(true)} />
+      ) : (
       <DragDropContext onDragEnd={onDragEnd}>
         <div
           className="flex gap-4 overflow-x-auto pb-4 -mx-1 px-1"
@@ -1041,6 +1092,7 @@ export default function TasksPage() {
           })}
         </div>
       </DragDropContext>
+      )}
 
       {/* ── Activation Approval Modal ────────────────────────────────── */}
       {pendingActivation && (
