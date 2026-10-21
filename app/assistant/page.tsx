@@ -6,6 +6,13 @@ import { Plus, RotateCcw } from "lucide-react"
 import { ChatThread } from "@/components/assistant/ChatThread"
 import { Composer, type IntegrationStatus } from "@/components/assistant/Composer"
 import {
+  readStoredModel,
+  storeModel,
+  useModelCatalog,
+  type ModelRef,
+  type ProviderModels,
+} from "@/components/assistant/ModelPicker"
+import {
   AGENTS,
   greetingFor,
   relativeTime,
@@ -70,13 +77,32 @@ function useIntegrations(): IntegrationStatus[] {
   return items
 }
 
-function HomeView({ agents, integrations }: { agents: AgentDef[]; integrations: IntegrationStatus[] }) {
+function HomeView({
+  agents,
+  integrations,
+  models,
+}: {
+  agents: AgentDef[]
+  integrations: IntegrationStatus[]
+  models: ProviderModels[]
+}) {
   const router = useRouter()
   const [userName, setUserName] = useState("")
   const [recent, setRecent] = useState<ConversationSummary[]>([])
   const [agent, setAgent] = useState<AgentDef>(agents[0] ?? AGENTS[0])
   const [text, setText] = useState("")
   const [sending, setSending] = useState(false)
+  // Stored in sessionStorage ("dock:model") so the thread picks it up on navigation.
+  const [model, setModelState] = useState<ModelRef>(null)
+
+  useEffect(() => {
+    setModelState(readStoredModel())
+  }, [])
+
+  function setModel(ref: ModelRef) {
+    setModelState(ref)
+    storeModel(ref)
+  }
 
   useEffect(() => {
     fetch("/api/setup/status", { cache: "no-store" })
@@ -136,6 +162,9 @@ function HomeView({ agents, integrations }: { agents: AgentDef[]; integrations: 
             attachments={[]}
             onAttach={() => null}
             onRemoveAttachment={() => null}
+            models={models}
+            model={model}
+            onModelChange={setModel}
           />
         </div>
 
@@ -186,11 +215,13 @@ function ThreadView({
   agents,
   roster,
   integrations,
+  models,
   conversationId,
 }: {
   agents: AgentDef[]
   roster: AgentRecord[]
   integrations: IntegrationStatus[]
+  models: ProviderModels[]
   conversationId: string
 }) {
   const router = useRouter()
@@ -292,6 +323,7 @@ function ThreadView({
           pendingMessage={pending}
           onPendingSent={() => setPending(null)}
           integrations={integrations}
+          models={models}
           onRefresh={async () => {
             await fetchConversations()
             await fetchDetail(conversationId)
@@ -343,6 +375,7 @@ function AssistantInner() {
   const id = searchParams.get("id")
   const { agents, roster } = useAgents()
   const integrations = useIntegrations()
+  const models = useModelCatalog()
   return (
     <div className="p-2">
       <div
@@ -350,9 +383,9 @@ function AssistantInner() {
         style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}
       >
         {id ? (
-          <ThreadView agents={agents} roster={roster} integrations={integrations} conversationId={id} />
+          <ThreadView agents={agents} roster={roster} integrations={integrations} models={models} conversationId={id} />
         ) : (
-          <HomeView agents={agents} integrations={integrations} />
+          <HomeView agents={agents} integrations={integrations} models={models} />
         )}
       </div>
     </div>

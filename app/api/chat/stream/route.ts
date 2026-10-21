@@ -1,7 +1,14 @@
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai"
 import { randomUUID } from "crypto"
 import { runtime } from "@/lib/runtime"
-import { inferenceStream, resolveModel } from "@/lib/inference"
+import {
+  buildModel,
+  inferenceStream,
+  listConfiguredProviders,
+  parseModelRef,
+  resolveModel,
+  type ResolvedModel,
+} from "@/lib/inference"
 import { appendEvent, appendMessage, ensureConversation, finishRun, startRun } from "@/lib/conversations"
 
 interface IncomingMessage {
@@ -30,6 +37,8 @@ export async function POST(request: Request) {
     agent?: string
     sessionId?: string
     taskId?: string
+    /** Optional per-message model, `provider/model-id`. Absent = agent default. */
+    model?: unknown
   }
 
   const conversationId = body.conversationId ?? "main-chat"
@@ -44,13 +53,31 @@ export async function POST(request: Request) {
     return new Response("Message is required", { status: 400 })
   }
 
+  // Per-message model override. Absent keeps the agent default exactly as before.
+  // Fail closed: the provider must be configured on this server and the model must build.
+  let override: ResolvedModel | null = null
+  if (body.model !== undefined && body.model !== null) {
+    const ref = typeof body.model === "string" ? body.model.trim() : ""
+    const parsed = ref ? parseModelRef(ref) : null
+    const providerOk =
+      parsed !== null &&
+      listConfiguredProviders().some((p) => p.provider === parsed.provider && p.configured)
+    if (!providerOk) {
+      return Response.json({ error: "Model provider is not configured on this server" }, { status: 400 })
+    }
+    override = buildModel(ref)
+    if (!override) {
+      return Response.json({ error: "Model could not be built" }, { status: 400 })
+    }
+  }
+
   await ensureConversation(conversationId, {
     title: conversationId === "main-chat" ? "Main chat" : "Untitled conversation",
     agent,
     taskId,
   })
 
-  const resolvedModel = resolveModel(agent)
+  const resolvedModel = override ?? resolveModel(agent)
 
   const run = await startRun(conversationId, {
     agent,
@@ -90,7 +117,7 @@ export async function POST(request: Request) {
       try {
         let reply = ""
 
-        const textStream = await inferenceStream({ message: prompt, agent })
+        const textStream = await inferenceStream({ message: prompt, agent, override })
         if (textStream) {
           // Real token streaming through the inference layer
           for await (const delta of textStream) {

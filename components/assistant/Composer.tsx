@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { ChevronDown, Plus, ArrowUp, Paperclip, X, Sparkles, Plug } from "lucide-react"
 import type { AgentDef } from "./shared"
+import { ModelPicker, type ModelRef, type ProviderModels } from "./ModelPicker"
 
 export interface IntegrationStatus {
   id: string
@@ -156,6 +157,9 @@ export function Composer({
   onAttach,
   onRemoveAttachment,
   showQuickActions,
+  models,
+  model,
+  onModelChange,
 }: {
   value: string
   onChange: (v: string) => void
@@ -170,6 +174,9 @@ export function Composer({
   onAttach: (files: FileList) => void
   onRemoveAttachment: (index: number) => void
   showQuickActions?: boolean
+  models: ProviderModels[]
+  model: ModelRef
+  onModelChange: (ref: ModelRef) => void
 }) {
   const fileInput = useRef<HTMLInputElement>(null)
   return (
@@ -235,6 +242,7 @@ export function Composer({
               <Plus size={16} />
             </button>
             <AgentPicker agents={agents} value={agent} onChange={onAgentChange} />
+            <ModelPicker providers={models} value={model} onChange={onModelChange} />
           </div>
           <button
             type="submit"

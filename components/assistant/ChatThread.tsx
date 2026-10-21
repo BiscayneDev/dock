@@ -6,6 +6,7 @@ import { DefaultChatTransport } from "ai"
 import { Copy, Check, RotateCcw } from "lucide-react"
 import { getText, type AgentDef } from "./shared"
 import { Composer, type IntegrationStatus } from "./Composer"
+import { readStoredModel, storeModel, type ModelRef, type ProviderModels } from "./ModelPicker"
 
 export interface Attachment {
   name: string
@@ -73,6 +74,7 @@ export function ChatThread({
   pendingMessage,
   onPendingSent,
   integrations,
+  models,
 }: {
   conversationId: string
   agent: AgentDef
@@ -83,10 +85,13 @@ export function ChatThread({
   pendingMessage?: string | null
   onPendingSent?: () => void
   integrations: IntegrationStatus[]
+  models: ProviderModels[]
 }) {
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [attachError, setAttachError] = useState<string | null>(null)
+  // Per-message model: null = Auto (agent default; no `model` field is sent).
+  const [model, setModelState] = useState<ModelRef>(null)
   const { messages, sendMessage, status, setMessages, regenerate } = useChat({
     id: `chat-${conversationId}-${agent.id}`,
     messages: initialMessages,
@@ -103,11 +108,22 @@ export function ChatThread({
     setMessages(initialMessages)
   }, [initialMessages, setMessages])
 
+  // Restore the model chosen on the home page / earlier in this tab.
+  useEffect(() => {
+    setModelState(readStoredModel())
+  }, [])
+
+  function setModel(ref: ModelRef) {
+    setModelState(ref)
+    storeModel(ref)
+  }
+
   // A message typed on the assistant home is sent once the thread mounts.
   useEffect(() => {
     if (!pendingMessage) return
     onPendingSent?.()
-    sendMessage({ text: pendingMessage }).catch(() => null)
+    const chosen = readStoredModel()
+    sendMessage({ text: pendingMessage }, chosen ? { body: { model: chosen } } : undefined).catch(() => null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingMessage])
 
@@ -132,7 +148,10 @@ export function ChatThread({
     const body = attachments.map((a) => `\n\n--- Attached: ${a.name} ---\n${a.content}`).join("")
     setInput("")
     setAttachments([])
-    sendMessage({ text: `${text || "Here are the attached files."}${body}` }).catch(() => null)
+    sendMessage(
+      { text: `${text || "Here are the attached files."}${body}` },
+      model ? { body: { model } } : undefined,
+    ).catch(() => null)
   }
 
   const lastAssistantIndex = messages.map((m) => m.role).lastIndexOf("assistant")
@@ -165,7 +184,7 @@ export function ChatThread({
                 text={getText(message)}
                 agent={agent}
                 isLast={index === lastAssistantIndex && !busy}
-                onRegenerate={() => regenerate().catch(() => null)}
+                onRegenerate={() => regenerate(model ? { body: { model } } : undefined).catch(() => null)}
               />
             )
           })}
@@ -197,6 +216,9 @@ export function ChatThread({
           onAttach={(files) => attach(files).catch(() => null)}
           onRemoveAttachment={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
           showQuickActions
+          models={models}
+          model={model}
+          onModelChange={setModel}
         />
       </div>
     </div>

@@ -80,8 +80,10 @@ export async function inferenceStream({
   message,
   agent,
   system,
-}: InferenceChatParams): Promise<AsyncIterable<string> | null> {
-  const resolved = resolveModel(agent)
+  override,
+}: InferenceChatParams & { override?: ResolvedModel | null }): Promise<AsyncIterable<string> | null> {
+  // A per-request override (chosen in the composer) wins over the agent default.
+  const resolved = override ?? resolveModel(agent)
   if (!resolved) return null
   const result = streamText({
     model: resolved.model,
