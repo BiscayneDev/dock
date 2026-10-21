@@ -1,8 +1,9 @@
 {
-  "name": "shipyard-os",
+  "name": "dock",
   "version": "0.1.0",
   "private": true,
   "bin": {
+    "dock": "bin/shipyard.js",
     "shipyard": "bin/shipyard.js"
   },
   "scripts": {

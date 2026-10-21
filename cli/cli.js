@@ -21,8 +21,8 @@ const showCursor = () => process.stdout.write("\x1b[?25h")
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
-const REPO_URL = "https://github.com/BiscayneDev/shipyard-os.git"
-const DEFAULT_DIR = "shipyard-os"
+const REPO_URL = "https://github.com/BiscayneDev/dock.git"
+const DEFAULT_DIR = "dock"
 
 // ── SIGINT handler ───────────────────────────────────────────────────────────
 
@@ -337,7 +337,7 @@ async function main() {
     runtime = await select("Choose your runtime", [
       { label: "OpenClaw", value: "openclaw", hint: "Local agent runtime (recommended)" },
       { label: "Ollama", value: "ollama", hint: "Run local LLMs (Llama, Mistral, etc.)" },
-      { label: "Demo Mode", value: "demo", hint: "Try Shipyard with mock data, no setup needed" },
+      { label: "Demo Mode", value: "demo", hint: "Try Dock with mock data, no setup needed" },
     ])
   }
 
@@ -366,7 +366,7 @@ async function main() {
   console.log()
 
   // 4a. Clone
-  const cloneSpinner = spinner("Cloning Shipyard OS...")
+  const cloneSpinner = spinner("Cloning Dock...")
   const cloned = run(`git clone --depth 1 ${REPO_URL} "${projectPath}"`)
   if (!cloned) {
     cloneSpinner.fail("Failed to clone repository")
@@ -401,7 +401,7 @@ async function main() {
 
   console.log()
   box([
-    bold("Your shipyard is ready, Captain."),
+    bold("Your Dock is ready, Captain."),
     "",
     `${dim("Project")}      ${bold(projectName)}`,
     `${dim("Runtime")}      ${runtimeLabel}`,

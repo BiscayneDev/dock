@@ -1,15 +1,15 @@
 <div align="center">
 
 <img src="https://img.shields.io/npm/v/create-shipyard-app?style=flat-square&color=22c55e&label=npm" alt="npm version" />
-<img src="https://img.shields.io/github/stars/BiscayneDev/shipyard-os?style=social" alt="GitHub stars" />
+<img src="https://img.shields.io/github/stars/BiscayneDev/dock?style=social" alt="GitHub stars" />
 
-# ⚓ Shipyard OS
+# ⚓ Dock
 
 ### The open-source operating system for AI agent teams.
 
 Drag a task → your agents execute → the board reflects reality.
 
-[Get Started](#-quickstart) · [Features](#-features) · [Demo](https://shipyard-os.vercel.app) · [Roadmap](#-roadmap)
+[Get Started](#-quickstart) · [Features](#-features) · [Demo](https://dock.vercel.app) · [Roadmap](#-roadmap)
 
 <br />
 
@@ -26,7 +26,7 @@ Drag a task → your agents execute → the board reflects reality.
 
 You're running a company with AI agents — research, engineering, deals, treasury. But right now you're juggling:
 
-| Without Shipyard | With Shipyard |
+| Without Dock | With Dock |
 |:---|:---|
 | Scattered agent outputs across Telegram, Slack, email | One dashboard, all agents, all activity |
 | No idea what your agents are working on | Kanban board that updates in real time |
@@ -48,7 +48,7 @@ Five specialized agents out of the box — Chief of Staff, Scout (research), Bui
 Morning briefing in one glance: agent status (live pulsing dots), task summary, project health, recent intel, inbox, and goals — all on one screen.
 
 ### 💰 Budget Enforcement
-Set monthly spend limits per agent. Shipyard checks budgets before activation and warns you when agents approach their limits. No surprise bills.
+Set monthly spend limits per agent. Dock checks budgets before activation and warns you when agents approach their limits. No surprise bills.
 
 ### 📂 GitHub Projects
 CI status, open PRs, and deploy health for your pinned repos. Color-coded badges update automatically.
@@ -87,8 +87,8 @@ This will:
 ### Or manually:
 
 ```bash
-git clone https://github.com/BiscayneDev/shipyard-os.git
-cd shipyard-os
+git clone https://github.com/BiscayneDev/dock.git
+cd dock
 npm install
 npm run dev
 ```
@@ -98,8 +98,8 @@ Open [localhost:3000](http://localhost:3000) — the setup wizard walks you thro
 ### With Ollama (local models):
 
 ```bash
-git clone https://github.com/BiscayneDev/shipyard-os.git
-cd shipyard-os
+git clone https://github.com/BiscayneDev/dock.git
+cd dock
 npm install
 npm run dev
 ```
@@ -122,7 +122,7 @@ To deploy your own instance: import the repo into Vercel, add the env vars from 
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    SHIPYARD OS                          │
+│                       DOCK                             │
 │                                                         │
 │  ┌──────────┐    ┌──────────┐    ┌──────────┐          │
 │  │ Backlog  │───▶│In Progress│───▶│   Done   │          │
@@ -188,7 +188,7 @@ Agents are fully customizable — change names, roles, skills, and colors from t
 ## 📁 Project Structure
 
 ```
-shipyard-os/
+dock/
 ├── app/
 │   ├── dashboard/      # Command center overview
 │   ├── tasks/          # Kanban board with drag-to-activate
@@ -226,7 +226,7 @@ shipyard-os/
 - [ ] **Agent marketplace** — share and install agent identities
 - [ ] **`Cmd+K` command palette** — quick actions from anywhere
 - [ ] **Webhooks** — real-time updates instead of polling
-- [ ] **Docker image** — `docker run -p 3000:3000 shipyard-os`
+- [ ] **Docker image** — `docker run -p 3000:3000 dock`
 - [ ] **Multi-workspace** — manage multiple agent teams
 - [ ] **Mobile app** — native iOS/Android companion
 
@@ -234,12 +234,12 @@ shipyard-os/
 
 ## 🤝 Contributing
 
-We'd love your help making Shipyard OS better. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+We'd love your help making Dock better. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ```bash
 # Fork the repo, then:
-git clone https://github.com/YOUR_USERNAME/shipyard-os.git
-cd shipyard-os
+git clone https://github.com/YOUR_USERNAME/dock.git
+cd dock
 npm install
 npm run dev
 ```
@@ -251,7 +251,7 @@ npm run dev
 <details>
 <summary><strong>Do I need OpenClaw to use this?</strong></summary>
 <br />
-No! Shipyard OS supports multiple runtimes: OpenClaw for full agent orchestration, Ollama/LM Studio/llama.cpp for local models, or demo mode to explore without any runtime.
+No! Dock supports multiple runtimes: OpenClaw for full agent orchestration, Ollama/LM Studio/llama.cpp for local models, or demo mode to explore without any runtime.
 </details>
 
 <details>
@@ -269,7 +269,7 @@ Yes. Add, edit, or delete agents from the Agents page. Each agent is a markdown 
 <details>
 <summary><strong>What about costs?</strong></summary>
 <br />
-Shipyard OS tracks per-agent token usage via the Anthropic Admin API. Set monthly budgets per agent, and the system will block activation when limits are reached. No surprise bills.
+Dock tracks per-agent token usage via the Anthropic Admin API. Set monthly budgets per agent, and the system will block activation when limits are reached. No surprise bills.
 </details>
 
 <details>
@@ -296,6 +296,6 @@ Powered by [OpenClaw](https://openclaw.ai).
 
 <div align="center">
 
-**If Shipyard OS helps you run your agent team, [give it a ⭐](https://github.com/BiscayneDev/shipyard-os)**
+**If Dock helps you run your agent team, [give it a ⭐](https://github.com/BiscayneDev/dock)**
 
 </div>

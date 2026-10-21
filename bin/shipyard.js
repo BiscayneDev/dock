@@ -272,7 +272,7 @@ function findProjectRoot() {
     if (existsSync(pkgPath)) {
       try {
         const pkg = JSON.parse(readFileSync(pkgPath, "utf8"))
-        if (pkg.name === "shipyard-os") return dir
+        if (pkg.name === "dock" || pkg.name === "shipyard-os") return dir
       } catch {
         // not valid JSON, keep searching
       }
@@ -280,7 +280,7 @@ function findProjectRoot() {
     const parent = dirname(dir)
     if (parent === dir) {
       console.log()
-      console.log(red("  No shipyard found. Run this from inside a Shipyard OS project."))
+      console.log(red("  No Dock project found. Run this from inside a Dock project."))
       console.log()
       process.exit(1)
     }
@@ -312,21 +312,21 @@ function parseFlags(args) {
 async function cmdHelp() {
   console.log()
   box([
-    bold(cyan("Shipyard OS") + " \u2014 Command Center"),
+    bold(cyan("Dock") + " \u2014 Command Center"),
     "",
-    `${bold("shipyard configure")}     ${dim("Re-configure runtime, delivery, workspace")}`,
-    `${bold("shipyard status")}        ${dim("Health check dashboard")}`,
-    `${bold("shipyard agent list")}    ${dim("List all agents")}`,
-    `${bold("shipyard agent add")}     ${dim("Add a new agent")}`,
-    `${bold("shipyard agent remove")} ${dim("<id> Remove an agent")}`,
-    `${bold("shipyard env list")}      ${dim("Show env vars (secrets redacted)")}`,
-    `${bold("shipyard env set")}       ${dim("<KEY> <VALUE> Set an env var")}`,
-    `${bold("shipyard skill search")} ${dim("<query> Search marketplace skills")}`,
-    `${bold("shipyard skill list")}   ${dim("List all available skills")}`,
-    `${bold("shipyard skill add")}    ${dim("<slug> Install a skill")}`,
-    `${bold("shipyard skill info")}   ${dim("<slug> Show installed skill details")}`,
-    `${bold("shipyard skill remove")} ${dim("<slug> Remove an installed skill")}`,
-    `${bold("shipyard dev")}           ${dim("Start the dev server")}`,
+    `${bold("dock configure")}     ${dim("Re-configure runtime, delivery, workspace")}`,
+    `${bold("dock status")}        ${dim("Health check dashboard")}`,
+    `${bold("dock agent list")}    ${dim("List all agents")}`,
+    `${bold("dock agent add")}     ${dim("Add a new agent")}`,
+    `${bold("dock agent remove")} ${dim("<id> Remove an agent")}`,
+    `${bold("dock env list")}      ${dim("Show env vars (secrets redacted)")}`,
+    `${bold("dock env set")}       ${dim("<KEY> <VALUE> Set an env var")}`,
+    `${bold("dock skill search")} ${dim("<query> Search marketplace skills")}`,
+    `${bold("dock skill list")}   ${dim("List all available skills")}`,
+    `${bold("dock skill add")}    ${dim("<slug> Install a skill")}`,
+    `${bold("dock skill info")}   ${dim("<slug> Show installed skill details")}`,
+    `${bold("dock skill remove")} ${dim("<slug> Remove an installed skill")}`,
+    `${bold("dock dev")}           ${dim("Start the dev server")}`,
     "",
     dim("Flags: --json, --runtime <val>, --open, --yes"),
   ])
@@ -354,7 +354,7 @@ async function cmdConfigure(flags) {
   }
 
   console.log()
-  console.log(bold("  Shipyard OS Configuration"))
+  console.log(bold("  Dock Configuration"))
   console.log()
 
   // 1. Runtime
@@ -512,7 +512,7 @@ async function cmdStatus(flags) {
 
   console.log()
   box([
-    bold("Shipyard OS Status"),
+    bold("Dock Status"),
     "",
     `${dim("Runtime")}       ${bold(runtimeLabels[runtime] || runtime)}          ${check(results.runtime.ok)} ${statusText(results.runtime.ok, "configured", "unknown")}`,
     `${dim("Gateway")}       ${results.gateway.value}   ${check(results.gateway.ok)} ${statusText(results.gateway.ok, "reachable", "unreachable")}`,
@@ -608,7 +608,7 @@ async function cmdAgentRemove(args, flags) {
 
   const id = args[0]
   if (!id) {
-    console.log(red("  Usage: shipyard agent remove <id>"))
+    console.log(red("  Usage: dock agent remove <id>"))
     process.exit(1)
   }
 
@@ -677,7 +677,7 @@ async function cmdEnvSet(args) {
   const value = args[1]
 
   if (!key || value === undefined) {
-    console.log(red("  Usage: shipyard env set <KEY> <VALUE>"))
+    console.log(red("  Usage: dock env set <KEY> <VALUE>"))
     process.exit(1)
   }
 
@@ -764,7 +764,7 @@ function writeInstalledRegistry(skills) {
 async function cmdSkillSearch(args, flags) {
   const query = args.join(" ")
   if (!query) {
-    console.log(red("  Usage: shipyard skill search <query>"))
+    console.log(red("  Usage: dock skill search <query>"))
     process.exit(1)
   }
 
@@ -839,7 +839,7 @@ function printSkillTable(skills) {
 async function cmdSkillAdd(args, flags) {
   const slug = args[0]
   if (!slug) {
-    console.log(red("  Usage: shipyard skill add <slug>"))
+    console.log(red("  Usage: dock skill add <slug>"))
     process.exit(1)
   }
 
@@ -928,14 +928,14 @@ async function cmdSkillAdd(args, flags) {
 async function cmdSkillInfo(args, flags) {
   const slug = args[0]
   if (!slug) {
-    console.log(red("  Usage: shipyard skill info <slug>"))
+    console.log(red("  Usage: dock skill info <slug>"))
     process.exit(1)
   }
 
   const skillDir = join(SKILLS_DIR, slug)
   if (!existsSync(skillDir)) {
     console.log(red(`  Skill "${slug}" is not installed.`))
-    console.log(dim(`  Run: shipyard skill add ${slug}`))
+    console.log(dim(`  Run: dock skill add ${slug}`))
     process.exit(1)
   }
 
@@ -989,7 +989,7 @@ async function cmdSkillInfo(args, flags) {
 async function cmdSkillRemove(args, flags) {
   const slug = args[0]
   if (!slug) {
-    console.log(red("  Usage: shipyard skill remove <slug>"))
+    console.log(red("  Usage: dock skill remove <slug>"))
     process.exit(1)
   }
 
