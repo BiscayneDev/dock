@@ -6,7 +6,7 @@ import { DefaultChatTransport } from "ai"
 import { Copy, Check, RotateCcw } from "lucide-react"
 import { getText, type AgentDef } from "./shared"
 import { Composer, type IntegrationStatus } from "./Composer"
-import { readStoredModel, storeModel, type ModelRef, type ProviderModels } from "./ModelPicker"
+import { readStoredModel, storeModel, type ModelCatalog, type ModelRef } from "./ModelPicker"
 
 export interface Attachment {
   name: string
@@ -74,7 +74,7 @@ export function ChatThread({
   pendingMessage,
   onPendingSent,
   integrations,
-  models,
+  catalog,
 }: {
   conversationId: string
   agent: AgentDef
@@ -85,12 +85,12 @@ export function ChatThread({
   pendingMessage?: string | null
   onPendingSent?: () => void
   integrations: IntegrationStatus[]
-  models: ProviderModels[]
+  catalog: ModelCatalog
 }) {
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [attachError, setAttachError] = useState<string | null>(null)
-  // Per-message model: null = Auto (agent default; no `model` field is sent).
+  // Effective model: null = Auto (no `model` field is sent).
   const [model, setModelState] = useState<ModelRef>(null)
   const { messages, sendMessage, status, setMessages, regenerate } = useChat({
     id: `chat-${conversationId}-${agent.id}`,
@@ -108,24 +108,26 @@ export function ChatThread({
     setMessages(initialMessages)
   }, [initialMessages, setMessages])
 
-  // Restore the model chosen on the home page / earlier in this tab.
+  // Restore the model chosen on the home page / earlier in this tab. With no
+  // stored choice, the catalog default (Shipyard when configured) applies.
   useEffect(() => {
-    setModelState(readStoredModel())
-  }, [])
+    setModelState(readStoredModel(catalog.defaultModel))
+  }, [catalog.defaultModel])
 
   function setModel(ref: ModelRef) {
     setModelState(ref)
     storeModel(ref)
   }
 
-  // A message typed on the assistant home is sent once the thread mounts.
+  // A message typed on the assistant home is sent once the thread mounts and
+  // the catalog has settled, so the default model is known before sending.
   useEffect(() => {
-    if (!pendingMessage) return
+    if (!pendingMessage || !catalog.loaded) return
     onPendingSent?.()
-    const chosen = readStoredModel()
+    const chosen = readStoredModel(catalog.defaultModel)
     sendMessage({ text: pendingMessage }, chosen ? { body: { model: chosen } } : undefined).catch(() => null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingMessage])
+  }, [pendingMessage, catalog.loaded])
 
   const busy = status === "submitted" || status === "streaming"
 
@@ -216,7 +218,7 @@ export function ChatThread({
           onAttach={(files) => attach(files).catch(() => null)}
           onRemoveAttachment={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
           showQuickActions
-          models={models}
+          models={catalog.providers}
           model={model}
           onModelChange={setModel}
         />

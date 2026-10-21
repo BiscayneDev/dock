@@ -16,40 +16,67 @@ export type ModelRef = string | null
 
 export const MODEL_STORAGE_KEY = "dock:model"
 
-/** Model choice survives navigation within the tab (home -> thread). */
-export function readStoredModel(): ModelRef {
+/** Stored value meaning "explicitly Auto": send no model field. */
+export const AUTO_CHOICE = "auto"
+
+/**
+ * Effective selection, used everywhere (picker display, send, regenerate):
+ *  - stored `auto`      -> null (Auto; no model field sent)
+ *  - stored `provider/id` -> that model
+ *  - nothing stored     -> catalog defaultModel (Shipyard when configured), else null (Auto)
+ */
+export function readStoredModel(defaultModel: string | null): ModelRef {
+  let raw: string | null = null
   try {
-    return window.sessionStorage.getItem(MODEL_STORAGE_KEY) || null
+    raw = window.sessionStorage.getItem(MODEL_STORAGE_KEY)
   } catch {
-    return null
+    raw = null
   }
+  if (!raw) return defaultModel
+  if (raw === AUTO_CHOICE) return null
+  return raw
 }
 
+/** Persist a choice. null (Auto) is stored as the explicit `auto` sentinel. */
 export function storeModel(ref: ModelRef) {
   try {
-    if (ref) window.sessionStorage.setItem(MODEL_STORAGE_KEY, ref)
-    else window.sessionStorage.removeItem(MODEL_STORAGE_KEY)
+    window.sessionStorage.setItem(MODEL_STORAGE_KEY, ref ?? AUTO_CHOICE)
   } catch {
     // sessionStorage unavailable: the choice simply won't persist.
   }
 }
 
+export interface ModelCatalog {
+  providers: ProviderModels[]
+  /** `provider/model-id` to use when nothing is stored, or null for Auto. */
+  defaultModel: string | null
+  /** False until the fetch settles (success or failure). */
+  loaded: boolean
+}
+
 /** Fetch the curated model catalog once. Empty until loaded or on failure. */
-export function useModelCatalog(): ProviderModels[] {
-  const [providers, setProviders] = useState<ProviderModels[]>([])
+export function useModelCatalog(): ModelCatalog {
+  const [catalog, setCatalog] = useState<ModelCatalog>({ providers: [], defaultModel: null, loaded: false })
   useEffect(() => {
     let cancelled = false
     fetch("/api/models", { cache: "no-store" })
       .then((r) => r.json())
-      .then((d: { providers?: ProviderModels[] }) => {
-        if (!cancelled && Array.isArray(d.providers)) setProviders(d.providers)
+      .then((d: { providers?: ProviderModels[]; defaultModel?: string | null }) => {
+        if (cancelled) return
+        setCatalog({
+          providers: Array.isArray(d.providers) ? d.providers : [],
+          defaultModel: typeof d.defaultModel === "string" ? d.defaultModel : null,
+          loaded: true,
+        })
       })
-      .catch(() => null)
+      .catch(() => {
+        if (!cancelled) setCatalog((c) => ({ ...c, loaded: true }))
+      })
     return () => {
       cancelled = true
     }
   }, [])
-  return providers
+  return catalog
 }
 
 function labelFor(ref: ModelRef, providers: ProviderModels[]): string {

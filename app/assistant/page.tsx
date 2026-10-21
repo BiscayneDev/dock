@@ -9,8 +9,8 @@ import {
   readStoredModel,
   storeModel,
   useModelCatalog,
+  type ModelCatalog,
   type ModelRef,
-  type ProviderModels,
 } from "@/components/assistant/ModelPicker"
 import {
   AGENTS,
@@ -80,11 +80,11 @@ function useIntegrations(): IntegrationStatus[] {
 function HomeView({
   agents,
   integrations,
-  models,
+  catalog,
 }: {
   agents: AgentDef[]
   integrations: IntegrationStatus[]
-  models: ProviderModels[]
+  catalog: ModelCatalog
 }) {
   const router = useRouter()
   const [userName, setUserName] = useState("")
@@ -96,8 +96,8 @@ function HomeView({
   const [model, setModelState] = useState<ModelRef>(null)
 
   useEffect(() => {
-    setModelState(readStoredModel())
-  }, [])
+    setModelState(readStoredModel(catalog.defaultModel))
+  }, [catalog.defaultModel])
 
   function setModel(ref: ModelRef) {
     setModelState(ref)
@@ -162,7 +162,7 @@ function HomeView({
             attachments={[]}
             onAttach={() => null}
             onRemoveAttachment={() => null}
-            models={models}
+            models={catalog.providers}
             model={model}
             onModelChange={setModel}
           />
@@ -215,13 +215,13 @@ function ThreadView({
   agents,
   roster,
   integrations,
-  models,
+  catalog,
   conversationId,
 }: {
   agents: AgentDef[]
   roster: AgentRecord[]
   integrations: IntegrationStatus[]
-  models: ProviderModels[]
+  catalog: ModelCatalog
   conversationId: string
 }) {
   const router = useRouter()
@@ -323,7 +323,7 @@ function ThreadView({
           pendingMessage={pending}
           onPendingSent={() => setPending(null)}
           integrations={integrations}
-          models={models}
+          catalog={catalog}
           onRefresh={async () => {
             await fetchConversations()
             await fetchDetail(conversationId)
@@ -375,7 +375,7 @@ function AssistantInner() {
   const id = searchParams.get("id")
   const { agents, roster } = useAgents()
   const integrations = useIntegrations()
-  const models = useModelCatalog()
+  const catalog = useModelCatalog()
   return (
     <div className="p-2">
       <div
@@ -383,9 +383,9 @@ function AssistantInner() {
         style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}
       >
         {id ? (
-          <ThreadView agents={agents} roster={roster} integrations={integrations} models={models} conversationId={id} />
+          <ThreadView agents={agents} roster={roster} integrations={integrations} catalog={catalog} conversationId={id} />
         ) : (
-          <HomeView agents={agents} integrations={integrations} models={models} />
+          <HomeView agents={agents} integrations={integrations} catalog={catalog} />
         )}
       </div>
     </div>

@@ -90,7 +90,8 @@ function providerConfigured(provider: ProviderKey): boolean {
     case "nous":
       return Boolean(process.env.NOUS_API_KEY)
     case "ollama":
-      return true // local, no key
+      // Local, no key — but only when the operator explicitly points at a server.
+      return Boolean(process.env.OLLAMA_BASE_URL)
     case "shipyard":
       // Opt-in: only treat the gateway as configured when pointed at one.
       return Boolean(process.env.SHIPYARD_INFERENCE_URL || process.env.SHIPYARD_INFERENCE_API_KEY)
@@ -126,6 +127,9 @@ export function listConfiguredProviders(): Array<{
     }
     if (provider === "anthropic" && !configured) {
       return { provider, configured, note: "Set ANTHROPIC_API_KEY to enable" }
+    }
+    if (provider === "ollama" && !configured) {
+      return { provider, configured, note: "Set OLLAMA_BASE_URL to enable (local models only)" }
     }
     if (provider === "shipyard" && !configured) {
       return { provider, configured, note: "Set SHIPYARD_INFERENCE_URL to enable (your Shipyard Inference gateway)" }

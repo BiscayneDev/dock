@@ -28,12 +28,21 @@ const CURATED_MODELS: Record<ProviderKey, Array<{ id: string; label: string }>> 
   ],
 }
 
+/** Default model when Shipyard Inference is configured; null otherwise (Auto). */
+const SHIPYARD_DEFAULT_MODEL = "shipyard/claude-sonnet-4-5"
+
 export async function GET() {
-  const providers = listConfiguredProviders().map((entry) => ({
+  const entries = listConfiguredProviders()
+  const providers = entries.map((entry) => ({
     provider: entry.provider,
     configured: entry.configured,
     ...(entry.note ? { note: entry.note } : {}),
     models: CURATED_MODELS[entry.provider] ?? [],
   }))
-  return Response.json({ providers, defaultLabel: "Auto" })
+  const shipyardConfigured = entries.some((e) => e.provider === "shipyard" && e.configured)
+  return Response.json({
+    providers,
+    defaultLabel: "Auto",
+    defaultModel: shipyardConfigured ? SHIPYARD_DEFAULT_MODEL : null,
+  })
 }
