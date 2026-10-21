@@ -1456,7 +1456,7 @@ function SailboatScene() {
               )}
 
               <button
-                onClick={() => router.push("/dashboard")}
+                onClick={() => router.push("/assistant")}
                 style={{
                   ...primaryBtnStyle(false),
                   width: "100%",

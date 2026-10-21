@@ -21,5 +21,5 @@ export default async function Home() {
   if (!setupDone) {
     redirect("/setup")
   }
-  redirect("/dashboard")
+  redirect("/assistant")
 }
