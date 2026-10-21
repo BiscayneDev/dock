@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react"
 import { useChat, type UIMessage } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
-import { Copy, Check, RotateCcw } from "lucide-react"
+import { Copy, Check, RotateCcw, ChevronRight } from "lucide-react"
 import { getText, type AgentDef } from "./shared"
+import { TraceWaterfall } from "@/components/runs/TraceWaterfall"
+import type { ConversationEvent, ConversationRun } from "@/lib/conversations"
 import { Composer, type IntegrationStatus } from "./Composer"
 import { readStoredModel, storeModel, type ModelCatalog, type ModelRef } from "./ModelPicker"
 
@@ -16,16 +18,72 @@ export interface Attachment {
 
 const MAX_ATTACHMENT_BYTES = 200 * 1024
 
+type RunPayload = { run: ConversationRun; events: ConversationEvent[] }
+
+// Lazy: fetches the run once on first expand and keeps it in component state.
+function RunTrace({ conversationId, runId }: { conversationId: string; runId: string }) {
+  const [open, setOpen] = useState(false)
+  const [data, setData] = useState<RunPayload | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    if (!open || data) return
+    setLoading(true)
+    setFailed(false)
+    fetch(`/api/runs/${encodeURIComponent(conversationId)}/${encodeURIComponent(runId)}`, { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return (await res.json()) as RunPayload
+      })
+      .then((payload) => setData(payload))
+      .catch(() => setFailed(true))
+      .finally(() => setLoading(false))
+  }, [open, data, conversationId, runId])
+
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-fit items-center gap-1 rounded-full px-2.5 py-1 text-[12px] hover:bg-white/5"
+        style={{ color: "var(--ink-3)" }}
+      >
+        <ChevronRight size={12} className={open ? "rotate-90 transition-transform" : "transition-transform"} /> Trace
+      </button>
+      {open && loading && (
+        <p className="text-[12px]" style={{ color: "var(--ink-3)" }}>
+          Loading trace…
+        </p>
+      )}
+      {open && failed && (
+        <p className="text-[12px]" style={{ color: "#f59e0b" }}>
+          Trace unavailable: the run could not be loaded.{" "}
+          <button type="button" className="underline" onClick={() => setData(null)}>
+            Retry
+          </button>
+        </p>
+      )}
+      {open && data && <TraceWaterfall run={data.run} events={data.events} />}
+    </div>
+  )
+}
+
 function AnswerMessage({
   text,
   agent,
   isLast,
   onRegenerate,
+  conversationId,
+  runId,
 }: {
   text: string
   agent: AgentDef
   isLast: boolean
   onRegenerate?: () => void
+  conversationId: string
+  runId?: string
 }) {
   const [copied, setCopied] = useState(false)
   return (
@@ -60,6 +118,7 @@ function AnswerMessage({
           </button>
         )}
       </div>
+      {runId && <RunTrace conversationId={conversationId} runId={runId} />}
     </div>
   )
 }
@@ -187,6 +246,8 @@ export function ChatThread({
                 agent={agent}
                 isLast={index === lastAssistantIndex && !busy}
                 onRegenerate={() => regenerate(model ? { body: { model } } : undefined).catch(() => null)}
+                conversationId={conversationId}
+                runId={(message.metadata as { runId?: string } | undefined)?.runId}
               />
             )
           })}
