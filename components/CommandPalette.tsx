@@ -51,7 +51,7 @@ function useCommands(): CommandItem[] {
     { id: "nav-dashboard", label: "Dashboard", description: "Command center overview", icon: LayoutDashboard, category: "navigation", keywords: ["home", "overview", "briefing"], action: go("/dashboard") },
     { id: "nav-conversations", label: "Conversations", description: "Unified run and transcript inbox", icon: PanelRightOpen, category: "navigation", keywords: ["inbox", "transcript", "runs", "timeline"], action: go("/conversations") },
     { id: "nav-alerts", label: "Alerts", description: "Canonical failed-run inbox", icon: Bell, category: "navigation", keywords: ["incidents", "failures", "attention"], action: go("/alerts") },
-    { id: "nav-chat", label: "Chat", description: "Talk to your agents", icon: MessageSquare, category: "navigation", keywords: ["message", "talk", "agent"], action: go("/chat") },
+    { id: "nav-chat", label: "Chat", description: "Talk to your agents", icon: MessageSquare, category: "navigation", keywords: ["message", "talk", "agent"], action: go("/assistant") },
     { id: "nav-tasks", label: "Tasks", description: "Kanban board", icon: CheckSquare, category: "navigation", keywords: ["kanban", "board", "todo"], action: go("/tasks") },
     { id: "nav-agents", label: "Agents", description: "Agent team management", icon: Users, category: "navigation", keywords: ["team", "vic", "scout", "builder", "baron"], action: go("/agents") },
     { id: "nav-skills", label: "Agent Skills", description: "Installed skills list", icon: SlidersHorizontal, category: "navigation", keywords: ["openclaw", "abilities"], action: go("/agents/skills") },

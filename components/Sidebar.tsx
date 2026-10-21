@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const WORKSPACE = [
+  { href: "/assistant", label: "Assistant" },
   { href: "/dashboard", label: "Command Deck" },
   { href: "/tasks", label: "Missions" },
   { href: "/agents", label: "Agents" },
