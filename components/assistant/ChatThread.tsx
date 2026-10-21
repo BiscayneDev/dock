@@ -4,10 +4,13 @@ import { useEffect, useState } from "react"
 import { useChat, type UIMessage } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
 import { getText, type AgentDef } from "./shared"
+import { Composer } from "./Composer"
 
 export function ChatThread({
   conversationId,
   agent,
+  agents,
+  onAgentChange,
   initialMessages,
   onRefresh,
   pendingMessage,
@@ -15,6 +18,8 @@ export function ChatThread({
 }: {
   conversationId: string
   agent: AgentDef
+  agents: AgentDef[]
+  onAgentChange: (agent: AgentDef) => void
   initialMessages: UIMessage[]
   onRefresh: () => Promise<void>
   pendingMessage?: string | null
@@ -47,84 +52,55 @@ export function ChatThread({
 
   const busy = status === "submitted" || status === "streaming"
 
-  async function submit(text: string) {
-    const trimmed = text.trim()
-    if (!trimmed || status !== "ready") return
+  function submit() {
+    const text = input.trim()
+    if (!text || busy) return
     setInput("")
-    await sendMessage({ text: trimmed })
+    sendMessage({ text }).catch(() => null)
   }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-6">
-        {messages.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm" style={{ color: "var(--ink-3)" }}>
-            Start a conversation with {agent.name}.
-          </div>
-        ) : (
-          messages.map((message) => {
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto flex max-w-[680px] flex-col gap-6 px-6 py-8">
+          {messages.length === 0 && (
+            <p className="pt-16 text-center text-[14px] text-[#737373]">Start a conversation with {agent.name}.</p>
+          )}
+          {messages.map((message) => {
             const isUser = message.role === "user"
-            return (
-              <div key={message.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-                <div
-                  className="max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed"
-                  style={{
-                    background: isUser ? "var(--surface-2)" : "transparent",
-                    border: isUser ? "1px solid var(--line)" : "none",
-                    color: "var(--ink)",
-                    padding: isUser ? undefined : "0",
-                  }}
-                >
-                  {!isUser && (
-                    <p className="mb-1 text-[11px] uppercase tracking-wide" style={{ color: agent.accent }}>
-                      {agent.emoji} {agent.name}
-                    </p>
-                  )}
-                  <p className="whitespace-pre-wrap">{getText(message)}</p>
+            if (isUser) {
+              return (
+                <div key={message.id} className="flex justify-end">
+                  <div className="max-w-[80%] rounded-[18px] bg-[#f4f4f4] px-4 py-2.5 text-[15px] leading-relaxed text-[#111]">
+                    <p className="whitespace-pre-wrap">{getText(message)}</p>
+                  </div>
                 </div>
+              )
+            }
+            return (
+              <div key={message.id} className="flex flex-col gap-2">
+                <p className="text-[12px] font-medium" style={{ color: agent.accent }}>
+                  {agent.emoji} {agent.name}
+                </p>
+                <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-[#262626]">{getText(message)}</p>
               </div>
             )
-          })
-        )}
-        {busy && (
-          <p className="text-xs" style={{ color: "var(--ink-3)" }}>
-            {agent.name} is working…
-          </p>
-        )}
+          })}
+          {busy && <p className="text-[13px] text-[#737373]">{agent.name} is working…</p>}
+        </div>
       </div>
 
-      <div className="px-6 pb-6 pt-2">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            submit(input).catch(() => null)
-          }}
-          className="flex items-end gap-2 rounded-2xl p-3"
-          style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}
-        >
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault()
-                submit(input).catch(() => null)
-              }
-            }}
-            placeholder={`Message ${agent.name}…`}
-            rows={2}
-            className="min-h-[44px] flex-1 resize-none bg-transparent px-1 py-1 text-sm outline-none"
-            style={{ color: "var(--ink)" }}
-          />
-          <button
-            type="submit"
-            disabled={busy || !input.trim()}
-            className="rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-40"
-            style={{ background: "var(--ink)", color: "var(--surface-0)" }}
-          >
-            {busy ? "Working…" : "Send"}
-          </button>
-        </form>
+      <div className="mx-auto w-full max-w-[680px] px-6 pb-5 pt-2">
+        <Composer
+          value={input}
+          onChange={setInput}
+          onSubmit={submit}
+          placeholder={`Message ${agent.name}…`}
+          agents={agents}
+          agent={agent}
+          onAgentChange={onAgentChange}
+          busy={busy}
+        />
       </div>
     </div>
   )

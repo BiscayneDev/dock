@@ -2,8 +2,9 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ChevronDown, Plus, RotateCcw } from "lucide-react"
+import { Plus } from "lucide-react"
 import { ChatThread } from "@/components/assistant/ChatThread"
+import { Composer } from "@/components/assistant/Composer"
 import {
   AGENTS,
   greetingFor,
@@ -21,6 +22,7 @@ interface AgentRecord {
   role: string
   accent: string
   description: string
+  tags?: string[]
 }
 
 interface IntegrationStatus {
@@ -35,80 +37,32 @@ const SUGGESTIONS = [
   "Brief a new task",
   "Summarize what the agents did",
   "How much have we spent this week?",
+  "Review open decisions",
+  "What are the agents doing?",
 ]
 
-function useAgents(): AgentDef[] {
-  const [agents, setAgents] = useState<AgentDef[]>(AGENTS)
+function useAgents(): { agents: AgentDef[]; roster: AgentRecord[] } {
+  const [roster, setRoster] = useState<AgentRecord[]>([])
   useEffect(() => {
     let cancelled = false
     fetch("/api/agents", { cache: "no-store" })
       .then((r) => r.json())
       .then((data: AgentRecord[]) => {
-        if (cancelled || !Array.isArray(data) || data.length === 0) return
-        setAgents(
-          data.map((a) => ({ id: a.id, name: a.name, emoji: a.emoji, accent: a.accent, description: a.role })),
-        )
+        if (!cancelled && Array.isArray(data)) setRoster(data)
       })
       .catch(() => null)
     return () => {
       cancelled = true
     }
   }, [])
-  return agents
-}
-
-function AgentSelect({
-  agents,
-  value,
-  onChange,
-}: {
-  agents: AgentDef[]
-  value: AgentDef
-  onChange: (agent: AgentDef) => void
-}) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm"
-        style={{ background: "var(--surface-2)", border: "1px solid var(--line)", color: "var(--ink)" }}
-      >
-        <span>{value.emoji}</span>
-        <span style={{ color: value.accent }}>{value.name}</span>
-        <ChevronDown size={12} style={{ color: "var(--ink-3)" }} />
-      </button>
-      {open && (
-        <div
-          className="absolute left-0 top-full z-20 mt-1 w-60 overflow-hidden rounded-xl shadow-xl"
-          style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}
-        >
-          {agents.map((agent) => (
-            <button
-              key={agent.id}
-              type="button"
-              onClick={() => {
-                onChange(agent)
-                setOpen(false)
-              }}
-              className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm hover:bg-white/5"
-            >
-              <span>{agent.emoji}</span>
-              <div>
-                <p className="font-medium" style={{ color: agent.accent }}>
-                  {agent.name}
-                </p>
-                <p className="text-[11px]" style={{ color: "var(--ink-3)" }}>
-                  {agent.description}
-                </p>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+  const agents = useMemo<AgentDef[]>(
+    () =>
+      roster.length
+        ? roster.map((a) => ({ id: a.id, name: a.name, emoji: a.emoji, accent: a.accent, description: a.role }))
+        : AGENTS,
+    [roster],
   )
+  return { agents, roster }
 }
 
 function HomeView({ agents }: { agents: AgentDef[] }) {
@@ -123,9 +77,7 @@ function HomeView({ agents }: { agents: AgentDef[] }) {
   useEffect(() => {
     fetch("/api/setup/status", { cache: "no-store" })
       .then((r) => r.json())
-      .then((d: { userName?: string }) => {
-        if (d.userName) setUserName(d.userName)
-      })
+      .then((d: { userName?: string }) => d.userName && setUserName(d.userName))
       .catch(() => null)
     fetch("/api/settings/status", { cache: "no-store" })
       .then((r) => r.json())
@@ -133,13 +85,12 @@ function HomeView({ agents }: { agents: AgentDef[] }) {
       .catch(() => null)
     fetch("/api/conversations", { cache: "no-store" })
       .then((r) => r.json())
-      .then((d: ConversationSummary[]) => setRecent(Array.isArray(d) ? d.slice(0, 5) : []))
+      .then((d: ConversationSummary[]) => setRecent(Array.isArray(d) ? d.slice(0, 4) : []))
       .catch(() => null)
   }, [])
 
-  useEffect(() => {
-    if (agents.length && !agents.some((a) => a.id === agent.id)) setAgent(agents[0])
-  }, [agents, agent.id])
+  const selected = agents.find((a) => a.id === agent.id) ?? agents[0] ?? AGENTS[0]
+  const connectedCount = integrations.filter((i) => i.connected).length
 
   const start = useCallback(
     async (message: string) => {
@@ -150,7 +101,7 @@ function HomeView({ agents }: { agents: AgentDef[] }) {
         const res = await fetch("/api/conversations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: trimmed.slice(0, 60), agent: agent.id }),
+          body: JSON.stringify({ title: trimmed.slice(0, 60), agent: selected.id }),
         })
         if (!res.ok) throw new Error("create failed")
         const conversation = (await res.json()) as { id: string }
@@ -159,120 +110,87 @@ function HomeView({ agents }: { agents: AgentDef[] }) {
         setSending(false)
       }
     },
-    [agent.id, router, sending],
+    [router, selected.id, sending],
   )
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col px-6 pt-16">
-      <h1 className="text-3xl font-semibold tracking-tight" style={{ color: "var(--ink)" }}>
-        {greetingFor(userName)}
-      </h1>
-      <p className="mt-2 text-sm" style={{ color: "var(--ink-3)" }}>
-        What should the team work on?
-      </p>
+    <div className="flex h-full flex-col items-center justify-center px-6">
+      <div className="flex w-full max-w-[672px] flex-col items-center">
+        <h1 className="text-center text-[34px] font-semibold tracking-[-0.02em] text-[#111]">
+          {greetingFor(userName)}!
+        </h1>
+        <p className="mt-1 text-center text-[34px] font-semibold tracking-[-0.02em] text-[#a3a3a3]">
+          What&apos;s next on your list?
+        </p>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          start(text).catch(() => null)
-        }}
-        className="mt-8 rounded-2xl p-4"
-        style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}
-      >
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault()
-              start(text).catch(() => null)
+        <div className="mt-10 w-full">
+          <Composer
+            value={text}
+            onChange={setText}
+            onSubmit={() => start(text)}
+            placeholder="Ask anything, or hand a task to an agent…"
+            agents={agents}
+            agent={selected}
+            onAgentChange={setAgent}
+            busy={sending}
+            tray={
+              <>
+                <span>
+                  {connectedCount > 0 ? `${connectedCount} of ${integrations.length} apps connected` : "No apps connected"}
+                </span>
+                <span className="text-[#525252]">Connected apps</span>
+              </>
             }
-          }}
-          placeholder="Ask anything, or hand a task to an agent…"
-          rows={3}
-          className="w-full resize-none bg-transparent text-base outline-none"
-          style={{ color: "var(--ink)" }}
-        />
-        <div className="mt-3 flex items-center justify-between">
-          <AgentSelect agents={agents} value={agent} onChange={setAgent} />
-          <button
-            type="submit"
-            disabled={!text.trim() || sending}
-            className="rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-40"
-            style={{ background: "var(--ink)", color: "var(--surface-0)" }}
-          >
-            {sending ? "Starting…" : "Send"}
-          </button>
+          />
         </div>
-      </form>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        {SUGGESTIONS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => start(s)}
-            className="rounded-full px-3 py-1.5 text-xs"
-            style={{ background: "var(--surface-1)", border: "1px solid var(--line)", color: "var(--ink-2)" }}
-          >
-            {s}
-          </button>
-        ))}
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+          {SUGGESTIONS.slice(0, 4).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => start(s)}
+              className="rounded-full bg-[#f4f4f4] px-4 py-2 text-[13px] text-[#404040] hover:bg-[#ebebeb]"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+
+        {recent.length > 0 && (
+          <div className="mt-12 w-full">
+            <p className="text-[12px] font-medium uppercase tracking-wide text-[#a3a3a3]">Recent</p>
+            <div className="mt-2 divide-y divide-[#f0f0f0]">
+              {recent.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => router.push(`/assistant?id=${encodeURIComponent(c.id)}`)}
+                  className="flex w-full items-center justify-between gap-4 py-3 text-left"
+                >
+                  <span className="truncate text-[14px] text-[#262626]">{c.title}</span>
+                  <span className="shrink-0 text-[12px] text-[#a3a3a3]">
+                    {c.agent} · {relativeTime(c.updatedAt)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
-
-      {integrations.length > 0 && (
-        <section className="mt-10">
-          <h2 className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-3)" }}>
-            Connected apps
-          </h2>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {integrations.map((i) => (
-              <div
-                key={i.id}
-                className="rounded-xl px-3 py-2.5"
-                style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}
-              >
-                <p className="text-sm" style={{ color: "var(--ink)" }}>
-                  {i.name}
-                </p>
-                <p className="mt-0.5 text-[11px]" style={{ color: i.connected ? "#10b981" : "var(--ink-3)" }}>
-                  {i.connected ? "Connected" : i.error ?? "Not connected"}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {recent.length > 0 && (
-        <section className="mt-10 pb-16">
-          <h2 className="text-xs uppercase tracking-wide" style={{ color: "var(--ink-3)" }}>
-            Recent
-          </h2>
-          <div className="mt-3 divide-y" style={{ borderColor: "var(--line)" }}>
-            {recent.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => router.push(`/assistant?id=${encodeURIComponent(c.id)}`)}
-                className="flex w-full items-center justify-between gap-4 py-3 text-left"
-              >
-                <span className="truncate text-sm" style={{ color: "var(--ink)" }}>
-                  {c.title}
-                </span>
-                <span className="shrink-0 text-xs" style={{ color: "var(--ink-3)" }}>
-                  {c.agent} · {relativeTime(c.updatedAt)}
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   )
 }
 
-function ThreadView({ agents, conversationId }: { agents: AgentDef[]; conversationId: string }) {
+function ThreadView({
+  agents,
+  roster,
+  conversationId,
+}: {
+  agents: AgentDef[]
+  roster: AgentRecord[]
+  conversationId: string
+}) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const pendingQuery = searchParams.get("q")
@@ -280,7 +198,6 @@ function ThreadView({ agents, conversationId }: { agents: AgentDef[]; conversati
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [detail, setDetail] = useState<ConversationDetail | null>(null)
   const [agent, setAgent] = useState<AgentDef>(agents[0] ?? AGENTS[0])
-  const [roster, setRoster] = useState<AgentRecord[]>([])
 
   const fetchConversations = useCallback(async () => {
     const res = await fetch("/api/conversations", { cache: "no-store" })
@@ -288,21 +205,20 @@ function ThreadView({ agents, conversationId }: { agents: AgentDef[]; conversati
     setConversations(Array.isArray(data) ? data : [])
   }, [])
 
-  const fetchDetail = useCallback(async (id: string) => {
-    const res = await fetch(`/api/conversations/${id}`, { cache: "no-store" })
-    if (!res.ok) return
-    const data = (await res.json()) as ConversationDetail
-    setDetail(data)
-    const match = AGENTS.concat(agents).find((a) => a.id === data.agent)
-    if (match) setAgent(match)
-  }, [agents])
+  const fetchDetail = useCallback(
+    async (id: string) => {
+      const res = await fetch(`/api/conversations/${id}`, { cache: "no-store" })
+      if (!res.ok) return
+      const data = (await res.json()) as ConversationDetail
+      setDetail(data)
+      const match = agents.find((a) => a.id === data.agent)
+      if (match) setAgent(match)
+    },
+    [agents],
+  )
 
   useEffect(() => {
     fetchConversations().catch(() => null)
-    fetch("/api/agents", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d: AgentRecord[]) => setRoster(Array.isArray(d) ? d : []))
-      .catch(() => null)
   }, [fetchConversations])
 
   useEffect(() => {
@@ -320,30 +236,27 @@ function ThreadView({ agents, conversationId }: { agents: AgentDef[]; conversati
   const initialMessages = useMemo(() => toInitialMessages(detail), [detail])
 
   return (
-    <div className="flex h-[calc(100vh-1rem)] min-h-0 gap-4 px-4 pb-4 pt-2">
-      <aside className="hidden w-60 shrink-0 flex-col md:flex">
+    <div className="flex h-full min-h-0">
+      {/* Conversations */}
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-[#f0f0f0] p-3 md:flex">
         <button
           type="button"
           onClick={() => router.push("/assistant")}
-          className="mb-3 flex items-center gap-2 rounded-xl px-3 py-2 text-sm"
-          style={{ border: "1px solid var(--line)", color: "var(--ink-2)" }}
+          className="mb-3 flex items-center gap-2 rounded-[10px] px-3 py-2 text-[13px] text-[#404040] hover:bg-[#f5f5f5]"
         >
           <Plus size={14} /> New chat
         </button>
-        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
           {conversations.map((c) => (
             <button
               key={c.id}
               type="button"
               onClick={() => router.push(`/assistant?id=${encodeURIComponent(c.id)}`)}
-              className="w-full rounded-xl px-3 py-2 text-left"
-              style={{
-                background: c.id === conversationId ? "var(--surface-2)" : "transparent",
-                color: "var(--ink)",
-              }}
+              className="w-full rounded-[10px] px-3 py-2 text-left"
+              style={{ background: c.id === conversationId ? "#f0f0f0" : "transparent" }}
             >
-              <p className="truncate text-sm">{c.title}</p>
-              <p className="text-[11px]" style={{ color: "var(--ink-3)" }}>
+              <p className="truncate text-[13px] text-[#262626]">{c.title}</p>
+              <p className="text-[11px] text-[#a3a3a3]">
                 {c.agent} · {relativeTime(c.updatedAt)}
               </p>
             </button>
@@ -351,33 +264,24 @@ function ThreadView({ agents, conversationId }: { agents: AgentDef[]; conversati
         </div>
       </aside>
 
-      <section
-        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl"
-        style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}
-      >
-        <div className="flex items-center justify-between gap-3 px-6 py-4" style={{ borderBottom: "1px solid var(--line)" }}>
-          <div className="min-w-0">
-            <h1 className="truncate text-base font-semibold" style={{ color: "var(--ink)" }}>
-              {detail?.title ?? "New chat"}
-            </h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => fetchDetail(conversationId).catch(() => null)}
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs"
-              style={{ color: "var(--ink-3)" }}
-            >
-              <RotateCcw size={12} /> Refresh
-            </button>
-            <AgentSelect agents={agents} value={agent} onChange={setAgent} />
-          </div>
+      {/* Chat */}
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex items-center justify-between px-6 py-3">
+          <h1 className="truncate text-[14px] font-medium text-[#111]">{detail?.title ?? "New chat"}</h1>
+          <button
+            type="button"
+            onClick={() => fetchDetail(conversationId).catch(() => null)}
+            className="rounded-full px-3 py-1.5 text-[12px] text-[#737373] hover:bg-[#f5f5f5]"
+          >
+            Refresh
+          </button>
         </div>
-
         <ChatThread
           key={`${conversationId}-${agent.id}-${detail?.messages.length ?? 0}`}
           conversationId={conversationId}
           agent={agent}
+          agents={agents}
+          onAgentChange={setAgent}
           initialMessages={initialMessages}
           pendingMessage={pending}
           onPendingSent={() => setPending(null)}
@@ -388,24 +292,34 @@ function ThreadView({ agents, conversationId }: { agents: AgentDef[]; conversati
         />
       </section>
 
-      <aside className="hidden w-64 shrink-0 flex-col xl:flex">
-        <p className="mb-3 text-xs uppercase tracking-wide" style={{ color: "var(--ink-3)" }}>
-          Team
-        </p>
-        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+      {/* Team */}
+      <aside className="hidden w-[300px] shrink-0 flex-col border-l border-[#f0f0f0] p-5 xl:flex">
+        <p className="text-[12px] font-medium uppercase tracking-wide text-[#a3a3a3]">Team</p>
+        <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto">
           {roster.map((a) => (
-            <div
+            <button
               key={a.id}
-              className="rounded-xl px-3 py-2.5"
-              style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}
+              type="button"
+              onClick={() => {
+                const match = agents.find((x) => x.id === a.id)
+                if (match) setAgent(match)
+              }}
+              className="w-full rounded-[14px] border border-[#ebebeb] p-3 text-left hover:bg-[#fafafa]"
             >
-              <p className="text-sm" style={{ color: a.accent }}>
+              <p className="text-[13px] font-medium text-[#111]">
                 {a.emoji} {a.name}
               </p>
-              <p className="mt-0.5 text-[11px]" style={{ color: "var(--ink-3)" }}>
-                {a.role}
-              </p>
-            </div>
+              <p className="mt-0.5 text-[12px] text-[#737373]">{a.role}</p>
+              {a.tags && a.tags.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {a.tags.slice(0, 3).map((t) => (
+                    <span key={t} className="rounded-full bg-[#f4f4f4] px-2 py-0.5 text-[11px] text-[#525252]">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </button>
           ))}
         </div>
       </aside>
@@ -416,14 +330,19 @@ function ThreadView({ agents, conversationId }: { agents: AgentDef[]; conversati
 function AssistantInner() {
   const searchParams = useSearchParams()
   const id = searchParams.get("id")
-  const agents = useAgents()
-  if (!id) return <HomeView agents={agents} />
-  return <ThreadView agents={agents} conversationId={id} />
+  const { agents, roster } = useAgents()
+  return (
+    <div className="p-2">
+      <div className="flex min-h-[calc(100vh-1rem)] flex-col overflow-hidden rounded-[18px] border border-[#ebebeb] bg-white text-[#404040] shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+        {id ? <ThreadView agents={agents} roster={roster} conversationId={id} /> : <HomeView agents={agents} />}
+      </div>
+    </div>
+  )
 }
 
 export default function AssistantPage() {
   return (
-    <Suspense fallback={<div className="flex h-screen items-center justify-center" style={{ color: "var(--ink-3)" }}>Loading…</div>}>
+    <Suspense fallback={<div className="flex h-screen items-center justify-center text-[#737373]">Loading…</div>}>
       <AssistantInner />
     </Suspense>
   )
