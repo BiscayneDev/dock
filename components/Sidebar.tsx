@@ -64,7 +64,7 @@ export function Sidebar() {
             ⚓
           </span>
           <span className="font-serif text-[16.5px]">
-            Shipyard <em style={{ color: "var(--ink-3)" }}>os</em>
+            Dock
           </span>
         </Link>
 
