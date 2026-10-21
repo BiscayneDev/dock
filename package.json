@@ -2,6 +2,7 @@
   "name": "dock",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "bin": {
     "dock": "bin/shipyard.js",
     "shipyard": "bin/shipyard.js"
