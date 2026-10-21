@@ -9,7 +9,7 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isSetup = pathname.startsWith("/setup")
 
-  if (isSetup) {
+  if (isSetup || pathname === "/login") {
     return <>{children}</>
   }
 

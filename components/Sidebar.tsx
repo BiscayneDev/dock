@@ -119,6 +119,19 @@ export function Sidebar() {
           <p className="mt-2 px-2.5 font-mono text-[10px]" style={{ color: "var(--ink-3)" }}>
             ⌘K Vic · ⌘P commands
           </p>
+          <button
+            type="button"
+            onClick={async () => {
+              const { createBrowserClient } = await import("@supabase/ssr")
+              const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+              await supabase.auth.signOut()
+              window.location.href = "/login"
+            }}
+            className="mt-2 w-full rounded-[8px] px-2.5 py-1.5 text-left text-[11.5px] hover:bg-white/5"
+            style={{ color: "var(--ink-3)" }}
+          >
+            Sign out
+          </button>
         </div>
       </aside>
 
