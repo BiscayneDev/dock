@@ -1,7 +1,7 @@
 /**
  * Inference Providers
  *
- * Provider-agnostic model access for Shipyard OS. Each provider is a thin
+ * Provider-agnostic model access for Dock. Each provider is a thin
  * factory over the Vercel AI SDK, configured from environment variables.
  *
  * Model references use the form `<provider>/<model-id>`, split on the FIRST

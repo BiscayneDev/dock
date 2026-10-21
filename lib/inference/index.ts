@@ -1,7 +1,7 @@
 /**
  * Inference Layer
  *
- * Provider-agnostic LLM calls for Shipyard OS, built on the Vercel AI SDK.
+ * Provider-agnostic LLM calls for Dock, built on the Vercel AI SDK.
  *
  * Model selection is per-agent and env-driven:
  *   AGENT_MODEL_VIC=anthropic/claude-sonnet-4-5

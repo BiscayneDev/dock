@@ -3,18 +3,18 @@ import Link from "next/link"
 import { ArrowRight, CheckCircle2, Code2, Layers3, Sparkles, Wallet, Zap } from "lucide-react"
 
 export const metadata: Metadata = {
-  title: "Shipwright | Shipyard",
+  title: "Shipwright | Dock",
   description: "Turn an API service into a working CLI + MCP server.",
   openGraph: {
-    title: "Shipwright | Shipyard",
+    title: "Shipwright | Dock",
     description: "Turn an API service into a working CLI + MCP server.",
     url: "/shipwright",
-    siteName: "Shipyard OS",
+    siteName: "Dock",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Shipwright | Shipyard",
+    title: "Shipwright | Dock",
     description: "Turn an API service into a working CLI + MCP server.",
   },
 }
@@ -157,7 +157,7 @@ export default function ShipwrightPage() {
             <h2 className="mt-2 text-2xl font-bold text-white">Three steps from API service to ship</h2>
           </div>
           <Link href="/dashboard" className="text-sm font-medium text-cyan-300 hover:text-cyan-200">
-            Back to Shipyard OS →
+            Back to Dock →
           </Link>
         </div>
 
@@ -212,7 +212,7 @@ export default function ShipwrightPage() {
               href="/dashboard"
               className="inline-flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900/70 px-4 py-2.5 text-sm font-semibold text-zinc-200 transition hover:border-violet-400/30 hover:text-white"
             >
-              Open Shipyard OS
+              Open Dock
             </Link>
             <Link
               href="/projects"

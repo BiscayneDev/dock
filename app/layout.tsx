@@ -13,7 +13,7 @@ const instrumentSerif = Instrument_Serif({
 })
 
 export const metadata: Metadata = {
-  title: "Shipyard OS",
+  title: "Dock",
   description: "The open-source Agent OS for solo founders",
   metadataBase: new URL("https://shipyard-teal.vercel.app"),
   keywords: [
@@ -26,16 +26,16 @@ export const metadata: Metadata = {
     "ai dashboard",
   ],
   openGraph: {
-    title: "Shipyard OS",
+    title: "Dock",
     description: "The open-source Agent OS for solo founders",
     url: "/os",
-    siteName: "Shipyard OS",
+    siteName: "Dock",
     type: "website",
     locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Shipyard OS",
+    title: "Dock",
     description: "The open-source Agent OS for solo founders",
   },
   other: {

@@ -530,7 +530,7 @@ function SailboatScene() {
                   letterSpacing: "-0.02em",
                 }}
               >
-                Shipyard OS
+                Dock
               </h1>
               <p
                 style={{
@@ -600,7 +600,7 @@ function SailboatScene() {
                 ))}
               </div>
               <p style={{ fontSize: 12, color: "#3f3f46", marginTop: 12, textAlign: "center" }}>
-                You define the agents — Shipyard OS runs them.
+                You define the agents — Dock runs them.
               </p>
             </div>
           )}
@@ -694,7 +694,7 @@ function SailboatScene() {
             <div>
               <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Connect OpenClaw</h2>
               <p style={{ color: "#a1a1aa", marginBottom: 32, lineHeight: 1.6 }}>
-                Shipyard OS runs on OpenClaw — your personal chief-of-staff agent runtime.
+                Dock runs on OpenClaw — your personal chief-of-staff agent runtime.
                 Each user connects their own Vic and keeps their own task threads, delivery target,
                 and workspace in sync.
               </p>
@@ -801,7 +801,7 @@ function SailboatScene() {
             <div>
               <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Connect Ollama</h2>
               <p style={{ color: "#a1a1aa", marginBottom: 32, lineHeight: 1.6 }}>
-                Point Shipyard OS at your local model server. Works with Ollama, LM Studio, or any OpenAI-compatible endpoint.
+                Point Dock at your local model server. Works with Ollama, LM Studio, or any OpenAI-compatible endpoint.
               </p>
 
               <label style={labelStyle}>Ollama URL</label>
@@ -890,7 +890,7 @@ function SailboatScene() {
                 Connect your channel
               </h2>
               <p style={{ color: "#a1a1aa", marginBottom: 32, lineHeight: 1.6 }}>
-                When Vic activates a task, Shipyard OS sends it to your personal delivery target
+                When Vic activates a task, Dock sends it to your personal delivery target
                 as a live turn. Connect the Telegram inbox you want Vic to use for this workspace.
               </p>
 
@@ -1002,7 +1002,7 @@ function SailboatScene() {
             <div>
               <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Agent Workspace</h2>
               <p style={{ color: "#a1a1aa", marginBottom: 32, lineHeight: 1.6 }}>
-                Where do your agent files live? This is where Shipyard OS reads memory, Scout
+                Where do your agent files live? This is where Dock reads memory, Scout
                 reports, and agent identities.
               </p>
 
@@ -1315,7 +1315,7 @@ function SailboatScene() {
               <div style={{ fontSize: 48, marginBottom: 16 }}>⚓</div>
               <h2 style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>You&apos;re all set.</h2>
               <p style={{ color: "#a1a1aa", marginBottom: 24, fontSize: 16 }}>
-                {state.userName ? `Welcome aboard, ${state.userName}.` : "Your Shipyard OS is ready."}
+                {state.userName ? `Welcome aboard, ${state.userName}.` : "Your Dock is ready."}
               </p>
 
               {/* Env status */}
@@ -1464,7 +1464,7 @@ function SailboatScene() {
                   padding: "14px 32px",
                 }}
               >
-                Launch Shipyard OS →
+                Launch Dock →
               </button>
             </div>
           )}

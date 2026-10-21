@@ -1,6 +1,6 @@
 # Adding a Custom Runtime
 
-Shipyard OS uses a pluggable runtime system. To add your own:
+Dock uses a pluggable runtime system. To add your own:
 
 ## 1. Create a runtime file
 

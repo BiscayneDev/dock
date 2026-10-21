@@ -1,7 +1,7 @@
 /**
  * Agent Runtime Interface
  *
- * Implement this interface to add a new runtime to Shipyard OS.
+ * Implement this interface to add a new runtime to Dock.
  * See openclaw.ts and ollama.ts for examples.
  */
 

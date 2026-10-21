@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og"
 
-export const alt = "Shipyard OS — The open-source Agent OS for solo founders"
+export const alt = "Dock — The open-source Agent OS for solo founders"
 export const size = { width: 1200, height: 630 }
 export const contentType = "image/png"
 export const runtime = "edge"
@@ -71,7 +71,7 @@ export default function OGImage() {
               display: "flex",
             }}
           >
-            Shipyard OS
+            Dock
           </div>
 
           {/* Tagline */}
@@ -132,7 +132,7 @@ export default function OGImage() {
             fontSize: 16,
           }}
         >
-          <span style={{ display: "flex" }}>github.com/BiscayneDev/shipyard-os</span>
+          <span style={{ display: "flex" }}>github.com/BiscayneDev/dock</span>
         </div>
       </div>
     ),

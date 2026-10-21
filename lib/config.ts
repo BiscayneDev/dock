@@ -10,13 +10,13 @@ try {
   const setup = JSON.parse(raw) as Record<string, string>
   if (setup.gatewayToken) {
     console.warn(
-      "[Shipyard OS] Gateway token found in data/setup.json — migrate to .env.local: OPENCLAW_GATEWAY_TOKEN=..."
+      "[Dock] Gateway token found in data/setup.json — migrate to .env.local: OPENCLAW_GATEWAY_TOKEN=..."
     )
     _setupTokenFallback = setup.gatewayToken
   }
   if (setup.anthropicAdminKey) {
     console.warn(
-      "[Shipyard OS] Anthropic admin key found in data/setup.json — migrate to .env.local: ANTHROPIC_ADMIN_KEY=..."
+      "[Dock] Anthropic admin key found in data/setup.json — migrate to .env.local: ANTHROPIC_ADMIN_KEY=..."
     )
   }
 } catch {

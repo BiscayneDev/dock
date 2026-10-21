@@ -91,7 +91,7 @@ export async function startConnect(origin: string): Promise<ConnectStart> {
   const redirectUri = `${origin}/api/paybox/connect/callback`
   const clientId = await registerClient(
     meta,
-    process.env.PAYBOX_CLIENT_NAME ?? "Shipyard OS",
+    process.env.PAYBOX_CLIENT_NAME ?? "Dock",
     redirectUri,
   )
   const { verifier, challenge } = pkce()

@@ -1,5 +1,5 @@
 /**
- * Buoy (ship-credits) client — Shipyard OS is a Buoy "platform" embed.
+ * Buoy (ship-credits) client — Dock is a Buoy "platform" embed.
  *
  * Env:
  *   BUOY_CREDITS_URL    base URL of the buoy-credits HTTP API (e.g. http://localhost:8787)

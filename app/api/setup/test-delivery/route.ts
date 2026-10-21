@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      await runtime.testDelivery(channel, target, "👋 Shipyard OS setup — connection test successful!")
+      await runtime.testDelivery(channel, target, "👋 Dock setup — connection test successful!")
       return NextResponse.json({ ok: true })
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : "Failed to send message"
