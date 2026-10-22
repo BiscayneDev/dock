@@ -14,6 +14,8 @@
 
 import { generateText, streamText } from "ai"
 import { buildModel, type ResolvedModel } from "./providers"
+import type { ShipyardCapture } from "./shipyard-capture"
+import type { RunModelCall, RunTelemetry } from "@/lib/conversations"
 
 export { buildModel, parseModelRef, listConfiguredProviders } from "./providers"
 export type { ResolvedModel, ProviderKey } from "./providers"
@@ -29,10 +31,10 @@ export function resolveModelRef(agent?: string): string | null {
 }
 
 /** Resolve a LanguageModel for an agent. Null = use the AgentRuntime pipeline. */
-export function resolveModel(agent?: string): ResolvedModel | null {
+export function resolveModel(agent?: string, capture?: ShipyardCapture): ResolvedModel | null {
   const ref = resolveModelRef(agent)
   if (!ref) return null
-  const resolved = buildModel(ref)
+  const resolved = buildModel(ref, capture)
   if (!resolved) {
     console.warn(`[inference] Unrecognized model reference '${ref}' — expected provider/model-id`)
     return null
@@ -73,22 +75,64 @@ export async function inferenceChat({ message, agent, system }: InferenceChatPar
 
 /**
  * Streamed generation through the inference layer.
- * Returns an async iterable of text deltas, or null when no model is
- * configured (caller falls back to the AgentRuntime pipeline).
+ * Returns the streamText result (consume `textStream`, then await `steps`
+ * for per-call usage), or null when no model is configured (caller falls
+ * back to the AgentRuntime pipeline).
  */
 export async function inferenceStream({
   message,
   agent,
   system,
   override,
-}: InferenceChatParams & { override?: ResolvedModel | null }): Promise<AsyncIterable<string> | null> {
+}: InferenceChatParams & { override?: ResolvedModel | null }) {
   // A per-request override (chosen in the composer) wins over the agent default.
   const resolved = override ?? resolveModel(agent)
   if (!resolved) return null
-  const result = streamText({
+  return streamText({
     model: resolved.model,
     prompt: message,
     ...(system ? { system } : {}),
   })
-  return result.textStream
+}
+
+/** Minimal shape of an AI SDK step we need for telemetry. */
+interface TelemetryStep {
+  usage: { inputTokens?: number; outputTokens?: number }
+  response: { modelId?: string }
+}
+
+function sumOrNull(values: Array<number | null>): number | null {
+  if (values.length === 0 || values.some((v) => v === null)) return null
+  return values.reduce<number>((total, v) => total + (v as number), 0)
+}
+
+/**
+ * Pair each AI SDK step (tokens, from the SDK result) with the Shipyard HTTP
+ * call captured for it (cost, timing). Steps and HTTP calls are issued in
+ * order, so index pairing holds. Totals are null whenever any call is unknown.
+ */
+export function collectRunTelemetry(
+  steps: TelemetryStep[],
+  capture: ShipyardCapture | null,
+): RunTelemetry | null {
+  if (steps.length === 0) return null
+  const calls: RunModelCall[] = steps.map((step, index) => {
+    const http = capture?.calls[index] ?? null
+    return {
+      index,
+      model: http?.model ?? step.response?.modelId ?? null,
+      provider: http?.provider ?? null,
+      startedAt: http?.startedAt ?? null,
+      endedAt: http?.endedAt ?? null,
+      inputTokens: typeof step.usage?.inputTokens === "number" ? step.usage.inputTokens : null,
+      outputTokens: typeof step.usage?.outputTokens === "number" ? step.usage.outputTokens : null,
+      costUsd: http?.costUsd ?? null,
+    }
+  })
+  return {
+    calls,
+    inputTokens: sumOrNull(calls.map((c) => c.inputTokens)),
+    outputTokens: sumOrNull(calls.map((c) => c.outputTokens)),
+    costUsd: sumOrNull(calls.map((c) => c.costUsd)),
+  }
 }

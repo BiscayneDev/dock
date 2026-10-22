@@ -26,6 +26,27 @@ export interface ConversationMessage {
   runId?: string
 }
 
+/** One model call (HTTP request) inside a run. Numbers and names only. */
+export interface RunModelCall {
+  index: number
+  model: string | null
+  provider: string | null
+  startedAt: string | null
+  endedAt: string | null
+  inputTokens: number | null
+  outputTokens: number | null
+  /** USD from the Shipyard gateway. Null = not reported (e.g. BYO-key providers). */
+  costUsd: number | null
+}
+
+export interface RunTelemetry {
+  calls: RunModelCall[]
+  /** Sums over calls; null when any call is unknown. */
+  inputTokens: number | null
+  outputTokens: number | null
+  costUsd: number | null
+}
+
 export interface ConversationRun {
   id: string
   conversationId: string
@@ -36,6 +57,8 @@ export interface ConversationRun {
   completedAt?: string
   taskId?: string
   error?: string
+  /** Per-call tokens and cost. Absent on legacy runs. */
+  telemetry?: RunTelemetry
 }
 
 export interface ConversationEvent {
@@ -393,7 +416,7 @@ export async function startRun(
 export async function finishRun(
   conversationId: string,
   runId: string,
-  input: { status: "completed" | "failed"; error?: string }
+  input: { status: "completed" | "failed"; error?: string; telemetry?: RunTelemetry }
 ): Promise<ConversationRun | null> {
   const conversation = await getConversation(conversationId)
   if (!conversation) return null
@@ -407,6 +430,7 @@ export async function finishRun(
       status: input.status,
       completedAt: now,
       error: input.error,
+      telemetry: input.telemetry ?? run.telemetry,
     }
     return finalRun
   })

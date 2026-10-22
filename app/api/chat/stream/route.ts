@@ -3,6 +3,7 @@ import { randomUUID } from "crypto"
 import { runtime } from "@/lib/runtime"
 import {
   buildModel,
+  collectRunTelemetry,
   inferenceStream,
   listConfiguredProviders,
   parseModelRef,
@@ -10,6 +11,7 @@ import {
   type ResolvedModel,
 } from "@/lib/inference"
 import { appendEvent, appendMessage, ensureConversation, finishRun, startRun } from "@/lib/conversations"
+import { createShipyardCapture } from "@/lib/inference/shipyard-capture"
 
 interface IncomingMessage {
   id?: string
@@ -53,6 +55,9 @@ export async function POST(request: Request) {
     return new Response("Message is required", { status: 400 })
   }
 
+  // Per-call cost capture for Shipyard models (telemetry only; see shipyard-capture.ts).
+  const capture = createShipyardCapture()
+
   // Per-message model override. Absent keeps the agent default exactly as before.
   // Fail closed: the provider must be configured on this server and the model must build.
   let override: ResolvedModel | null = null
@@ -65,7 +70,7 @@ export async function POST(request: Request) {
     if (!providerOk) {
       return Response.json({ error: "Model provider is not configured on this server" }, { status: 400 })
     }
-    override = buildModel(ref)
+    override = buildModel(ref, capture)
     if (!override) {
       return Response.json({ error: "Model could not be built" }, { status: 400 })
     }
@@ -77,7 +82,7 @@ export async function POST(request: Request) {
     taskId,
   })
 
-  const resolvedModel = override ?? resolveModel(agent)
+  const resolvedModel = override ?? resolveModel(agent, capture)
 
   const run = await startRun(conversationId, {
     agent,
@@ -117,12 +122,19 @@ export async function POST(request: Request) {
       try {
         let reply = ""
 
-        const textStream = await inferenceStream({ message: prompt, agent, override })
-        if (textStream) {
+        const result = await inferenceStream({ message: prompt, agent, override: resolvedModel })
+        let telemetry: ReturnType<typeof collectRunTelemetry> = null
+        if (result) {
           // Real token streaming through the inference layer
-          for await (const delta of textStream) {
+          for await (const delta of result.textStream) {
             reply += delta
             writer.write({ type: "text-delta", id: textId, delta })
+          }
+          // Per-call usage from the SDK; cost from the Shipyard capture. Fail open.
+          try {
+            telemetry = collectRunTelemetry(await result.steps, capture)
+          } catch {
+            telemetry = null
           }
         } else {
           // Fall back to the AgentRuntime pipeline (chunked fake streaming)
@@ -150,7 +162,7 @@ export async function POST(request: Request) {
           agent,
           summary: `${agent} replied in streamed chat`,
         })
-        await finishRun(conversationId, run.id, { status: "completed" })
+        await finishRun(conversationId, run.id, { status: "completed", telemetry: telemetry ?? undefined })
         await appendEvent(conversationId, {
           type: "run.completed",
           runId: run.id,

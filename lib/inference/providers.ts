@@ -21,6 +21,7 @@ import { createAnthropic } from "@ai-sdk/anthropic"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createOllama } from "ai-sdk-ollama"
 import { OLLAMA_BASE_URL } from "../config"
+import { createCapturingFetch, type ShipyardCapture } from "./shipyard-capture"
 
 export type ProviderKey = "anthropic" | "nous" | "ollama" | "shipyard"
 
@@ -65,17 +66,23 @@ function ollamaModel(modelId: string): LanguageModel {
   return ollama(modelId)
 }
 
-function shipyardModel(modelId: string): LanguageModel {
+function shipyardModel(modelId: string, capture?: ShipyardCapture): LanguageModel {
   // Shipyard Inference gateway — OpenAI-compatible front door to the Router
   // (cost-routing, failover, x402 payments, telemetry).
+  // With a capture sink, the fetch records per-call cost from x_shipyard and
+  // x-shipyard-* headers without changing the bytes the SDK sees.
+  const baseURL = process.env.SHIPYARD_INFERENCE_URL ?? "http://127.0.0.1:8787/v1"
   const shipyard = createOpenAI({
     apiKey: process.env.SHIPYARD_INFERENCE_API_KEY ?? "dev-key",
-    baseURL: process.env.SHIPYARD_INFERENCE_URL ?? "http://127.0.0.1:8787/v1",
+    baseURL,
+    ...(capture ? { fetch: createCapturingFetch(baseURL, capture) } : {}),
   })
   return shipyard.chat(modelId)
 }
 
-const factories: Record<ProviderKey, (modelId: string) => LanguageModel> = {
+type Factory = (modelId: string, capture?: ShipyardCapture) => LanguageModel
+
+const factories: Record<ProviderKey, Factory> = {
   anthropic: anthropicModel,
   nous: nousModel,
   ollama: ollamaModel,
@@ -103,11 +110,11 @@ export function isProviderKey(value: string): value is ProviderKey {
 }
 
 /** Build a resolved model from a `provider/model-id` reference. */
-export function buildModel(ref: string): ResolvedModel | null {
+export function buildModel(ref: string, capture?: ShipyardCapture): ResolvedModel | null {
   const parsed = parseModelRef(ref)
   if (!parsed || !isProviderKey(parsed.provider)) return null
   return {
-    model: factories[parsed.provider](parsed.modelId),
+    model: factories[parsed.provider](parsed.modelId, capture),
     label: ref,
     provider: parsed.provider,
     modelId: parsed.modelId,
