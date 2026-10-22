@@ -29,6 +29,39 @@ export interface ApprovalEventInput {
 
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "closed"
 
+/** Route preview stored on approval_requested (lib/route-preview.ts). Null fields mean the gateway did not say. */
+export interface ApprovalRouteView {
+  model: string
+  provider: string
+  tier: string | null
+  estimatedCostUsd: number | null
+  estimateBasis: string
+  routeId: string
+  jevConfidence: number | null
+  previewedAt: string | null
+}
+
+export interface RouteRow {
+  label: string
+  value: string
+  mono: boolean
+}
+
+/** Reason codes from lib/route-preview.ts, in words for the card. */
+export const ROUTE_REASON_LABEL: Record<string, string> = {
+  not_configured: "route preview is not set up",
+  timeout: "preview timed out",
+  network_error: "gateway could not be reached",
+  unauthorized: "preview key was rejected",
+  bad_request: "preview request was rejected",
+  no_capable_model: "no model can serve this request",
+  rate_limited: "preview is rate limited",
+  http_error: "gateway returned an error",
+  bad_response: "gateway reply was not understood",
+  model_chosen: "you chose the model",
+  preview_error: "preview failed",
+}
+
 export interface ApprovalCardView {
   runId: string
   actionId: string
@@ -40,6 +73,13 @@ export interface ApprovalCardView {
   target: string
   model: string
   modelReason: string
+  /** The route Jev picked. Null when the preview did not run or failed; routeReason then says why. */
+  route: ApprovalRouteView | null
+  routeReason: string | null
+  /** Rows for the model and route section of the card (model picked, tier, cost). */
+  routeRows: RouteRow[]
+  /** Plain-words line explaining the model cost estimate. Null when there is no route. */
+  routeBasis: string | null
   estimatedCents: number | null
   estimatedLabel: string
   budgetLabel: string
@@ -73,6 +113,54 @@ function text(value: unknown, max: number): string | null {
 
 function num(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null
+}
+
+/** Dollar label for a model cost estimate. Null (unpriced model) is never shown as $0. */
+export function formatUsd(usd: number | null | undefined): string {
+  if (typeof usd !== "number" || !Number.isFinite(usd) || usd < 0) return "no dollar estimate"
+  return usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`
+}
+
+/** Parses the route stored on an approval event. Anything malformed is treated as no route. */
+export function parseApprovalRoute(value: unknown): ApprovalRouteView | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null
+  const r = value as Record<string, unknown>
+  const model = text(r.model, 200)
+  const provider = text(r.provider, 200)
+  const routeId = text(r.routeId, 100)
+  if (!model || !provider || !routeId) return null
+  const cost = r.estimatedCostUsd === null || r.estimatedCostUsd === undefined ? null : num(r.estimatedCostUsd)
+  return {
+    model,
+    provider,
+    tier: text(r.tier, 40),
+    estimatedCostUsd: cost,
+    estimateBasis: text(r.estimateBasis, 1000) ?? "",
+    routeId,
+    jevConfidence: num(r.jevConfidence),
+    previewedAt: text(r.previewedAt, 40),
+  }
+}
+
+/** Rows and plain-words basis for the model section. Pure, so the node tests check exactly what renders. */
+export function routeSection(
+  route: ApprovalRouteView | null,
+  routeReason: string | null,
+): { rows: RouteRow[]; basis: string | null } {
+  if (!route) {
+    const reason = routeReason ? (ROUTE_REASON_LABEL[routeReason] ?? UNKNOWN) : UNKNOWN
+    return { rows: [{ label: "Model Jev picked", value: `Model not previewed (${reason})`, mono: false }], basis: null }
+  }
+  const rows: RouteRow[] = [
+    { label: "Model Jev picked", value: `${route.model} via ${route.provider}`, mono: true },
+    { label: "Tier", value: route.tier ?? UNKNOWN, mono: false },
+    { label: "Model cost (estimate)", value: formatUsd(route.estimatedCostUsd), mono: false },
+  ]
+  const basis =
+    route.estimatedCostUsd === null
+      ? `${route.model} has no listed price, so the gateway gives no dollar figure for this call.`
+      : `Estimated from the request length and ${route.model}'s listed price. Real output length, retries and cache hits are not counted.`
+  return { rows, basis }
 }
 
 /** Only https URLs are shown as a preview. Anything else falls back to the 'No preview yet' state. */
@@ -150,6 +238,9 @@ export function buildApprovalCards(
     const budgetCents = num(d.budgetCents) ?? (Number.isFinite(run.budgetCents) ? run.budgetCents : null)
     const projectId = (typeof d.projectId === "string" ? d.projectId : null) ?? run.projectId
     const model = text(d.model, 200) ?? text(run.model, 200)
+    const route = parseApprovalRoute(d.route)
+    const routeReason = text(d.routeReason, 40)
+    const section = routeSection(route, routeReason)
 
     cards.push({
       runId: run.id,
@@ -160,6 +251,10 @@ export function buildApprovalCards(
       target: text(d.target, 200) ?? text(d.destination, 200) ?? UNKNOWN,
       model: model ?? UNKNOWN,
       modelReason: text(d.modelReason, 200) ?? text(run.payload.modelReason, 200) ?? UNKNOWN,
+      route,
+      routeReason,
+      routeRows: section.rows,
+      routeBasis: section.basis,
       estimatedCents,
       estimatedLabel: formatCents(estimatedCents),
       budgetLabel: formatCents(budgetCents),

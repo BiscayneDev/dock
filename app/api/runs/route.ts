@@ -4,6 +4,7 @@ import { enqueueRun, listEventsForRuns, listRuns } from "@/lib/queue"
 import { ownerHasOnlineDevice } from "@/lib/devices"
 import { buildModel, parseModelRef, resolveModelRef, listConfiguredProviders } from "@/lib/inference"
 import { createShipyardCapture } from "@/lib/inference/shipyard-capture"
+import { SHIPYARD_AUTO_MODEL } from "@/lib/route-preview"
 import { RUN_TARGETS, type RunTarget } from "@/lib/task-runs"
 import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
@@ -119,6 +120,10 @@ export async function POST(request: Request) {
     }
     model = ref
     modelReason = "Chosen in the composer for this message"
+  } else if (listConfiguredProviders().some((p) => p.provider === "shipyard" && p.configured)) {
+    // Default: the gateway's Jev picks the model per call. The approval card shows what it picked.
+    model = SHIPYARD_AUTO_MODEL
+    modelReason = "Jev picks the model for each call (auto)"
   } else {
     model = resolveModelRef(agentKey)
     modelReason = "Agent default (no model chosen in the composer)"

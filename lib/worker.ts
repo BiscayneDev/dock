@@ -4,6 +4,12 @@ import { buildModel, collectRunTelemetry, resolveModel } from "@/lib/inference"
 import { createShipyardCapture } from "@/lib/inference/shipyard-capture"
 import { chiefKey, recordRunOutcome } from "@/lib/briefs-store"
 import { captureApprovalPreview } from "@/lib/approval-preview"
+import {
+  approvalRouteFields,
+  previewRoute,
+  SHIPYARD_AUTO_MODEL,
+  type RouteMessage,
+} from "@/lib/route-preview"
 import { previewTargetFromRun } from "@/lib/preview-guard"
 import { buildChiefPrompt, loadProfile, loadRules, loadVentureProfile } from "@/lib/onboarding-server"
 import {
@@ -85,6 +91,26 @@ async function finish(
   return status === "succeeded" ? "succeeded" : `${status}:${detail.error ?? ""}`
 }
 
+/**
+ * Route preview for an approval: which model Jev would pick, and what that call would cost, for the same messages
+ * the run would send. Informational only: it never blocks or changes the gate. Never throws.
+ */
+async function routeForApproval(admin: SupabaseClient, run: TaskRun) {
+  try {
+    if (run.model !== SHIPYARD_AUTO_MODEL) return approvalRouteFields({ ok: false, reason: "model_chosen" })
+    const prompt = typeof run.payload.prompt === "string" ? run.payload.prompt : ""
+    if (!prompt.trim()) return approvalRouteFields({ ok: false, reason: "preview_error" })
+    const system = run.agentKey === (await chiefKey(admin, run.workspaceId)) ? await chiefPromptFor(admin, run) : null
+    const messages: RouteMessage[] = [
+      ...(system ? [{ role: "system" as const, content: system }] : []),
+      { role: "user" as const, content: prompt },
+    ]
+    return approvalRouteFields(await previewRoute(messages))
+  } catch {
+    return approvalRouteFields({ ok: false, reason: "preview_error" })
+  }
+}
+
 /** Works one claimed run. Returns a short outcome label for the tick summary. */
 export async function processRun(admin: SupabaseClient, run: TaskRun, opts: TickOptions): Promise<string> {
   const workerId = opts.workerId
@@ -104,6 +130,8 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
       runId: run.id,
       target: previewTargetFromRun(run.payload, a.destination),
     })
+    // Model route preview (Shipyard /v1/route). Bounded to 5s; a failure is stored as routeReason, never blocks.
+    const routeFields = await routeForApproval(admin, run)
     await addEvent(admin, run.id, EVENT.approvalRequested, {
       actionId: a.id,
       type: a.type,
@@ -117,6 +145,7 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
       budgetCents: run.budgetCents,
       model: run.model,
       modelReason: typeof run.payload.modelReason === "string" ? run.payload.modelReason : null,
+      ...routeFields,
       projectId: run.projectId,
       conversationId: typeof run.payload.conversationId === "string" ? run.payload.conversationId : null,
       // Only the capture step sets these. A screenshotUrl supplied by the agent payload is ignored.
@@ -175,11 +204,15 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
       abortSignal: AbortSignal.timeout(Math.min(remaining, 150_000)),
     })
     const telemetry = collectRunTelemetry(result.steps, capture)
+    // The model the gateway actually served (x-shipyard-model header, read by the capture). Null if not Shipyard.
+    const served = capture.calls[capture.calls.length - 1]
     const reportedCents = centsFromUsd(telemetry?.costUsd)
     // Unknown cost (e.g. BYO-key providers report none) is charged the estimate, so the cap still bites.
     const costCents = reportedCents ?? estimate
     await addEvent(admin, run.id, EVENT.modelCall, {
       model: model.label,
+      servedModel: served?.model ?? null,
+      servedProvider: served?.provider ?? null,
       inputTokens: telemetry?.inputTokens ?? null,
       outputTokens: telemetry?.outputTokens ?? null,
       costCents,

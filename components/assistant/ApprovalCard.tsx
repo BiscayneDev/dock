@@ -152,11 +152,24 @@ export function ApprovalCard({ card, onDecided }: { card: ApprovalCardView; onDe
       <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
         <Field label="Target" value={card.target} mono />
         <Field label="Project" value={card.projectName} />
-        <Field label="Model" value={card.model} mono />
-        <Field label="Why this model" value={card.modelReason} />
+        {card.routeRows.map((row) => (
+          <Field key={row.label} label={row.label} value={row.value} mono={row.mono} />
+        ))}
         <Field label="Estimated cost" value={card.estimatedLabel} />
         <Field label="Run budget" value={card.budgetLabel} />
       </dl>
+
+      {card.routeBasis && (
+        <div className="flex flex-col gap-1 text-[12px]" style={{ color: "var(--ink-3)" }}>
+          <p>{card.routeBasis}</p>
+          {card.route?.estimateBasis && (
+            <details>
+              <summary className="cursor-pointer">Full estimate basis</summary>
+              <p className="mt-1 break-words">{card.route.estimateBasis}</p>
+            </details>
+          )}
+        </div>
+      )}
 
       {error && (
         <p className="text-[13px]" style={{ color: "#f87171" }} role="alert">
