@@ -14,6 +14,7 @@ import {
   proposedActionFromPayload,
 } from "@/lib/task-runs"
 import { allowedDeviceCompletion, deviceWorkerId, DEVICE_COMPLETE_STATUSES } from "@/lib/device-rules"
+import { modeForRun, PLAN_MODE_INSTRUCTION } from "@/lib/tool-permissions"
 
 // Home-node run actions (P2). The device holds the lease; the server does the model call and the bookkeeping,
 // so cloud and home runs share one budget ledger (task_runs.spent_cents) and one money gate.
@@ -62,13 +63,16 @@ export async function inferForDevice(
   const model = run.model ? buildModel(run.model, capture) : resolveModel(run.agentKey, capture)
   if (!model) return { ok: false, status: 409, error: "no model configured" }
   const system = run.agentKey === CHIEF_RUNTIME_AGENT ? await chiefPromptFor(admin, run) : null
+  // Same plan-mode gate as the cloud worker: kanban state forbids file/command tools in plan mode.
+  const planMode = modeForRun(run.payload) === "plan"
+  const effectiveSystem = [system, planMode ? PLAN_MODE_INSTRUCTION : null].filter(Boolean).join("\n\n") || null
 
   const remainingMs = 150_000
   try {
     const result = await generateText({
       model: model.model,
       prompt,
-      ...(system ? { system } : {}),
+      ...(effectiveSystem ? { system: effectiveSystem } : {}),
       abortSignal: AbortSignal.timeout(remainingMs),
     })
     const telemetry = collectRunTelemetry(result.steps, capture)

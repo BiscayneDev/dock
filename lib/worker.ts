@@ -36,6 +36,7 @@ import {
   type MoneyExecutor,
 } from "@/lib/task-runs"
 import { checkpointData, continuationPrompt } from "@/lib/run-resume"
+import { modeForRun, PLAN_MODE_INSTRUCTION } from "@/lib/tool-permissions"
 
 // Cloud worker runner (P2). Each tick claims up to N runs and works them in order within a time budget.
 // Rules: money actions are gated before any model call; every model call is budget-checked and metered.
@@ -213,12 +214,18 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
 
   const system = run.agentKey === (await chiefKey(admin, run.workspaceId)) ? await chiefPromptFor(admin, run) : null
 
+  // Kanban state gates permissions: plan mode forbids file/command tools in the system prompt and
+  // marks the output as a plan (enrichment), never a finished deliverable.
+  const mode = modeForRun(run.payload)
+  const isPlan = mode === "plan"
+  const effectiveSystem = [system, isPlan ? PLAN_MODE_INSTRUCTION : null].filter(Boolean).join("\n\n") || null
+
   await heartbeat(admin, run.id, workerId, DEFAULT_LEASE_SECONDS)
   try {
     const result = await generateText({
       model: model.model,
       prompt: effectivePrompt,
-      ...(system ? { system } : {}),
+      ...(effectiveSystem ? { system: effectiveSystem } : {}),
       abortSignal: AbortSignal.timeout(Math.min(remaining, 150_000)),
     })
     const telemetry = collectRunTelemetry(result.steps, capture)
@@ -238,6 +245,15 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
     })
     if (reportedCents === null) await addEvent(admin, run.id, EVENT.costUnknown, { chargedCents: costCents })
     await addSpend(admin, run, workerId, costCents)
+    // Plan mode: the output is enrichment on the task, not a finished deliverable.
+    if (isPlan) {
+      const { error: payloadError } = await admin
+        .from("task_runs")
+        .update({ payload: { ...run.payload, mode: "plan", planOutput: true }, updated_at: new Date().toISOString() })
+        .eq("id", run.id)
+      // Never fails the run: the output is already stored.
+      void payloadError
+    }
     // Checkpoint BEFORE finishing: if the run is retried (lease loss, retry after failure),
     // resumePlan reads this and the next attempt continues from the prior output.
     // Wrapped as { step, snapshot } so resumePlan's step/snapshot shape matches.
