@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { adminClient } from "@/lib/tenancy"
+import { adminClient, agentTokenWorkspace } from "@/lib/tenancy"
 import { isUuid } from "@/lib/assistant-store"
 import { authenticateDevice, heldRun, touchDevice } from "@/lib/devices"
 import { addEvent, getRun, listEvents, markRunning } from "@/lib/queue"
@@ -19,9 +19,18 @@ export async function GET(request: Request, context: Context) {
   if (!isUuid(id)) return NextResponse.json({ error: "Run not found" }, { status: 404 })
   const session = await assistantContext()
   let client
+  let tokenWorkspaceId: string | null = null
   if (session) {
     client = session.supabase
   } else if (agentTokenAuthorized(request)) {
+    const tokenWs = await agentTokenWorkspace()
+    if (tokenWs === "forbidden") {
+      return NextResponse.json(
+        { error: "agent token auth requires a single-workspace deployment" },
+        { status: 403 },
+      )
+    }
+    tokenWorkspaceId = tokenWs.workspaceId
     client = adminClient()
   } else {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -29,6 +38,9 @@ export async function GET(request: Request, context: Context) {
   try {
     const run = await getRun(client, id)
     if (!run) return NextResponse.json({ error: "Run not found" }, { status: 404 })
+    if (tokenWorkspaceId && run.workspaceId !== tokenWorkspaceId) {
+      return NextResponse.json({ error: "Run not found" }, { status: 404 })
+    }
     return NextResponse.json({ events: await listEvents(client, id) })
   } catch {
     return NextResponse.json({ error: "Events lookup failed" }, { status: 500 })

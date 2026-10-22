@@ -3,7 +3,7 @@ import { assistantContext, isUuid, projectInWorkspace } from "@/lib/assistant-st
 import { enqueueRun, listEventsForRuns, listRuns } from "@/lib/queue"
 import { ownerHasOnlineDevice } from "@/lib/devices"
 import { agentTokenAuthorized } from "@/lib/agent-auth"
-import { adminClient } from "@/lib/tenancy"
+import { adminClient, agentTokenWorkspace } from "@/lib/tenancy"
 import { buildModel, parseModelRef, resolveModelRef, listConfiguredProviders } from "@/lib/inference"
 import { createShipyardCapture } from "@/lib/inference/shipyard-capture"
 import { SHIPYARD_AUTO_MODEL } from "@/lib/route-preview"
@@ -25,18 +25,22 @@ function maxBudgetCents(): number {
 /**
  * Browser session first (existing behavior); machine clients (DOCK_AGENT_TOKEN
  * bearer) fall back to the service-role client acting as the first workspace's
- * owner — headless single-tenant deployments.
+ * owner — but only in single-workspace deployments. Multi-workspace installs
+ * reject agent-token auth (fail closed) instead of binding to the first workspace.
  */
-async function resolveContext(request: Request) {
+export async function resolveContext(request: Request) {
   const ctx = await assistantContext()
   if (ctx) return ctx
   if (!agentTokenAuthorized(request)) return null
+  const tokenWs = await agentTokenWorkspace()
+  if (tokenWs === "forbidden") {
+    return { forbidden: true } as const
+  }
   const admin = adminClient()
   const { data: ws } = await admin
     .from("workspaces")
     .select("id, owner_id")
-    .order("created_at", { ascending: true })
-    .limit(1)
+    .eq("id", tokenWs.workspaceId)
     .maybeSingle()
   if (!ws) return null
   return { supabase: admin, userId: ws.owner_id as string, workspaceId: ws.id as string }
@@ -46,6 +50,12 @@ async function resolveContext(request: Request) {
 export async function GET(request: Request) {
   const ctx = await resolveContext(request)
   if (!ctx) return NextResponse.json({ error: "Sign in required" }, { status: 401 })
+  if ("forbidden" in ctx) {
+    return NextResponse.json(
+      { error: "agent token auth requires a single-workspace deployment" },
+      { status: 403 },
+    )
+  }
   const runs = await listRuns(ctx.supabase, 50)
   const events = await listEventsForRuns(
     ctx.supabase,
@@ -64,6 +74,12 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const ctx = await resolveContext(request)
   if (!ctx) return NextResponse.json({ error: "Sign in required" }, { status: 401 })
+  if ("forbidden" in ctx) {
+    return NextResponse.json(
+      { error: "agent token auth requires a single-workspace deployment" },
+      { status: 403 },
+    )
+  }
 
   let body: Record<string, unknown>
   try {

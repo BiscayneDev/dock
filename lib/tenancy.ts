@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 import type { User } from "@supabase/supabase-js"
 import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
+import { tokenScoping } from "@/lib/token-scoping"
 
 // Tenancy helpers (P1). Session client = the signed-in user, RLS applies.
 // Admin client = service role, bypasses RLS; server-only, never sent to browsers.
@@ -53,6 +54,25 @@ export async function currentUser(supabase: SupabaseClient): Promise<User | null
 
 export function hashToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex")
+}
+
+/**
+ * Workspace binding for DOCK_AGENT_TOKEN machine clients. Superuser behavior is
+ * kept for single-tenant (single-workspace) deployments; multi-workspace
+ * deployments fail closed ("forbidden") instead of binding to the first
+ * workspace. Returns "forbidden" also when no workspace exists at all.
+ */
+export async function agentTokenWorkspace(): Promise<{ workspaceId: string } | "forbidden"> {
+  const admin = adminClient()
+  const { count, error } = await admin.from("workspaces").select("id", { count: "exact", head: true })
+  if (error || tokenScoping(count ?? Number.NaN) === "reject") return "forbidden"
+  const { data: ws } = await admin
+    .from("workspaces")
+    .select("id, owner_id")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  return ws ? { workspaceId: ws.id as string } : "forbidden"
 }
 
 export function newInviteToken(): string {
