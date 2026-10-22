@@ -19,8 +19,16 @@ const SIGNED_IN_PATHS = ["/api/invites/redeem"]
 // memory and chat are still file-based and single-owner, so they stay owner-only until moved.
 const BETA_PATHS = ["/onboarding", "/assistant", "/api/onboarding", "/api/workspace", "/api/invites/redeem"]
 
+// Home-node device routes authenticate per-route with the device bearer token and never accept a session.
+// Exact paths only: /api/devices (list, create) and DELETE /api/devices/[id] stay behind the session gate.
+const DEVICE_BEARER_PATTERNS = [
+  /^\/api\/devices\/(heartbeat|claim|infer|pair)$/,
+  /^\/api\/runs\/[^/]+\/(events|complete)$/,
+]
+
 function isPublic(pathname: string): boolean {
   if (PUBLIC_EXACT_PATHS.includes(pathname)) return true
+  if (DEVICE_BEARER_PATTERNS.some((re) => re.test(pathname))) return true
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
 }
 
