@@ -5,10 +5,11 @@ import { createServerClient } from "@supabase/ssr"
 // - sign-in itself
 // - agent callbacks: OpenClaw agents curl these with no login (pre-existing, see docs)
 // - PayBox OAuth callback: redirected here by PayBox
+// - Worker tick: Vercel Cron, authenticated per-route with CRON_SECRET (fails closed, app/api/worker/tick)
 // Agent callbacks (POST) are authenticated per-route with DOCK_AGENT_TOKEN (lib/agent-auth.ts).
 // /api/notify is exact-match only: /api/notify/stream and /api/notify/recent are browser
 // routes and must stay behind the session gate.
-const PUBLIC_PATHS = ["/login", "/api/auth", "/api/tasks/agent-done", "/api/tasks/agent-spawn", "/api/paybox/connect/callback"]
+const PUBLIC_PATHS = ["/login", "/api/auth", "/api/tasks/agent-done", "/api/tasks/agent-spawn", "/api/paybox/connect/callback", "/api/worker/tick"]
 const PUBLIC_EXACT_PATHS = ["/api/notify"]
 
 // Signed-in users who are not yet allowed in may still reach these (redeeming an invite).
