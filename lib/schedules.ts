@@ -16,8 +16,6 @@ export interface AgentSchedule {
   hour: number
   /** Day of week (0=Sun, 1=Mon...6=Sat) for weekly schedules */
   dayOfWeek?: number
-  /** Timezone label for display */
-  timezone: string
   enabled: boolean
   lastRunAt: string | null
   nextRunAt: string | null

@@ -13,7 +13,6 @@ interface AgentSchedule {
   frequency: string
   hour: number
   dayOfWeek?: number
-  timezone: string
   enabled: boolean
   lastRunAt: string | null
   nextRunAt: string | null

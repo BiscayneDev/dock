@@ -46,7 +46,6 @@ export async function POST(request: Request) {
       frequency: body.frequency ?? "daily",
       hour: body.hour ?? 9,
       dayOfWeek: body.dayOfWeek,
-      timezone: body.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
       enabled: body.enabled ?? true,
       lastRunAt: null,
       nextRunAt: null,

@@ -67,3 +67,8 @@ body {
   0%, 100% { opacity: 0.15; }
   50% { opacity: 0.35; }
 }
+
+/* Visible placeholders (inline styles on inputs can't target ::placeholder) */
+input::placeholder {
+  color: var(--ink-2);
+}
