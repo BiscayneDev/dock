@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { DEFAULT_CHIEF_PERSONA, currentUser, sessionClient } from "@/lib/tenancy"
+import { promptBlock } from "@/lib/memory"
 import {
   MAX_CUSTOM_RULES,
   MAX_RULE_LENGTH,
@@ -263,13 +264,32 @@ export function buildChiefPrompt(profile: ProfileView | null, rules: RuleView[],
  * projectId is given. Fails open (returns null, or the workspace-only block) so chat keeps working.
  * Only called for the Chief's runtime key.
  */
-export async function chiefSystemPrompt(projectId: string | null = null): Promise<string | null> {
+export async function chiefSystemPrompt(projectId: string | null = null, query = ""): Promise<string | null> {
   try {
     const supabase = await sessionClient()
     const user = await currentUser(supabase)
     if (!user) return null
     const workspaceId = await loadWorkspaceId(supabase, user.id)
     if (!workspaceId) return null
+    const memory = await memoryBlock({ userId: user.id, workspaceId }, query, projectId)
+    const core = await chiefCorePrompt(supabase, workspaceId, projectId)
+    return [core, memory].filter((part): part is string => Boolean(part)).join("\n\n") || null
+  } catch {
+    return null
+  }
+}
+
+/** Shared memory block for the Chief. Fails open. Placed after the rules so rules still override it. */
+async function memoryBlock(owner: { userId: string; workspaceId: string }, query: string, projectId: string | null): Promise<string | null> {
+  try {
+    return await promptBlock(owner, query, projectId)
+  } catch {
+    return null
+  }
+}
+
+async function chiefCorePrompt(supabase: SupabaseClient, workspaceId: string, projectId: string | null): Promise<string | null> {
+  try {
     const { data: chief } = await supabase
       .from("agents")
       .select("id")

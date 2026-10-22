@@ -1,130 +1,56 @@
-import { WORKSPACE } from "@/lib/config"
 import { NextRequest, NextResponse } from "next/server"
-import { readdir, readFile, stat } from "fs/promises"
-import { homedir } from "os"
-import path from "path"
+import { assistantContext, isUuid } from "@/lib/assistant-store"
+import { forget, listDurable, type MemoryRow } from "@/lib/memory"
 
-interface MemoryFile {
-  name: string
-  date: string
-  pinned: boolean
-  size: number
-  modified: string
-}
+// Shipyard Memory for the signed-in owner: durable facts and project knowledge. Owner-only.
+// Conversation-scope rows are not listed here; they feed recall and are not user-facing notes.
+// The old local-file reads (WORKSPACE.memory, MEMORY.md) are gone: they do not exist on Vercel.
 
-interface MemoryListResponse {
-  files: MemoryFile[]
-  lastUpdated: string | null
-}
-
-interface MemoryContentResponse {
-  name: string
+export interface MemoryItemView {
+  id: string
+  scope: "fact" | "project"
+  type: string
   content: string
-  date: string
+  projectId: string | null
+  projectName: string | null
+  createdAt: string
 }
 
-export async function GET(request: NextRequest) {
-  if (process.env.VERCEL || process.env.VERCEL_ENV) {
-    const { searchParams } = new URL(request.url)
-    const file = searchParams.get("file")
-    if (file) {
-      const empty: MemoryContentResponse = { name: file, content: "", date: file }
-      return NextResponse.json(empty)
-    }
-    const empty: MemoryListResponse = { files: [], lastUpdated: null }
-    return NextResponse.json(empty)
+function view(row: MemoryRow): MemoryItemView | null {
+  if (row.scope !== "fact" && row.scope !== "project") return null
+  return {
+    id: row.id,
+    scope: row.scope,
+    type: row.type,
+    content: row.content,
+    projectId: row.projectId,
+    projectName: row.projectName ?? null,
+    createdAt: row.createdAt,
   }
+}
 
-  const { searchParams } = new URL(request.url)
-  const fileParam = searchParams.get("file")
-
-  const memoryDir = WORKSPACE.memory
-  const longTermPath = WORKSPACE.memoryFile
-
-  // Return file content
-  if (fileParam) {
-    try {
-      let filePath: string
-      let name: string
-
-      if (fileParam === "MEMORY") {
-        filePath = longTermPath
-        name = "MEMORY"
-      } else {
-        filePath = path.join(memoryDir, `${fileParam}.md`)
-        name = fileParam
-      }
-
-      const content = await readFile(filePath, "utf-8")
-      const response: MemoryContentResponse = {
-        name,
-        content,
-        date: fileParam,
-      }
-      return NextResponse.json(response)
-    } catch {
-      return NextResponse.json(
-        { error: "File not found" },
-        { status: 404 }
-      )
-    }
-  }
-
-  // Return file list
-  const files: MemoryFile[] = []
-
-  // Add MEMORY.md as pinned entry
+export async function GET() {
+  const ctx = await assistantContext()
+  if (!ctx) return NextResponse.json({ error: "Sign in to view memory" }, { status: 401 })
   try {
-    const memStat = await stat(longTermPath)
-    files.push({
-      name: "MEMORY",
-      date: "MEMORY",
-      pinned: true,
-      size: memStat.size,
-      modified: memStat.mtime.toISOString(),
-    })
+    const rows = await listDurable({ userId: ctx.userId, workspaceId: ctx.workspaceId })
+    const items = rows.map(view).filter((v): v is MemoryItemView => v !== null)
+    return NextResponse.json({ items })
   } catch {
-    // MEMORY.md does not exist
+    return NextResponse.json({ error: "Memory is unavailable right now" }, { status: 500 })
   }
+}
 
-  // Read daily memory files
+export async function DELETE(request: NextRequest) {
+  const ctx = await assistantContext()
+  if (!ctx) return NextResponse.json({ error: "Sign in to change memory" }, { status: 401 })
+  const id = new URL(request.url).searchParams.get("id") ?? ""
+  if (!isUuid(id)) return NextResponse.json({ error: "Invalid id" }, { status: 400 })
   try {
-    const entries = await readdir(memoryDir)
-    const mdFiles = entries.filter((f) => f.endsWith(".md"))
-
-    for (const file of mdFiles) {
-      try {
-        const filePath = path.join(memoryDir, file)
-        const fileStat = await stat(filePath)
-        const date = file.replace(/\.md$/, "")
-        files.push({
-          name: date,
-          date,
-          pinned: false,
-          size: fileStat.size,
-          modified: fileStat.mtime.toISOString(),
-        })
-      } catch {
-        // skip
-      }
-    }
+    const removed = await forget({ userId: ctx.userId, workspaceId: ctx.workspaceId }, id)
+    if (!removed) return NextResponse.json({ error: "Not found" }, { status: 404 })
+    return NextResponse.json({ ok: true })
   } catch {
-    // memory dir does not exist
+    return NextResponse.json({ error: "Could not delete" }, { status: 500 })
   }
-
-  // Sort: pinned first, then by date descending
-  files.sort((a, b) => {
-    if (a.pinned && !b.pinned) return -1
-    if (!a.pinned && b.pinned) return 1
-    return b.date.localeCompare(a.date)
-  })
-
-  const lastUpdated =
-    files.find((f) => !f.pinned)?.modified ?? null
-
-  const response: MemoryListResponse = {
-    files,
-    lastUpdated,
-  }
-  return NextResponse.json(response)
 }

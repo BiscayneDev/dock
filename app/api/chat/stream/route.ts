@@ -1,5 +1,6 @@
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai"
 import { randomUUID } from "crypto"
+import { after } from "next/server"
 import { runtime } from "@/lib/runtime"
 import {
   buildModel,
@@ -21,6 +22,7 @@ import {
 import { createShipyardCapture } from "@/lib/inference/shipyard-capture"
 import { CHIEF_RUNTIME_AGENT } from "@/lib/tenancy"
 import { chiefSystemPrompt } from "@/lib/onboarding-server"
+import { recordTurn } from "@/lib/memory"
 import { BRIEF_PROTOCOL_PROMPT, parseBriefBlocks, parseMention, pickChief } from "@/lib/briefs"
 import { createBriefs, loadRoster, maxBriefBudgetCents } from "@/lib/briefs-store"
 
@@ -187,7 +189,7 @@ export async function POST(request: Request) {
 
         // Chief of Staff only: saved onboarding profile and enabled rules (null when none saved).
         // Project chats teach every agent the brief protocol: work is proposed as a brief, never started from chat.
-        const base = agent === chiefAgent ? await chiefSystemPrompt(projectId) : null
+        const base = agent === chiefAgent ? await chiefSystemPrompt(projectId, prompt) : null
         const system = projectId ? [base, BRIEF_PROTOCOL_PROMPT].filter(Boolean).join("\n\n") : base
         const result = await inferenceStream({
           message: modelPrompt,
@@ -251,6 +253,14 @@ export async function POST(request: Request) {
             agent,
             meta: { runId: run.id, projectId, ...(briefIds.length > 0 ? { briefIds } : {}) },
           })
+          // Shipyard Memory: conversation scope + durable facts, after the reply. Never blocks it.
+          const turnOwner = { userId: ctx.userId, workspaceId: ctx.workspaceId }
+          const turn = { userText: prompt, assistantText: storedText }
+          try {
+            after(() => recordTurn(turnOwner, conversationId, projectId, turn))
+          } catch {
+            void recordTurn(turnOwner, conversationId, projectId, turn)
+          }
         } else {
           await appendMessage(conversationId, {
             role: "assistant",
