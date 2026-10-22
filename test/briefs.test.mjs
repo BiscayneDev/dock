@@ -132,3 +132,30 @@ test("chief: the flagged chief wins, then the first roster entry, and no name is
   assert.equal(pickChief([{ key: "scout", displayName: "Scout", isChief: false }]).key, "scout")
   assert.equal(pickChief([]), null)
 })
+
+// ── Monthly spend cap ──
+import { monthStartIso, validateCapCents, checkMonthlyCap, MAX_MONTHLY_CAP_CENTS } from "../lib/briefs.ts"
+
+test("cap window: resets at the start of the UTC month", () => {
+  assert.equal(monthStartIso(new Date("2026-10-22T10:00:00Z")), "2026-10-01T00:00:00.000Z")
+  assert.equal(monthStartIso(new Date("2026-10-31T23:59:59Z")), "2026-10-01T00:00:00.000Z")
+  assert.equal(monthStartIso(new Date("2026-11-01T00:00:00Z")), "2026-11-01T00:00:00.000Z")
+})
+
+test("cap validation: null clears; whole cents from 0 to the ceiling only", () => {
+  assert.equal(validateCapCents(null), null)
+  assert.equal(validateCapCents(0), 0)
+  assert.equal(validateCapCents(MAX_MONTHLY_CAP_CENTS), MAX_MONTHLY_CAP_CENTS)
+  assert.equal(typeof validateCapCents(-1), "string")
+  assert.equal(typeof validateCapCents(1.5), "string")
+  assert.equal(typeof validateCapCents("500"), "string")
+  assert.equal(typeof validateCapCents(MAX_MONTHLY_CAP_CENTS + 1), "string")
+})
+
+test("cap check: no cap always passes; spent plus reserved must fit under the cap", () => {
+  assert.equal(checkMonthlyCap({ capCents: null, spentCents: 999999, reservedCents: 999999 }).ok, true)
+  assert.equal(checkMonthlyCap({ capCents: 1000, spentCents: 400, reservedCents: 600 }).ok, true, "exactly at the cap passes")
+  const over = checkMonthlyCap({ capCents: 1000, spentCents: 400, reservedCents: 601 })
+  assert.equal(over.ok, false)
+  assert.equal(over.remainingCents, -1)
+})

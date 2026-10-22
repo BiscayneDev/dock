@@ -225,6 +225,107 @@ const KIND_LABEL: Record<string, string> = {
   run_failed: "Stopped",
 }
 
+interface SpendView {
+  capCents: number | null
+  spentCents: number
+  reservedCents: number
+}
+
+/** This month's spend against the project's monthly cap, with the owner's control to set or clear it. */
+function SpendControl({ projectId, refreshKey }: { projectId: string; refreshKey: number }) {
+  const [spend, setSpend] = useState<SpendView | null>(null)
+  const [draft, setDraft] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/projects/${projectId}/spend`, { cache: "no-store" })
+      .then(async (res) => (res.ok ? ((await res.json()) as SpendView) : null))
+      .then((data) => {
+        if (!cancelled && data) {
+          setSpend(data)
+          setDraft(data.capCents === null ? "" : String(data.capCents / 100))
+        }
+      })
+      .catch(() => null)
+    return () => {
+      cancelled = true
+    }
+  }, [projectId, refreshKey])
+
+  async function save(capCents: number | null) {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/spend`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ capCents }),
+      })
+      const data = (await res.json().catch(() => ({}))) as SpendView & { error?: string }
+      if (!res.ok) {
+        setError(data.error ?? "Could not save the cap.")
+        return
+      }
+      setSpend(data)
+    } catch {
+      setError("Network error. The cap was not changed.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!spend) return null
+  const used = spend.spentCents + spend.reservedCents
+  const over = spend.capCents !== null && used > spend.capCents
+  return (
+    <div className="flex flex-col gap-2 rounded-[12px] border p-3 text-[13px]" style={{ borderColor: "var(--border)" }}>
+      <p style={{ color: over ? "#e06c6c" : "var(--ink-2)" }}>
+        This month: {money(spend.spentCents)} spent · {money(spend.reservedCents)} reserved
+        {spend.capCents !== null ? ` · cap ${money(spend.capCents)}` : " · no cap"}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-1.5 text-[12px]" style={{ color: "var(--ink-3)" }}>
+          Monthly cap $
+          <input
+            inputMode="decimal"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="none"
+            aria-label="Monthly spend cap in dollars"
+            className="w-24 rounded-md border bg-transparent px-2 py-1 text-[13px]"
+            style={{ borderColor: "var(--border)", color: "var(--ink)" }}
+          />
+        </label>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => {
+            const trimmed = draft.trim()
+            if (trimmed === "") return save(null)
+            const dollars = Number(trimmed)
+            if (!Number.isFinite(dollars) || dollars < 0) {
+              setError("Enter a dollar amount, or leave blank for no cap.")
+              return
+            }
+            return save(Math.round(dollars * 100))
+          }}
+          className="rounded-full px-3 py-1 text-[12px] font-medium hover:bg-white/5 disabled:opacity-50"
+          style={{ color: "var(--ink)" }}
+        >
+          {saving ? "Saving…" : "Save cap"}
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="text-[12px]" style={{ color: "#e06c6c" }}>
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /** The project's ledger: what was proposed, approved, run and finished. Read-only; newest first. */
 export function LedgerPanel({ projectId, refreshKey }: { projectId: string; refreshKey: number }) {
   const [entries, setEntries] = useState<LedgerView[] | null>(null)
@@ -255,8 +356,9 @@ export function LedgerPanel({ projectId, refreshKey }: { projectId: string; refr
         className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] hover:bg-white/5"
         style={{ color: "var(--ink-3)" }}
       >
-        <ScrollText size={12} /> Ledger
+        <ScrollText size={12} /> Ledger & spend
       </button>
+      {open && <div className="mt-2"><SpendControl projectId={projectId} refreshKey={refreshKey} /></div>}
       {open && (
         <ol className="mt-2 flex flex-col gap-2 border-l pl-4" style={{ borderColor: "var(--border)" }}>
           {entries === null && <li className="text-[12px]" style={{ color: "var(--ink-3)" }}>Loading…</li>}

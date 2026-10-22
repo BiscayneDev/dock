@@ -4,6 +4,8 @@ import { resolveModelRef } from "@/lib/inference"
 import {
   canApprove,
   canCancel,
+  checkMonthlyCap,
+  monthStartIso,
   pickChief,
   type RosterEntry,
   composeRunPrompt,
@@ -224,6 +226,60 @@ export async function listLedger(client: SupabaseClient, projectId: string, limi
 }
 
 export class BriefConflictError extends Error {}
+export class CapExceededError extends Error {}
+
+const money = (cents: number) => `$${(cents / 100).toFixed(2)}`
+
+export interface ProjectSpend {
+  capCents: number | null
+  /** Cost of finished runs this month (ledger). */
+  spentCents: number
+  /** Budgets of approved and running briefs this month. */
+  reservedCents: number
+  periodStart: string
+}
+
+/** Cap, spend and reservations for one project in the current UTC month. */
+export async function getProjectSpend(client: SupabaseClient, projectId: string, now: Date): Promise<ProjectSpend> {
+  const periodStart = monthStartIso(now)
+  const { data: project, error: projectError } = await client
+    .from("projects")
+    .select("monthly_spend_cap_cents")
+    .eq("id", projectId)
+    .maybeSingle()
+  if (projectError) throw new Error(`projects: ${projectError.message}`)
+  const capCents = (project?.monthly_spend_cap_cents as number | null | undefined) ?? null
+
+  const { data: spendRows, error: spendError } = await client
+    .from("ledger_entries")
+    .select("cost_cents")
+    .eq("project_id", projectId)
+    .in("kind", ["run_succeeded", "run_failed"])
+    .gte("created_at", periodStart)
+  if (spendError) throw new Error(`ledger: ${spendError.message}`)
+  const spentCents = ((spendRows ?? []) as Array<{ cost_cents: number | null }>).reduce((t, r) => t + (r.cost_cents ?? 0), 0)
+
+  const { data: reservedRows, error: reservedError } = await client
+    .from("project_briefs")
+    .select("budget_cents")
+    .eq("project_id", projectId)
+    .in("state", ["approved", "running"])
+  if (reservedError) throw new Error(`briefs: ${reservedError.message}`)
+  const reservedCents = ((reservedRows ?? []) as Array<{ budget_cents: number }>).reduce((t, r) => t + r.budget_cents, 0)
+
+  return { capCents, spentCents, reservedCents, periodStart }
+}
+
+/** Owner sets or clears the monthly cap. Caller validates the value first (validateCapCents). */
+export async function setProjectCap(client: SupabaseClient, projectId: string, capCents: number | null): Promise<void> {
+  const { data, error } = await client
+    .from("projects")
+    .update({ monthly_spend_cap_cents: capCents })
+    .eq("id", projectId)
+    .select("id")
+  if (error) throw new Error(`projects: ${error.message}`)
+  if (!data || data.length === 0) throw new Error("not_found")
+}
 
 /**
  * Owner approves a brief. The state flip is a conditional update (proposed -> approved), so a double click
@@ -247,6 +303,19 @@ export async function approveBrief(
     .select("id")
   if (claimError) throw new Error(`briefs: ${claimError.message}`)
   if (!claimed || claimed.length === 0) throw new BriefConflictError("brief was already decided")
+
+  // Monthly cap. Checked after the flip, so this brief's own budget is already in the reserved total.
+  // Two approvals racing each see each other as approved, so the race can only over-refuse, never over-spend.
+  if (current.projectId) {
+    const spend = await getProjectSpend(client, current.projectId, new Date())
+    const check = checkMonthlyCap({ capCents: spend.capCents, spentCents: spend.spentCents, reservedCents: spend.reservedCents })
+    if (!check.ok) {
+      await client.from("project_briefs").update({ state: "proposed", decided_at: null }).eq("id", briefId)
+      throw new CapExceededError(
+        `Monthly cap of ${money(check.capCents ?? 0)} would be exceeded: ${money(spend.spentCents)} spent and ${money(spend.reservedCents)} reserved this month.`,
+      )
+    }
+  }
 
   const model = resolveModelRef(current.agentKey)
   let run: TaskRun
