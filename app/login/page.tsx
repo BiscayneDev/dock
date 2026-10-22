@@ -61,6 +61,8 @@ function LoginInner() {
   const router = useRouter()
   const params = useSearchParams()
   const next = safeNext(params.get("next"))
+  // Invite links carry ?invite=<token>. Only with a token can a new account be created.
+  const inviteToken = params.get("invite")?.trim() || null
   const [step, setStep] = useState<"email" | "code">("email")
   const [email, setEmail] = useState("")
   const [code, setCode] = useState("")
@@ -75,7 +77,7 @@ function LoginInner() {
     setError(null)
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { shouldCreateUser: false },
+      options: { shouldCreateUser: !!inviteToken },
     })
     setBusy(false)
     if (error) {
@@ -90,12 +92,25 @@ function LoginInner() {
     setBusy(true)
     setError(null)
     const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: value, type: "email" })
-    setBusy(false)
     if (error) {
+      setBusy(false)
       setError("That code didn't work. Check it, or request a new one.")
       setCode("")
       return
     }
+    if (inviteToken) {
+      const res = await fetch("/api/invites/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: inviteToken }),
+      }).catch(() => null)
+      if (!res || !res.ok) {
+        setBusy(false)
+        setError("This invite is not valid for this email, or it has already been used.")
+        return
+      }
+    }
+    setBusy(false)
     router.replace(next)
     router.refresh()
   }

@@ -42,20 +42,53 @@ const SUGGESTIONS = [
 const dim = { color: "var(--ink-3)" }
 const ink = { color: "var(--ink)" }
 
+interface WorkspaceAgents {
+  chief: { id: string; displayName: string; role: string; runtimeAgent: string } | null
+}
+
+// The user's Chief of Staff comes first. It runs on the runtime key "vic" (runtimeAgent),
+// so chat, model routing (AGENT_MODEL_VIC) and conversations keep using the existing path.
+// File-based roster agents stay below it; a file agent with the same runtime key is hidden.
 function useAgents(): { agents: AgentDef[]; roster: AgentRecord[] } {
-  const [roster, setRoster] = useState<AgentRecord[]>([])
+  const router = useRouter()
+  const [fileRoster, setFileRoster] = useState<AgentRecord[]>([])
+  const [chief, setChief] = useState<WorkspaceAgents["chief"]>(null)
   useEffect(() => {
     let cancelled = false
     fetch("/api/agents", { cache: "no-store" })
       .then((r) => r.json())
       .then((data: AgentRecord[]) => {
-        if (!cancelled && Array.isArray(data)) setRoster(data)
+        if (!cancelled && Array.isArray(data)) setFileRoster(data)
+      })
+      .catch(() => null)
+    fetch("/api/workspace", { cache: "no-store" })
+      .then((r) => (r.ok ? (r.json() as Promise<WorkspaceAgents>) : null))
+      .then((ws) => {
+        if (cancelled || !ws) return
+        if (!ws.chief) {
+          router.replace("/onboarding")
+          return
+        }
+        setChief(ws.chief)
       })
       .catch(() => null)
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [router])
+  const roster = useMemo<AgentRecord[]>(() => {
+    if (!chief) return fileRoster
+    const head: AgentRecord = {
+      id: chief.runtimeAgent,
+      name: chief.displayName,
+      emoji: "🤖",
+      role: chief.role,
+      accent: "#7c3aed",
+      description: "Your Chief of Staff. Talk to them directly; they coordinate the rest of the team.",
+      tags: [],
+    }
+    return [head, ...fileRoster.filter((a) => a.id !== chief.runtimeAgent)]
+  }, [chief, fileRoster])
   const agents = useMemo<AgentDef[]>(
     () =>
       roster.length

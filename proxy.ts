@@ -11,9 +11,20 @@ import { createServerClient } from "@supabase/ssr"
 const PUBLIC_PATHS = ["/login", "/api/auth", "/api/tasks/agent-done", "/api/tasks/agent-spawn", "/api/paybox/connect/callback"]
 const PUBLIC_EXACT_PATHS = ["/api/notify"]
 
+// Signed-in users who are not yet allowed in may still reach these (redeeming an invite).
+const SIGNED_IN_PATHS = ["/api/invites/redeem"]
+
+// Beta members (on the allowlist, not the owner) may use only these. Conversations, tasks,
+// memory and chat are still file-based and single-owner, so they stay owner-only until moved.
+const BETA_PATHS = ["/onboarding", "/assistant", "/api/onboarding", "/api/workspace", "/api/invites/redeem"]
+
 function isPublic(pathname: string): boolean {
   if (PUBLIC_EXACT_PATHS.includes(pathname)) return true
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+}
+
+function matches(pathname: string, list: string[]): boolean {
+  return list.some((p) => pathname === p || pathname.startsWith(`${p}/`))
 }
 
 export async function proxy(request: NextRequest) {
@@ -46,13 +57,24 @@ export async function proxy(request: NextRequest) {
 
   if (isPublic(pathname)) return response
 
+  // Admin override: DOCK_OWNER_EMAIL has full access.
   const owner = (process.env.DOCK_OWNER_EMAIL ?? "").trim().toLowerCase()
-  const allowed = !!user && !!owner && (user.email ?? "").toLowerCase() === owner
+  const isOwner = !!user && !!owner && (user.email ?? "").toLowerCase() === owner
+  if (isOwner) return response
 
-  if (allowed) return response
+  if (user && matches(pathname, SIGNED_IN_PATHS)) return response
 
-  if (user && !allowed) {
-    // Signed in as someone else: end that session.
+  // Beta members: on the allowlist (checked by RPC, RLS-safe), limited to BETA_PATHS.
+  if (user) {
+    const { data: isBeta } = await supabase.rpc("is_beta_member")
+    if (isBeta === true) {
+      if (matches(pathname, BETA_PATHS)) return response
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ error: "Not available on this account" }, { status: 403 })
+      }
+      return NextResponse.redirect(new URL("/onboarding", request.url))
+    }
+    // Signed in as someone who is not allowed: end that session.
     await supabase.auth.signOut()
   }
 
