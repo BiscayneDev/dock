@@ -10,6 +10,7 @@ const WORKSPACE = [
   { href: "/tasks", label: "Missions" },
   { href: "/agents", label: "Agents" },
   { href: "/intel", label: "Intel" },
+  { href: "/settings", label: "Settings" },
 ];
 
 const RAILS = [
