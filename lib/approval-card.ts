@@ -44,7 +44,13 @@ export interface ApprovalCardView {
   estimatedLabel: string
   budgetLabel: string
   projectName: string
+  /**
+   * What the card renders in the preview slot: an https URL while the stored signed URL is fresh, else the
+   * owner's preview route (which returns a fresh signed URL). Null means 'No preview yet'.
+   */
   screenshotUrl: string | null
+  /** Raw reason code when there is no preview (the card maps it to words). Null otherwise. */
+  previewReason: string | null
   /** True when the estimate is above APPROVAL_CONFIRM_CENTS: Approve needs a second click. */
   requiresConfirm: boolean
   decidedAt: string | null
@@ -80,6 +86,26 @@ export function safeScreenshotUrl(value: unknown): string | null {
   }
 }
 
+/**
+ * Preview slot for one approval. A stored signed URL is used only until its expiry. After that (or when the
+ * stored URL is missing) the card asks the owner's preview route, which signs a fresh URL on each request.
+ */
+export function previewFields(
+  runId: string,
+  d: Record<string, unknown>,
+  now: number,
+): { screenshotUrl: string | null; previewReason: string | null } {
+  const stored = safeScreenshotUrl(d.screenshotUrl)
+  const expires = typeof d.screenshotExpiresAt === "string" ? Date.parse(d.screenshotExpiresAt) : NaN
+  const hasPath = typeof d.screenshotPath === "string" && d.screenshotPath.length > 0
+  const storedFresh = stored !== null && Number.isFinite(expires) && expires > now
+  let screenshotUrl: string | null = null
+  if (storedFresh) screenshotUrl = stored
+  else if (hasPath) screenshotUrl = `/api/approvals/${encodeURIComponent(runId)}/preview`
+  const reason = typeof d.previewFailed === "string" && d.previewFailed.length > 0 ? d.previewFailed.slice(0, 40) : null
+  return { screenshotUrl, previewReason: screenshotUrl ? null : reason ?? null }
+}
+
 const STATUS_LABEL: Record<ApprovalStatus, string> = {
   pending: "Waiting for your decision",
   approved: "Approved",
@@ -97,6 +123,7 @@ export function buildApprovalCards(
   conversationId: string,
   projectNames: Record<string, string> = {},
   canDecideRun: (run: ApprovalRunInput) => boolean = () => true,
+  now: number = Date.now(),
 ): ApprovalCardView[] {
   const cards: ApprovalCardView[] = []
   // Runs arrive newest first, so the cards do too.
@@ -137,7 +164,7 @@ export function buildApprovalCards(
       estimatedLabel: formatCents(estimatedCents),
       budgetLabel: formatCents(budgetCents),
       projectName: (projectId && projectNames[projectId]) || UNKNOWN,
-      screenshotUrl: safeScreenshotUrl(d.screenshotUrl),
+      ...previewFields(run.id, d, now),
       requiresConfirm: estimatedCents !== null && estimatedCents > APPROVAL_CONFIRM_CENTS,
       decidedAt: decision ? decision.createdAt : null,
       canDecide: status === "pending" && canDecideRun(run),

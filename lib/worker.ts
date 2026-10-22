@@ -3,6 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { buildModel, collectRunTelemetry, resolveModel } from "@/lib/inference"
 import { createShipyardCapture } from "@/lib/inference/shipyard-capture"
 import { chiefKey, recordRunOutcome } from "@/lib/briefs-store"
+import { captureApprovalPreview } from "@/lib/approval-preview"
+import { previewTargetFromRun } from "@/lib/preview-guard"
 import { buildChiefPrompt, loadProfile, loadRules, loadVentureProfile } from "@/lib/onboarding-server"
 import {
   addEvent,
@@ -95,6 +97,13 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
   const gate = decideMoneyGate(proposedActionFromPayload(run.payload), events)
   if (gate.kind === "request_approval") {
     const a = gate.action
+    // Preview for the human approver. One capture, bounded to 15s, never blocks the approval: on failure the
+    // approval is still created and the card shows the reason. The screenshot never authorises the action.
+    const preview = await captureApprovalPreview(admin, {
+      ownerId: run.ownerId,
+      runId: run.id,
+      target: previewTargetFromRun(run.payload, a.destination),
+    })
     await addEvent(admin, run.id, EVENT.approvalRequested, {
       actionId: a.id,
       type: a.type,
@@ -110,7 +119,14 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
       modelReason: typeof run.payload.modelReason === "string" ? run.payload.modelReason : null,
       projectId: run.projectId,
       conversationId: typeof run.payload.conversationId === "string" ? run.payload.conversationId : null,
-      screenshotUrl: typeof run.payload.screenshotUrl === "string" ? run.payload.screenshotUrl : null,
+      // Only the capture step sets these. A screenshotUrl supplied by the agent payload is ignored.
+      ...(preview.ok
+        ? {
+            screenshotUrl: preview.screenshotUrl,
+            screenshotPath: preview.screenshotPath,
+            screenshotExpiresAt: preview.screenshotExpiresAt,
+          }
+        : { screenshotUrl: null, previewFailed: preview.reason }),
     })
     await parkForApproval(admin, run.id, workerId)
     return "awaiting_approval"

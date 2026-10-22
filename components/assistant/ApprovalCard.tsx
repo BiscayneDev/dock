@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { ShieldCheck } from "lucide-react"
 import { APPROVAL_CONFIRM_CENTS, formatCents, needsSecondClick, type ApprovalCardView } from "@/lib/approval-card"
+import { previewReasonLabel } from "@/lib/preview-guard"
 
 // Approval cards inline in the assistant thread. Data comes from GET /api/approvals (owner session).
 // Polls every few seconds only while a pending approval is on screen.
@@ -66,6 +67,7 @@ export function ApprovalCard({ card, onDecided }: { card: ApprovalCardView; onDe
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState<null | "approve" | "reject">(null)
   const [error, setError] = useState<string | null>(null)
+  const [previewBroken, setPreviewBroken] = useState(false)
   const decidable = card.canDecide && card.status === "pending"
 
   async function decide(decision: "approve" | "reject") {
@@ -121,23 +123,28 @@ export function ApprovalCard({ card, onDecided }: { card: ApprovalCardView; onDe
       </p>
 
       <div className="overflow-hidden rounded-[10px]" style={{ background: "var(--surface-0)", border: "1px solid var(--line)" }}>
-        {card.screenshotUrl ? (
-          // Screenshot slot: rendered only when the run supplies an https URL.
+        {card.screenshotUrl && !previewBroken ? (
+          // Screenshot of the proposed page, captured before approval (lib/preview-capture.ts). It shows what
+          // would happen; it does not approve anything. Source is a signed https URL or the owner's preview route.
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={card.screenshotUrl}
             alt="Preview of the proposed work"
             loading="lazy"
             referrerPolicy="no-referrer"
+            onError={() => setPreviewBroken(true)}
             className="block max-h-[260px] w-full object-cover"
           />
         ) : (
           <div
-            className="flex h-[120px] items-center justify-center text-[13px]"
+            className="flex h-[120px] items-center justify-center px-4 text-center text-[13px]"
             style={{ color: "var(--ink-3)" }}
             data-testid="no-preview"
           >
-            No preview yet
+            {(() => {
+              const reason = previewBroken ? "could not load" : previewReasonLabel(card.previewReason)
+              return reason ? `No preview yet (${reason})` : "No preview yet"
+            })()}
           </div>
         )}
       </div>
