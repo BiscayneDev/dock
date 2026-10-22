@@ -21,6 +21,7 @@ export interface ConversationDetail extends ConversationSummary {
     agent: string
     timestamp: number
     runId?: string
+    meta?: Record<string, unknown>
   }>
 }
 
@@ -66,7 +67,11 @@ export function toInitialMessages(detail: ConversationDetail | null): UIMessage[
     id: message.id,
     role: message.role === "agent" ? "assistant" : message.role,
     parts: [{ type: "text", text: message.text }],
-    metadata: message.runId ? { runId: message.runId } : undefined,
+    metadata: {
+      ...(message.runId ? { runId: message.runId } : {}),
+      ...(Array.isArray(message.meta?.briefIds) ? { briefIds: message.meta.briefIds as string[] } : {}),
+      ...(typeof message.meta?.kind === "string" ? { kind: message.meta.kind as string } : {}),
+    },
   })) as UIMessage[]
 }
 

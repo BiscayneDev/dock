@@ -21,6 +21,8 @@ import {
 import { createShipyardCapture } from "@/lib/inference/shipyard-capture"
 import { CHIEF_RUNTIME_AGENT } from "@/lib/tenancy"
 import { chiefSystemPrompt } from "@/lib/onboarding-server"
+import { BRIEF_PROTOCOL_PROMPT, parseBriefBlocks, parseMention } from "@/lib/briefs"
+import { createBriefs, loadRoster, maxBriefBudgetCents } from "@/lib/briefs-store"
 
 const HISTORY_TURNS = 20
 const HISTORY_CHARS = 12000
@@ -74,7 +76,7 @@ export async function POST(request: Request) {
   }
 
   const conversationId = body.conversationId ?? "main-chat"
-  const agent = body.agent ?? "vic"
+  let agent = body.agent ?? "vic"
   const sessionId = body.sessionId
   const taskId = body.taskId
   const messages = Array.isArray(body.messages) ? body.messages : []
@@ -117,6 +119,18 @@ export async function POST(request: Request) {
   const assistantChat = ctx ? await getAssistantConversation(ctx, conversationId) : null
   const projectId = assistantChat?.projectId ?? null
   const history = assistantChat && ctx ? await priorTurns(ctx, conversationId) : []
+
+  // @mention routes this turn to a roster agent. The mention is stripped from what the model sees;
+  // the thread keeps the owner's original text. Mentions never approve or spawn work by themselves.
+  let modelPrompt = prompt
+  if (assistantChat && ctx && projectId) {
+    const roster = await loadRoster(ctx.supabase, ctx.workspaceId).catch(() => [])
+    const mention = parseMention(prompt, roster)
+    if (mention.agentKey) {
+      agent = mention.agentKey
+      modelPrompt = mention.text || prompt
+    }
+  }
 
   const resolvedModel = override ?? resolveModel(agent, capture)
 
@@ -168,9 +182,11 @@ export async function POST(request: Request) {
         let reply = ""
 
         // Chief of Staff only: saved onboarding profile and enabled rules (null when none saved).
-        const system = agent === CHIEF_RUNTIME_AGENT ? await chiefSystemPrompt(projectId) : null
+        // Project chats teach every agent the brief protocol: work is proposed as a brief, never started from chat.
+        const base = agent === CHIEF_RUNTIME_AGENT ? await chiefSystemPrompt(projectId) : null
+        const system = projectId ? [base, BRIEF_PROTOCOL_PROMPT].filter(Boolean).join("\n\n") : base
         const result = await inferenceStream({
-          message: prompt,
+          message: modelPrompt,
           agent,
           override: resolvedModel,
           system: system ?? undefined,
@@ -203,11 +219,26 @@ export async function POST(request: Request) {
         writer.write({ type: "finish-step" })
 
         if (assistantChat && ctx) {
+          // Brief blocks become proposals (state: proposed). They are stripped from the stored text and shown as cards.
+          let storedText = reply
+          let briefIds: string[] = []
+          if (projectId) {
+            const parsed = parseBriefBlocks(reply, maxBriefBudgetCents())
+            storedText = parsed.text
+            if (parsed.proposals.length > 0) {
+              const briefs = await createBriefs(
+                ctx.supabase,
+                { workspaceId: ctx.workspaceId, ownerId: ctx.userId },
+                { projectId, conversationId, proposals: parsed.proposals },
+              ).catch(() => [])
+              briefIds = briefs.map((b) => b.id)
+            }
+          }
           await appendAssistantMessage(ctx, conversationId, {
             role: "assistant",
-            content: reply,
+            content: storedText,
             agent,
-            meta: { runId: run.id, projectId },
+            meta: { runId: run.id, projectId, ...(briefIds.length > 0 ? { briefIds } : {}) },
           })
         } else {
           await appendMessage(conversationId, {

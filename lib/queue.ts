@@ -87,6 +87,8 @@ export interface EnqueueInput {
   model: string | null
   budgetCents: number
   proposedAction?: ProposedAction | null
+  /** Set when the run was approved from a project brief. The worker uses it to write the outcome back. */
+  briefId?: string | null
 }
 
 /** Owner-side insert. RLS requires owner_id = auth.uid() and a workspace the user owns. */
@@ -94,6 +96,7 @@ export async function enqueueRun(supabase: SupabaseClient, input: EnqueueInput):
   if (!(RUN_TARGETS as readonly string[]).includes(input.target)) throw new Error("invalid target")
   const payload: Record<string, unknown> = { prompt: input.prompt }
   if (input.proposedAction) payload.proposedAction = input.proposedAction
+  if (input.briefId) payload.briefId = input.briefId
   const { data, error } = await supabase
     .from("task_runs")
     .insert({

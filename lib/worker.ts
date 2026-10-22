@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { buildModel, collectRunTelemetry, resolveModel } from "@/lib/inference"
 import { createShipyardCapture } from "@/lib/inference/shipyard-capture"
 import { CHIEF_RUNTIME_AGENT } from "@/lib/tenancy"
+import { recordRunOutcome } from "@/lib/briefs-store"
 import { buildChiefPrompt, loadProfile, loadRules, loadVentureProfile } from "@/lib/onboarding-server"
 import {
   addEvent,
@@ -75,6 +76,11 @@ async function finish(
   detail: { output?: string | null; error?: string | null },
 ): Promise<string> {
   await complete(admin, run.id, workerId, { status, ...detail })
+  // Brief-linked runs write their outcome back to the brief, the ledger and the central thread. Never fails the run.
+  const briefId = typeof run.payload.briefId === "string" ? run.payload.briefId : null
+  if (briefId) {
+    await recordRunOutcome(admin, run, briefId, status, detail).catch(() => null)
+  }
   return status === "succeeded" ? "succeeded" : `${status}:${detail.error ?? ""}`
 }
 

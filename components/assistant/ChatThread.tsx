@@ -9,6 +9,8 @@ import { TraceWaterfall } from "@/components/runs/TraceWaterfall"
 import type { ConversationEvent, ConversationRun } from "@/lib/conversations"
 import { Composer, type IntegrationStatus } from "./Composer"
 import { readStoredModel, storeModel, type ModelCatalog, type ModelRef } from "./ModelPicker"
+import { BriefCard, LedgerPanel } from "./BriefCard"
+import { stripBriefBlocks } from "@/lib/briefs"
 
 export interface Attachment {
   name: string
@@ -77,6 +79,9 @@ function AnswerMessage({
   onRegenerate,
   conversationId,
   runId,
+  briefIds,
+  kind,
+  onSettled,
 }: {
   text: string
   agent: AgentDef
@@ -84,16 +89,26 @@ function AnswerMessage({
   onRegenerate?: () => void
   conversationId: string
   runId?: string
+  briefIds?: string[]
+  kind?: string
+  onSettled?: () => void
 }) {
   const [copied, setCopied] = useState(false)
+  const visible = stripBriefBlocks(text)
   return (
     <div className="flex flex-col gap-2">
       <p className="text-[12px] font-medium" style={{ color: agent.accent }}>
         {agent.emoji} {agent.name}
+        {kind === "result" && <span style={{ color: "var(--ink-3)" }}> · result</span>}
       </p>
-      <p className="whitespace-pre-wrap text-[15px] leading-relaxed" style={{ color: "var(--ink)" }}>
-        {text}
-      </p>
+      {visible && (
+        <p className="whitespace-pre-wrap text-[15px] leading-relaxed" style={{ color: "var(--ink)" }}>
+          {visible}
+        </p>
+      )}
+      {briefIds?.map((id) => (
+        <BriefCard key={id} briefId={id} onSettled={onSettled} />
+      ))}
       <div className="flex items-center gap-1 pt-1">
         <button
           type="button"
@@ -276,6 +291,11 @@ export function ChatThread({
                 onRegenerate={() => regenerate(model ? { body: { model } } : undefined).catch(() => null)}
                 conversationId={conversationId}
                 runId={(message.metadata as { runId?: string } | undefined)?.runId}
+                briefIds={(message.metadata as { briefIds?: string[] } | undefined)?.briefIds}
+                kind={(message.metadata as { kind?: string } | undefined)?.kind}
+                onSettled={() => {
+                  onRefresh().catch(() => null)
+                }}
               />
             )
           })}
@@ -286,6 +306,12 @@ export function ChatThread({
           )}
         </div>
       </div>
+
+      {projectId && (
+        <div className="shrink-0 pb-1">
+          <LedgerPanel projectId={projectId} refreshKey={messages.length} />
+        </div>
+      )}
 
       <div className="mx-auto w-full max-w-[680px] px-6 pb-5 pt-2">
         {attachError && (
