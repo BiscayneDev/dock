@@ -77,19 +77,26 @@ function useIntegrations(): IntegrationStatus[] {
   return items
 }
 
+// Vic (chief of staff) is the default agent unless the user picks another one.
+function defaultAgent(agents: AgentDef[]): AgentDef {
+  return agents.find((a) => a.id === "vic") ?? agents[0] ?? AGENTS[0]
+}
+
 function HomeView({
   agents,
   integrations,
   catalog,
+  prefill,
 }: {
   agents: AgentDef[]
   integrations: IntegrationStatus[]
   catalog: ModelCatalog
+  prefill: string | null
 }) {
   const router = useRouter()
   const [userName, setUserName] = useState("")
   const [recent, setRecent] = useState<ConversationSummary[]>([])
-  const [agent, setAgent] = useState<AgentDef>(agents[0] ?? AGENTS[0])
+  const [agentId, setAgentId] = useState<string | null>(null)
   const [text, setText] = useState("")
   const [sending, setSending] = useState(false)
   // Stored in sessionStorage ("dock:model") so the thread picks it up on navigation.
@@ -98,6 +105,14 @@ function HomeView({
   useEffect(() => {
     setModelState(readStoredModel(catalog.defaultModel))
   }, [catalog.defaultModel])
+
+  // ?prefill=<text> (from the Launch button, command palette, dashboard) fills the composer once, then clears the param.
+  useEffect(() => {
+    if (prefill) {
+      setText(prefill)
+      router.replace("/assistant")
+    }
+  }, [prefill, router])
 
   function setModel(ref: ModelRef) {
     setModelState(ref)
@@ -115,7 +130,7 @@ function HomeView({
       .catch(() => null)
   }, [])
 
-  const selected = agents.find((a) => a.id === agent.id) ?? agents[0] ?? AGENTS[0]
+  const selected = agents.find((a) => a.id === agentId) ?? defaultAgent(agents)
 
   const start = useCallback(
     async (message: string) => {
@@ -156,7 +171,7 @@ function HomeView({
             placeholder="Ask anything, or hand a task to an agent…"
             agents={agents}
             agent={selected}
-            onAgentChange={setAgent}
+            onAgentChange={(a) => setAgentId(a.id)}
             busy={sending}
             integrations={integrations}
             attachments={[]}
@@ -230,7 +245,9 @@ function ThreadView({
   const [pending, setPending] = useState<string | null>(pendingQuery)
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [detail, setDetail] = useState<ConversationDetail | null>(null)
-  const [agent, setAgent] = useState<AgentDef>(agents[0] ?? AGENTS[0])
+  const [agentId, setAgentId] = useState<string | null>(null)
+  const agent = agents.find((a) => a.id === agentId) ?? defaultAgent(agents)
+  const setAgent = useCallback((a: AgentDef) => setAgentId(a.id), [])
 
   const fetchConversations = useCallback(async () => {
     const res = await fetch("/api/conversations", { cache: "no-store" })
@@ -247,7 +264,7 @@ function ThreadView({
       const match = agents.find((a) => a.id === data.agent)
       if (match) setAgent(match)
     },
-    [agents],
+    [agents, setAgent],
   )
 
   useEffect(() => {
@@ -373,6 +390,7 @@ function ThreadView({
 function AssistantInner() {
   const searchParams = useSearchParams()
   const id = searchParams.get("id")
+  const prefill = searchParams.get("prefill")
   const { agents, roster } = useAgents()
   const integrations = useIntegrations()
   const catalog = useModelCatalog()
@@ -385,7 +403,7 @@ function AssistantInner() {
         {id ? (
           <ThreadView agents={agents} roster={roster} integrations={integrations} catalog={catalog} conversationId={id} />
         ) : (
-          <HomeView agents={agents} integrations={integrations} catalog={catalog} />
+          <HomeView agents={agents} integrations={integrations} catalog={catalog} prefill={prefill} />
         )}
       </div>
     </div>

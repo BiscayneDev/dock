@@ -23,6 +23,7 @@ import {
   Building2,
   Command,
   PanelRightOpen,
+  Sparkles,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
@@ -48,6 +49,7 @@ function useCommands(): CommandItem[] {
 
   return [
     // Navigation
+    { id: "nav-vic", label: "Ask Vic", description: "Chief of staff, default in Assistant", icon: Sparkles, category: "navigation", keywords: ["vic", "chief", "staff", "ask", "chat", "⌘k"], action: go("/assistant") },
     { id: "nav-dashboard", label: "Dashboard", description: "Command center overview", icon: LayoutDashboard, category: "navigation", keywords: ["home", "overview", "briefing"], action: go("/dashboard") },
     { id: "nav-conversations", label: "Conversations", description: "Unified run and transcript inbox", icon: PanelRightOpen, category: "navigation", keywords: ["inbox", "transcript", "runs", "timeline"], action: go("/conversations") },
     { id: "nav-alerts", label: "Alerts", description: "Canonical failed-run inbox", icon: Bell, category: "navigation", keywords: ["incidents", "failures", "attention"], action: go("/alerts") },
@@ -83,6 +85,7 @@ function matchesQuery(command: CommandItem, query: string): boolean {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function CommandPalette() {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -117,10 +120,16 @@ export function CommandPalette() {
         setQuery("")
         setSelectedIndex(0)
       }
+      // ⌘K: jump to the Assistant with Vic selected (replaces the old floating Vic panel).
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault()
+        setOpen(false)
+        router.push("/assistant")
+      }
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [])
+  }, [router])
 
   // Focus input when opening
   useEffect(() => {
@@ -277,7 +286,7 @@ export function CommandPalette() {
             <kbd className="px-1 rounded" style={{ backgroundColor: "#1a1a2e" }}>esc</kbd> close
           </span>
           <span className="ml-auto flex items-center gap-1">
-            <Command size={10} />K to toggle
+            <Command size={10} />K Ask Vic
           </span>
         </div>
       </div>

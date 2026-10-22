@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const WORKSPACE = [
@@ -26,6 +26,7 @@ const MOBILE_NAV = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [wallet, setWallet] = useState<string | null>(null);
 
   useEffect(() => {
@@ -70,7 +71,7 @@ export function Sidebar() {
 
         {/* Launch */}
         <button
-          onClick={() => window.dispatchEvent(new CustomEvent("vic:open", { detail: "Launch a new venture: " }))}
+          onClick={() => router.push(`/assistant?prefill=${encodeURIComponent("Launch a new venture: ")}`)}
           className="mb-4 flex w-full items-center justify-center gap-2 rounded-[10px] px-3 py-2.5 text-[12.5px] font-semibold transition-all duration-200 hover:-translate-y-[1px]"
           style={{
             color: "#0b0b10",

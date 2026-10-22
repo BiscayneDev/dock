@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -199,6 +200,7 @@ function hotRiskLabel(repos: Repo[]): string {
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const router = useRouter()
   const [sessions, setSessions] = useState<Session[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [repos, setRepos] = useState<Repo[]>([])
@@ -351,7 +353,7 @@ export default function DashboardPage() {
       return { task, conversation, latestActivity, lastHeard }
     })
 
-  const openVicWith = (prompt: string) => window.dispatchEvent(new CustomEvent("vic:open", { detail: prompt }))
+  const openVicWith = (prompt: string) => router.push(`/assistant?prefill=${encodeURIComponent(prompt)}`)
 
   return (
     <div className="relative mx-auto max-w-[820px] px-5 pb-24 pt-2 lg:px-8">
