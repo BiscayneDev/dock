@@ -26,9 +26,17 @@ const DEVICE_BEARER_PATTERNS = [
   /^\/api\/runs\/[^/]+\/(events|complete)$/,
 ]
 
+// Dinghy connector routes authenticate per-route: pair with the one-time code, the rest with the connector bearer token.
+// Exact paths only. /api/connector/setup (the owner's Settings card) stays behind the session gate.
+const CONNECTOR_BEARER_PATTERNS = [
+  /^\/api\/connector\/(pair|unlink|runs)$/,
+  /^\/api\/connector\/approvals\/[^/]+\/decision$/,
+]
+
 function isPublic(pathname: string): boolean {
   if (PUBLIC_EXACT_PATHS.includes(pathname)) return true
   if (DEVICE_BEARER_PATTERNS.some((re) => re.test(pathname))) return true
+  if (CONNECTOR_BEARER_PATTERNS.some((re) => re.test(pathname))) return true
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
 }
 

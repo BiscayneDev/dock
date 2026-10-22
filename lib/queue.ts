@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { EVENT, RUN_TARGETS, type ProposedAction, type RunStatus, type RunTarget } from "@/lib/task-runs"
+import { connectorApprovalParked, connectorRunFinished } from "@/lib/connector-events"
 
 // Task queue data layer (migration 0005). Owner calls pass the signed-in session client (RLS applies).
 // Worker calls pass the service-role client: they claim, heartbeat and complete runs for any workspace.
@@ -89,6 +90,8 @@ export interface EnqueueInput {
   proposedAction?: ProposedAction | null
   /** Set when the run was approved from a project brief. The worker uses it to write the outcome back. */
   briefId?: string | null
+  /** Set when the run came from a Dinghy connector. Used for run dedupe and for the webhook back to Dinghy. */
+  connector?: { connectionId: string; clientMessageId: string } | null
 }
 
 /** Owner-side insert. RLS requires owner_id = auth.uid() and a workspace the user owns. */
@@ -97,6 +100,9 @@ export async function enqueueRun(supabase: SupabaseClient, input: EnqueueInput):
   const payload: Record<string, unknown> = { prompt: input.prompt }
   if (input.proposedAction) payload.proposedAction = input.proposedAction
   if (input.briefId) payload.briefId = input.briefId
+  if (input.connector) {
+    payload.connector = { connection_id: input.connector.connectionId, client_message_id: input.connector.clientMessageId }
+  }
   const { data, error } = await supabase
     .from("task_runs")
     .insert({
@@ -171,7 +177,9 @@ export async function parkForApproval(admin: SupabaseClient, runId: string, work
     .in("status", ["leased", "running"])
     .select("id")
   if (error) throw new Error(`park: ${error.message}`)
-  return (data ?? []).length === 1
+  const parked = (data ?? []).length === 1
+  if (parked) await connectorApprovalParked(admin, runId)
+  return parked
 }
 
 /** Adds spend to the run. Only the current leaseholder can meter it. */
@@ -214,7 +222,9 @@ export async function complete(
   if (error) throw new Error(`complete: ${error.message}`)
   const kind = result.status === "succeeded" ? EVENT.completed : result.status === "failed" ? EVENT.failed : EVENT.cancelled
   await addEvent(admin, runId, kind, result.error ? { error: result.error } : {})
-  return (data ?? []).length === 1
+  const done = (data ?? []).length === 1
+  if (done) await connectorRunFinished(admin, runId, result)
+  return done
 }
 
 export async function addEvent(
