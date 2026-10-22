@@ -3,7 +3,7 @@ import { readFile, writeFile, mkdir } from "fs/promises"
 import { join, dirname } from "path"
 import { currentUser, sessionClient } from "@/lib/tenancy"
 import { agentTokenAuthorized } from "@/lib/agent-auth"
-import { isDue, calculateNextRun, dueSchedules, scheduleFeedId, type AgentSchedule } from "@/lib/schedules"
+import { calculateNextRun, dueSchedules, scheduleFeedId, type AgentSchedule } from "@/lib/schedules"
 import { adminClient } from "@/lib/tenancy"
 import { enqueueRun } from "@/lib/queue"
 import { resolveModelRef } from "@/lib/inference"
@@ -77,11 +77,6 @@ export async function POST(request: Request) {
   let changed = false
 
   for (const schedule of dueSchedules(now, schedules)) {
-    if (!isDue(schedule, now)) {
-      results.push({ id: schedule.id, name: schedule.name, status: "skipped" })
-      continue
-    }
-
     const feedId = scheduleFeedId(schedule.id)
     const current: Watermark = workspace ? await getWatermark(workspace.owner_id, feedId) : NO_WATERMARK
     const tickItem = { id: schedule.id, createdAt: now.toISOString() }

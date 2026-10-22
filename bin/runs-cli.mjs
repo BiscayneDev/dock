@@ -23,10 +23,13 @@ export function isTerminalStatus(status) {
 export function parseRunArgs(args) {
   const flags = {}
   const positional = []
+  const takesValue = ["--agent", "--prompt", "--project", "--budget"]
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
-    const takesValue = ["--agent", "--prompt", "--project", "--budget"]
-    if (takesValue.includes(arg) && i + 1 < args.length) {
+    if (takesValue.includes(arg)) {
+      if (i + 1 >= args.length) {
+        throw new Error(`usage: ${arg} requires a value`)
+      }
       flags[arg.slice(2)] = args[++i]
     } else if (!arg.startsWith("--")) {
       positional.push(arg)
@@ -73,14 +76,21 @@ function apiConfig() {
 
 async function apiFetch(path, init = {}) {
   const { baseUrl, token } = apiConfig()
-  const res = await fetch(`${baseUrl}${path}`, {
-    ...init,
-    headers: {
-      "content-type": "application/json",
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-      ...(init.headers ?? {}),
-    },
-  })
+  let res
+  try {
+    res = await fetch(`${baseUrl}${path}`, {
+      ...init,
+      headers: {
+        "content-type": "application/json",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(init.headers ?? {}),
+      },
+    })
+  } catch (err) {
+    throw new Error(
+      `cannot reach DOCK_URL (${baseUrl}): ${err instanceof Error ? err.message : String(err)}`
+    )
+  }
   const body = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(body.error || `HTTP ${res.status} ${path}`)
   return body
@@ -148,6 +158,7 @@ async function cmdRunsWatch(id) {
     const run = await fetchRun(id)
     if (isTerminalStatus(run.status)) {
       console.log(runOutcome(run))
+      if (run.status !== "succeeded") process.exitCode = 1
       return
     }
     if (Date.now() > deadline) {

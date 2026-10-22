@@ -26,8 +26,11 @@ test("parseRunArgs extracts flags and positionals", () => {
   assert.deepEqual(watch.positional, ["abc-123"])
   assert.deepEqual(watch.flags, {})
 
-  // Unknown / dangling flags fall through without crashing.
-  const odd = parseRunArgs(["--agent"])
+  // A value-taking flag with no value is a usage error, not a silent undefined.
+  assert.throws(() => parseRunArgs(["--agent"]), /--agent requires a value/)
+
+  // Unknown --flags (not value-taking) still fall through without crashing.
+  const odd = parseRunArgs(["--yolo"])
   assert.deepEqual(odd.flags, {})
   assert.deepEqual(odd.positional, [])
 })

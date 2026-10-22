@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 
 interface ReportItem {
   title: string
@@ -147,8 +147,10 @@ export default function IntelPage() {
   const fetchReport = useCallback(async () => {
     try {
       const res = await fetch("/api/intel/report", { cache: "no-store" })
-      const data = await res.json()
-      setReport(data)
+      if (res.ok) {
+        const data = await res.json()
+        setReport(data)
+      }
     } catch {
       // ignore
     } finally {
@@ -156,11 +158,20 @@ export default function IntelPage() {
     }
   }, [])
 
+  // Track the deploy-poll interval so it can be cleared on unmount.
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  useEffect(() => () => {
+    if (pollRef.current !== null) clearInterval(pollRef.current)
+  }, [])
+
   useEffect(() => {
     fetchReport()
     // Fetch standup data
     fetch("/api/standup")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`standup: HTTP ${r.status}`)
+        return r.json()
+      })
       .then((d: StandupData) => setStandup(d))
       .catch(() => {})
   }, [fetchReport])
@@ -199,10 +210,14 @@ export default function IntelPage() {
             await fetch("/api/intel/deploy", { method: "POST" }).catch(() => {})
             // Poll every 15s for up to 3 minutes
             let attempts = 0
-            const poll = setInterval(async () => {
+            pollRef.current = setInterval(async () => {
               attempts++
               await fetchReport()
-              if (attempts >= 12) { clearInterval(poll); setDeploying(false) }
+              if (attempts >= 12) {
+                if (pollRef.current !== null) clearInterval(pollRef.current)
+                pollRef.current = null
+                setDeploying(false)
+              }
             }, 15000)
           }}
           disabled={deploying}

@@ -91,7 +91,7 @@ export async function POST(req: Request) {
   const errors: Array<{ path: string; message: string }> = []
   if (truncated) {
     errors.push({
-      path: dir,
+      path: dirInput,
       message: `skipped ${candidates.length - MAX_FILES} files: only the first ${MAX_FILES} are imported`,
     })
   }
@@ -115,10 +115,18 @@ export async function POST(req: Request) {
     }
   }
 
-  // Upsert by name into the existing external-skills store.
+  // Upsert by name into the existing external-skills store. On re-import of a
+  // known name, preserve fields the importer doesn't produce (category,
+  // source_url) — merge, don't overwrite.
   const existing = await readExternalSkills()
   const byName = new Map(existing.map((s) => [s.name, s]))
-  for (const skill of imported) byName.set(skill.name, skill)
+  for (const skill of imported) {
+    const prev = byName.get(skill.name)
+    byName.set(skill.name, {
+      ...skill,
+      ...(prev ? { category: prev.category, ...(prev.source_url ? { source_url: prev.source_url } : {}) } : {}),
+    })
+  }
   await writeExternalSkills([...byName.values()])
 
   return NextResponse.json({

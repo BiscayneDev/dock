@@ -12,11 +12,19 @@ export async function getWatermark(ownerId: string, feedId: string): Promise<Wat
     .eq("owner_id", ownerId)
     .eq("feed_id", feedId)
     .maybeSingle()
-  if (error || !data) return NO_WATERMARK
+  if (error || !data) {
+    // Swallowed by design (caller falls back to NO_WATERMARK) but log it so a
+    // broken watermarks table doesn't silently re-process old items.
+    if (error) console.error(`getWatermark(${ownerId}, ${feedId}):`, error.message)
+    return NO_WATERMARK
+  }
   return parseWatermarkRow(data as Record<string, unknown> | null)
 }
 
 /** Upsert the watermark for (ownerId, feedId) into workspaceId. Throws on DB error. */
+// NOTE: enqueue-then-watermark is not atomic — if setWatermark fails after a
+// successful enqueueRun, the next tick may process the same item again
+// (duplicate run possible). Acceptable for at-most-once scheduling semantics.
 export async function setWatermark(
   workspaceId: string,
   ownerId: string,
