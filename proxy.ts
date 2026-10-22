@@ -9,7 +9,7 @@ import { createServerClient } from "@supabase/ssr"
 // Agent callbacks (POST) are authenticated per-route with DOCK_AGENT_TOKEN (lib/agent-auth.ts).
 // /api/notify is exact-match only: /api/notify/stream and /api/notify/recent are browser
 // routes and must stay behind the session gate.
-const PUBLIC_PATHS = ["/login", "/api/auth", "/api/tasks/agent-done", "/api/tasks/agent-spawn", "/api/paybox/connect/callback", "/api/worker/tick"]
+const PUBLIC_PATHS = ["/login", "/api/auth", "/api/tasks/agent-done", "/api/tasks/agent-spawn", "/api/paybox/connect/callback", "/api/connect/shipyard/callback", "/api/worker/tick"]
 const PUBLIC_EXACT_PATHS = ["/", "/api/notify"]
 
 // Signed-in users who are not yet allowed in may still reach these (redeeming an invite).
