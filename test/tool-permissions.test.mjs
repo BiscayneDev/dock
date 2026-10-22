@@ -38,25 +38,6 @@ test("modeForColumn unknown column defaults to plan", () => {
   assert.equal(modeForColumn("Weird Column"), "plan");
 });
 
-// modeForRun tests
-import { modeForRun } from "../lib/tool-permissions.ts";
-
-test("modeForRun prefers a valid payload.mode", () => {
-  assert.equal(modeForRun({ mode: "build" }), "build");
-  assert.equal(modeForRun({ mode: "explore", column: "In Progress" }), "explore");
-});
-
-test("modeForRun falls back to the column mapping", () => {
-  assert.equal(modeForRun({ column: "In Progress" }), "build");
-  assert.equal(modeForRun({ column: "Backlog" }), "plan");
-  assert.equal(modeForRun({}), "plan");
-});
-
-test("modeForRun ignores an invalid payload.mode", () => {
-  assert.equal(modeForRun({ mode: "yolo", column: "Review" }), "build");
-  assert.equal(modeForRun({ mode: 7 }), "plan");
-});
-
 import { EXPLORE_MODE_INSTRUCTION } from "../lib/tool-permissions.ts";
 
 test("EXPLORE_MODE_INSTRUCTION exists and is non-trivial", () => {

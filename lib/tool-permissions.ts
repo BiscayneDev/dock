@@ -65,17 +65,6 @@ export function modeForColumn(column: string): RunMode {
   return COLUMN_MODES[column] ?? "plan";
 }
 
-/**
- * Mode for a run payload: an explicit valid payload.mode wins; otherwise the kanban column
- * decides (defaulting to plan, the most restrictive mode).
- */
-export function modeForRun(payload: Record<string, unknown> | null | undefined): RunMode {
-  const mode = payload?.mode;
-  if (mode === "plan" || mode === "build" || mode === "explore") return mode;
-  const column = typeof payload?.column === "string" ? payload.column : "";
-  return modeForColumn(column);
-}
-
 /** System-prompt suffix that gates plan mode: no file writes, no command execution. */
 export const PLAN_MODE_INSTRUCTION =
   "PLAN MODE: you may not modify files or execute commands; produce a plan only";
