@@ -86,3 +86,6 @@ export const TEAM_TEMPLATES: TeamTemplate[] = [
     ],
   },
 ]
+export function templateAgentExplore(agentKey: string): boolean {
+  return TEAM_TEMPLATES.some((t) => t.agents.some((a) => a.id === agentKey && a.explore === true))
+}

@@ -36,7 +36,8 @@ import {
   type MoneyExecutor,
 } from "@/lib/task-runs"
 import { checkpointData, continuationPrompt } from "@/lib/run-resume"
-import { modeForRun, PLAN_MODE_INSTRUCTION } from "@/lib/tool-permissions"
+import { PLAN_MODE_INSTRUCTION } from "@/lib/tool-permissions"
+import { resolveRunMode } from "@/lib/agent-mode"
 
 // Cloud worker runner (P2). Each tick claims up to N runs and works them in order within a time budget.
 // Rules: money actions are gated before any model call; every model call is budget-checked and metered.
@@ -216,7 +217,9 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
 
   // Kanban state gates permissions: plan mode forbids file/command tools in the system prompt and
   // marks the output as a plan (enrichment), never a finished deliverable.
-  const mode = modeForRun(run.payload)
+  // payload.mode is the single source of truth at runtime (set at enqueue time); column mapping is
+  // resolveRunMode's fallback for legacy runs without a mode.
+  const mode = resolveRunMode(run.payload)
   const isPlan = mode === "plan"
   const effectiveSystem = [system, isPlan ? PLAN_MODE_INSTRUCTION : null].filter(Boolean).join("\n\n") || null
 

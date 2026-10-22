@@ -3,6 +3,7 @@ import { decideApproval, enqueueRun } from "@/lib/queue"
 import { resolveModelRef } from "@/lib/inference"
 import { EVENT } from "@/lib/task-runs"
 import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
+import { resolveAgentExplore } from "@/lib/agent-flags"
 import { adminClient, DEFAULT_CHIEF_NAME } from "@/lib/tenancy"
 import {
   CONNECTOR_PAIRING_TTL_MS,
@@ -197,6 +198,7 @@ export async function submitConnectorRun(
       model,
       budgetCents: DEFAULT_BUDGET_CENTS,
       connector: { connectionId: auth.connectionId, clientMessageId },
+      explore: await resolveAgentExplore(agentKey),
     })
     return { status: 201, body: { run_id: run.id, agent_name: await agentName(admin, auth, agentKey) } }
   } catch (err) {

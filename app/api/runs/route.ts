@@ -7,6 +7,7 @@ import { createShipyardCapture } from "@/lib/inference/shipyard-capture"
 import { SHIPYARD_AUTO_MODEL } from "@/lib/route-preview"
 import { RUN_TARGETS, type RunTarget } from "@/lib/task-runs"
 import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
+import { resolveAgentExplore } from "@/lib/agent-flags"
 
 export const dynamic = "force-dynamic"
 
@@ -143,6 +144,7 @@ export async function POST(request: Request) {
       budgetCents: budget,
       conversationId,
       modelReason,
+      explore: await resolveAgentExplore(agentKey),
     })
     return NextResponse.json({ id: run.id, status: run.status, budgetCents: run.budgetCents }, { status: 201 })
   } catch {

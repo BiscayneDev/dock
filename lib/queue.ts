@@ -10,6 +10,7 @@ import {
   type RunTarget,
 } from "@/lib/task-runs"
 import { connectorApprovalParked, connectorRunFinished } from "@/lib/connector-events"
+import { resolveRunMode } from "@/lib/agent-mode"
 
 // Task queue data layer (migration 0005). Owner calls pass the signed-in session client (RLS applies).
 // Worker calls pass the service-role client: they claim, heartbeat and complete runs for any workspace.
@@ -103,6 +104,8 @@ export interface EnqueueInput {
   conversationId?: string | null
   /** Why this model was used: chosen in the composer, or the agent's default. Shown on the approval card. */
   modelReason?: string | null
+  /** Resolved from the agent's explore flag by the caller. Forces payload.mode to "explore" (read-only). */
+  explore?: boolean
   /** Set when the run came from a Dinghy connector. Used for run dedupe and for the webhook back to Dinghy. */
   connector?: { connectionId: string; clientMessageId: string } | null
 }
@@ -115,6 +118,9 @@ export async function enqueueRun(supabase: SupabaseClient, input: EnqueueInput):
   if (input.briefId) payload.briefId = input.briefId
   if (input.conversationId) payload.conversationId = input.conversationId
   if (input.modelReason) payload.modelReason = input.modelReason
+  // Single source of truth for mode at runtime: payload.mode. Explore agents are
+  // forced read-only here at enqueue time (overrides any later column mapping).
+  if (input.explore) payload.mode = resolveRunMode({ explore: true })
   if (input.connector) {
     payload.connector = { connection_id: input.connector.connectionId, client_message_id: input.connector.clientMessageId }
   }

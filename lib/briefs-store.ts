@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { enqueueRun, type TaskRun } from "@/lib/queue"
+import { resolveAgentExplore } from "@/lib/agent-flags"
 import { resolveModelRef } from "@/lib/inference"
 import {
   canApprove,
@@ -344,6 +345,7 @@ export async function approveBrief(
           model,
           budgetCents: share,
           briefId: current.id,
+          explore: await resolveAgentExplore(agentKey),
         }),
       )
     }

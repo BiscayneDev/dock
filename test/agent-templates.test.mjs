@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { resolveRunMode } from "../lib/agent-mode.ts";
 import { TEAM_TEMPLATES } from "../lib/agent-templates.ts";
 import { modeForColumn } from "../lib/tool-permissions.ts";
+import { templateAgentExplore } from "../lib/agent-templates.ts";
 
 test("explore flag on agent overrides column mapping", () => {
   assert.deepEqual(resolveRunMode({ explore: true }, "In Progress"), "explore");
@@ -41,4 +42,12 @@ test("Scout agents are marked explore", () => {
       }
     }
   }
+});
+
+test("templateAgentExplore resolves the template default", () => {
+  assert.equal(templateAgentExplore("researcher"), true);
+  assert.equal(templateAgentExplore("scout"), true);
+  assert.equal(templateAgentExplore("chief"), false);
+  assert.equal(templateAgentExplore("engineer"), false);
+  assert.equal(templateAgentExplore("nobody"), false);
 });
