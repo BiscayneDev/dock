@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react"
 import DevicesSection from "@/components/settings/DevicesSection"
 import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
+import ConnectDinghyCard from "@/components/settings/ConnectDinghyCard"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -544,6 +545,7 @@ export default function SettingsPage() {
 
       <AgentBudgetsSection />
       <DevicesSection />
+      <ConnectDinghyCard />
       <CronsSection />
       <ConnectedServicesSection />
       <NotificationsSection />
