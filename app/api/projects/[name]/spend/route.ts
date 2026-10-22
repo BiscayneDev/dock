@@ -5,24 +5,24 @@ import { validateCapCents } from "@/lib/briefs"
 
 export const dynamic = "force-dynamic"
 
-async function scoped(params: Promise<{ id: string }>) {
+async function scoped(params: Promise<{ name: string }>) {
   const ctx = await assistantContext()
   if (!ctx) return { error: NextResponse.json({ error: "Sign in required" }, { status: 401 }) }
-  const { id } = await params
+  const { name: id } = await params
   if (!isUuid(id)) return { error: NextResponse.json({ error: "Not found" }, { status: 404 }) }
   if (!(await projectInWorkspace(ctx, id))) return { error: NextResponse.json({ error: "Project not found" }, { status: 404 }) }
   return { ctx, id }
 }
 
 /** This month's cap, spend and reservations for the project. */
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(_request: Request, { params }: { params: Promise<{ name: string }> }) {
   const s = await scoped(params)
   if ("error" in s) return s.error
   return NextResponse.json(await getProjectSpend(s.ctx.supabase, s.id, new Date()))
 }
 
 /** Owner sets or clears the project's monthly cap. Body: { capCents: number | null }. */
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ name: string }> }) {
   const s = await scoped(params)
   if ("error" in s) return s.error
   let body: { capCents?: unknown }
