@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState, type ReactNode } from "react"
-import { useRouter } from "next/navigation"
+import { Suspense, useEffect, useState, type ReactNode } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { WaveBackground } from "@/components/onboarding/WaveBackground"
 import {
   DEFAULT_CHIEF_NAME,
@@ -22,6 +22,10 @@ import {
 // Onboarding: ten questions plus a review screen. Each answer saves when the user moves forward.
 // Skip stores null with skipped=true (the agent decides later). The Chief of Staff name is only
 // saved on Confirm, and only after a uniqueness check.
+//
+// Venture mode (/onboarding?mode=venture): the same questions for a NEW project in the workspace.
+// The Chief of Staff step is skipped (the existing Chief is used), nothing is saved until Confirm,
+// and Confirm creates the project with its own answers and rules in one request.
 
 type Ans = { choice: string | null; other: string; skipped: boolean }
 type Rule = { presetKey: string | null; text: string; enabled: boolean }
@@ -54,10 +58,13 @@ type ServerState = {
   }
   rules: Array<{ presetKey: string | null; text: string; enabled: boolean }>
 }
+type Launched = { projectId: string; name: string }
 
 // Recommended defaults shown before a value is saved. Other questions have no default.
 const DEFAULTS: Record<string, string> = { source: "blank", direction: "carry_on" }
 const DEFAULT_PAYMENT = "usdc"
+const VENTURE_GOAL_TITLE = "What is the new venture, in one sentence?"
+const LAUNCH_STAGES = ["Goal and answers saved", "Rules set for this venture", "Handing it to your Chief of Staff"]
 
 function ans(a: Answered | undefined, key: string): Ans {
   if (!a) return { choice: DEFAULTS[key] ?? null, other: "", skipped: false }
@@ -108,8 +115,23 @@ function summarizeAns(group: string, a: Ans): string {
   return optionLabel(group, a.choice) ?? a.choice
 }
 
+function ansBody(a: Ans): Record<string, unknown> {
+  return a.skipped ? { skipped: true } : { choice: a.choice, other: a.other }
+}
+
 export default function OnboardingPage() {
+  return (
+    <Suspense fallback={null}>
+      <OnboardingFlow />
+    </Suspense>
+  )
+}
+
+function OnboardingFlow() {
   const router = useRouter()
+  const venture = useSearchParams().get("mode") === "venture"
+  const order: StepKey[] = venture ? STEP_ORDER.filter((k) => k !== "chief") : STEP_ORDER
+
   const [loaded, setLoaded] = useState(false)
   const [step, setStep] = useState(0)
   const [editing, setEditing] = useState(false)
@@ -118,21 +140,35 @@ export default function OnboardingPage() {
   const [customRule, setCustomRule] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [launched, setLaunched] = useState<Launched | null>(null)
+  const [launchStage, setLaunchStage] = useState(0)
 
-  const key: StepKey = STEP_ORDER[step]
+  const key: StepKey = order[step]
 
   useEffect(() => {
     let cancelled = false
+    const signIn = venture ? "/login?next=/onboarding?mode=venture" : "/login?next=/onboarding"
     fetch("/api/onboarding", { cache: "no-store" })
       .then(async (r) => {
         if (r.status === 401) {
-          router.replace("/login?next=/onboarding")
+          router.replace(signIn)
           return null
         }
         return (await r.json()) as ServerState
       })
       .then((s) => {
         if (!s || cancelled) return
+        if (venture) {
+          // Venture mode needs a Chief of Staff. Without one, the first-run flow names one first.
+          if (!s.chief) {
+            router.replace("/onboarding")
+            return
+          }
+          setChiefName(s.chief.displayName)
+          setDraft(EMPTY_DRAFT)
+          setLoaded(true)
+          return
+        }
         if (s.chief) {
           router.replace("/assistant")
           return
@@ -144,7 +180,19 @@ export default function OnboardingPage() {
     return () => {
       cancelled = true
     }
-  }, [router])
+  }, [router, venture])
+
+  // After a venture is created: show the launch steps, then open the assistant.
+  useEffect(() => {
+    if (!launched) return
+    const timers = [
+      setTimeout(() => setLaunchStage(1), 500),
+      setTimeout(() => setLaunchStage(2), 1000),
+      setTimeout(() => setLaunchStage(3), 1500),
+      setTimeout(() => router.replace(`/assistant?prefill=${encodeURIComponent(`Working on ${launched.name}: `)}`), 2100),
+    ]
+    return () => timers.forEach(clearTimeout)
+  }, [launched, router])
 
   async function post(body: Record<string, unknown>) {
     const res = await fetch("/api/onboarding", {
@@ -157,7 +205,8 @@ export default function OnboardingPage() {
     return data
   }
 
-  // Review shows what is saved on the server, not what is typed locally.
+  // First-run review shows what is saved on the server, not what is typed locally.
+  // Venture drafts are not saved yet, so there is nothing to reload.
   async function refreshFromServer() {
     const res = await fetch("/api/onboarding", { cache: "no-store" })
     if (!res.ok) return
@@ -173,11 +222,11 @@ export default function OnboardingPage() {
   function afterSave() {
     if (editing) {
       setEditing(false)
-      moveTo(STEP_ORDER.indexOf("review"))
-      void refreshFromServer()
+      moveTo(order.indexOf("review"))
+      if (!venture) void refreshFromServer()
     } else {
       moveTo(step + 1)
-      if (STEP_ORDER[step + 1] === "review") void refreshFromServer()
+      if (!venture && order[step + 1] === "review") void refreshFromServer()
     }
   }
 
@@ -185,10 +234,48 @@ export default function OnboardingPage() {
     setDraft((d) => ({ ...d, [group]: { ...(d[group] as Ans), ...patch, skipped: false } }))
   }
 
+  function markSkipped(k: StepKey) {
+    if (k === "rules") setDraft((d) => ({ ...d, rules: [], rulesSkipped: true }))
+    else if (k === "pricing") setDraft((d) => ({ ...d, pricing: { choice: null, other: "", skipped: true }, payment: null }))
+    else setDraft((d) => ({ ...d, [k]: { choice: null, other: "", skipped: true } }))
+  }
+
+  // Venture: every answer goes in one request at Confirm.
+  async function confirmVenture() {
+    const steps = {
+      goal: { text: draft.goal.trim() },
+      source: ansBody(draft.source),
+      story: ansBody(draft.story),
+      stage: ansBody(draft.stage),
+      direction: ansBody(draft.direction),
+      customer: ansBody(draft.customer),
+      pricing: { ...ansBody(draft.pricing), payment: draft.payment },
+      acquisition: ansBody(draft.acquisition),
+    }
+    const rules = draft.rulesSkipped
+      ? { skipped: true }
+      : { items: draft.rules.map((r) => ({ presetKey: r.presetKey, text: r.text, enabled: r.enabled })) }
+    const data = (await post({ action: "venture", steps, rules })) as unknown as Launched
+    setLaunched({ projectId: data.projectId, name: data.name })
+  }
+
   async function saveStep() {
     setError(null)
+    if (venture && key !== "review") {
+      afterSave()
+      return
+    }
     setBusy(true)
     try {
+      if (key === "review") {
+        if (venture) {
+          await confirmVenture()
+          return
+        }
+        await post({ action: "chief", name: chiefName.trim() })
+        router.replace("/assistant")
+        return
+      }
       if (key === "goal") {
         await post({ action: "answer", step: "goal", text: draft.goal.trim() })
       } else if (key === "chief") {
@@ -207,10 +294,6 @@ export default function OnboardingPage() {
           other: draft.pricing.other,
           payment: draft.payment,
         })
-      } else if (key === "review") {
-        await post({ action: "chief", name: chiefName.trim() })
-        router.replace("/assistant")
-        return
       } else {
         const a = draft[key] as Ans
         await post({ action: "answer", step: key, choice: a.choice, other: a.other })
@@ -225,18 +308,21 @@ export default function OnboardingPage() {
 
   async function skipStep() {
     setError(null)
+    if (venture) {
+      markSkipped(key)
+      afterSave()
+      return
+    }
     setBusy(true)
     try {
       if (key === "rules") {
         await post({ action: "rules", skipped: true })
-        setDraft((d) => ({ ...d, rules: [], rulesSkipped: true }))
       } else if (key === "pricing") {
         await post({ action: "answer", step: "pricing", skipped: true })
-        setDraft((d) => ({ ...d, pricing: { choice: null, other: "", skipped: true }, payment: null }))
       } else {
         await post({ action: "answer", step: key, skipped: true })
-        setDraft((d) => ({ ...d, [key]: { choice: null, other: "", skipped: true } }))
       }
+      markSkipped(key)
       afterSave()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong. Try again.")
@@ -265,9 +351,9 @@ export default function OnboardingPage() {
     setCustomRule("")
   }
 
-  function editStep(index: number) {
+  function editStep(k: StepKey) {
     setEditing(true)
-    moveTo(index)
+    moveTo(order.indexOf(k))
   }
 
   if (!loaded) {
@@ -279,29 +365,67 @@ export default function OnboardingPage() {
     )
   }
 
+  if (launched) {
+    const rulesLine = draft.rulesSkipped
+      ? "Rules skipped: the agent decides"
+      : `${draft.rules.filter((r) => r.enabled).length} active rule${draft.rules.filter((r) => r.enabled).length === 1 ? "" : "s"}`
+    return (
+      <div className="relative flex min-h-screen items-center justify-center p-6">
+        <WaveBackground />
+        <div className="relative z-10 w-full max-w-[600px] rounded-[18px] p-6 sm:p-8" style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}>
+          <p className="text-[12px] uppercase tracking-[0.18em]" style={hint}>
+            Launching
+          </p>
+          <h1 className="mt-3 break-words text-[22px] font-semibold" style={{ color: "var(--ink)" }}>
+            {launched.name}
+          </h1>
+          <ul className="mt-6 space-y-3 text-[14px]" style={{ color: "var(--ink-2)" }}>
+            {LAUNCH_STAGES.map((text, i) => {
+              const done = launchStage > i
+              return (
+                <li key={text} className="flex items-center gap-3" style={{ opacity: done ? 1 : 0.4 }}>
+                  <span aria-hidden className="flex h-5 w-5 items-center justify-center rounded-full text-[11px]" style={{ border: "1px solid var(--line-strong)", color: "var(--ink)" }}>
+                    {done ? "✓" : ""}
+                  </span>
+                  <span>{i === 1 ? `${text}: ${rulesLine}` : text}</span>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      </div>
+    )
+  }
+
   const isQuestion = (SKIPPABLE as StepKey[]).includes(key)
-  const total = STEP_ORDER.length
+  const total = order.length
+  const title = venture && key === "goal" ? VENTURE_GOAL_TITLE : STEP_TITLES[key]
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center p-6">
+    <div className="relative flex min-h-screen items-center justify-center p-4 sm:p-6">
       <WaveBackground />
-      <div className="relative z-10 w-full max-w-[600px] rounded-[18px] p-8" style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}>
-        <div className="flex items-center justify-between">
+      <div className="relative z-10 w-full max-w-[600px] rounded-[18px] p-5 sm:p-8" style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}>
+        <div className="flex items-center justify-between gap-3">
           <p className="text-[13px] font-semibold tracking-wide" style={{ color: "var(--ink-2)" }}>
-            ⚓ Dock
+            ⚓ Dock{venture ? " · Launch a venture" : ""}
           </p>
-          <p className="text-[12px]" style={{ color: "var(--ink-3)" }}>
+          <p className="shrink-0 text-[12px]" style={{ color: "var(--ink-3)" }}>
             {step + 1} of {total}
           </p>
         </div>
         <div className="mt-3 flex gap-1" aria-hidden>
-          {STEP_ORDER.map((k, i) => (
+          {order.map((k, i) => (
             <div key={k} className="h-1 flex-1 rounded-full" style={{ background: i <= step ? "var(--ink)" : "var(--line-strong)" }} />
           ))}
         </div>
 
-        <h1 className="mt-7 text-[22px] font-semibold" style={{ color: "var(--ink)" }}>
-          {STEP_TITLES[key]}
+        {venture && (
+          <p className="mt-7 text-[12px] uppercase tracking-[0.18em]" style={hint}>
+            Launch a venture: new project
+          </p>
+        )}
+        <h1 className={`${venture ? "mt-2" : "mt-7"} text-[22px] font-semibold`} style={{ color: "var(--ink)" }}>
+          {title}
         </h1>
 
         <div className="mt-5 space-y-4">
@@ -386,14 +510,14 @@ export default function OnboardingPage() {
                   maxLength={MAX_RULE_LENGTH}
                   aria-label="Add your own rule"
                   placeholder="Add your own rule"
-                  className="flex-1 rounded-[12px] px-4 py-2.5 text-[14px] outline-none"
+                  className="min-w-0 flex-1 rounded-[12px] px-4 py-2.5 text-[14px] outline-none"
                   style={field}
                 />
                 <button
                   type="button"
                   onClick={addCustomRule}
                   disabled={!customRule.trim()}
-                  className="rounded-[12px] px-4 text-[13px] disabled:opacity-40"
+                  className="shrink-0 rounded-[12px] px-4 text-[13px] disabled:opacity-40"
                   style={{ border: "1px solid var(--line-strong)", color: "var(--ink)" }}
                 >
                   Add
@@ -448,12 +572,12 @@ export default function OnboardingPage() {
 
           {key === "review" && (
             <div className="space-y-2 rounded-[12px] p-4 text-[14px]" style={{ background: "var(--surface-0)", border: "1px solid var(--line)" }}>
-              <ReviewRow title={STEP_TITLES.goal} value={draft.goal.trim() || "Not set"} onEdit={() => editStep(0)} />
-              <ReviewRow title="Source" value={summarizeAns("source", draft.source)} onEdit={() => editStep(1)} />
-              <ReviewRow title="Story" value={summarizeAns("story", draft.story)} onEdit={() => editStep(2)} />
-              <ReviewRow title="Stage" value={summarizeAns("stage", draft.stage)} onEdit={() => editStep(3)} />
-              <ReviewRow title="Direction" value={summarizeAns("direction", draft.direction)} onEdit={() => editStep(4)} />
-              <ReviewRow title="First customer" value={summarizeAns("customer", draft.customer)} onEdit={() => editStep(5)} />
+              <ReviewRow title={venture ? "New venture" : STEP_TITLES.goal} value={draft.goal.trim() || "Not set"} onEdit={() => editStep("goal")} />
+              <ReviewRow title="Source" value={summarizeAns("source", draft.source)} onEdit={() => editStep("source")} />
+              <ReviewRow title="Story" value={summarizeAns("story", draft.story)} onEdit={() => editStep("story")} />
+              <ReviewRow title="Stage" value={summarizeAns("stage", draft.stage)} onEdit={() => editStep("stage")} />
+              <ReviewRow title="Direction" value={summarizeAns("direction", draft.direction)} onEdit={() => editStep("direction")} />
+              <ReviewRow title="First customer" value={summarizeAns("customer", draft.customer)} onEdit={() => editStep("customer")} />
               <ReviewRow
                 title="Pricing and payments"
                 value={
@@ -461,9 +585,9 @@ export default function OnboardingPage() {
                     ? "Skipped: agent decides"
                     : `${summarizeAns("pricing", draft.pricing)}; paid by ${optionLabel("payment", draft.payment) ?? "not set"}`
                 }
-                onEdit={() => editStep(6)}
+                onEdit={() => editStep("pricing")}
               />
-              <ReviewRow title="Acquisition" value={summarizeAns("acquisition", draft.acquisition)} onEdit={() => editStep(7)} />
+              <ReviewRow title="Acquisition" value={summarizeAns("acquisition", draft.acquisition)} onEdit={() => editStep("acquisition")} />
               <ReviewRow
                 title="Rules"
                 value={
@@ -471,9 +595,13 @@ export default function OnboardingPage() {
                     ? "Skipped: agent decides"
                     : draft.rules.filter((r) => r.enabled).map((r) => r.text).join("; ") || "None active"
                 }
-                onEdit={() => editStep(8)}
+                onEdit={() => editStep("rules")}
               />
-              <ReviewRow title="Chief of Staff" value={chiefName.trim()} onEdit={() => editStep(9)} />
+              {venture ? (
+                <ReviewRow title="Chief of Staff (existing)" value={chiefName.trim()} />
+              ) : (
+                <ReviewRow title="Chief of Staff" value={chiefName.trim()} onEdit={() => editStep("chief")} />
+              )}
             </div>
           )}
         </div>
@@ -484,7 +612,7 @@ export default function OnboardingPage() {
           </p>
         )}
 
-        <div className="mt-7 flex items-center justify-between gap-3">
+        <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"
             onClick={() => moveTo(Math.max(0, step - 1))}
@@ -494,7 +622,7 @@ export default function OnboardingPage() {
           >
             Back
           </button>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-end gap-3 sm:gap-4">
             {isQuestion && (
               <button
                 type="button"
@@ -513,7 +641,15 @@ export default function OnboardingPage() {
               className="rounded-[12px] px-5 py-2.5 text-[14px] font-medium disabled:opacity-40"
               style={{ background: "var(--ink)", color: "var(--surface-0)" }}
             >
-              {busy ? "Saving…" : key === "review" ? `Confirm and create ${chiefName.trim() || "Chief of Staff"}` : editing ? "Save and review" : "Continue"}
+              {busy
+                ? "Saving…"
+                : key === "review"
+                  ? venture
+                    ? "Confirm and launch venture"
+                    : `Confirm and create ${chiefName.trim() || "Chief of Staff"}`
+                  : editing
+                    ? "Save and review"
+                    : "Continue"}
             </button>
           </div>
         </div>
@@ -543,7 +679,7 @@ function Choice({ options, value, onPick }: { options: Option[]; value: string |
             role="radio"
             aria-checked={active}
             onClick={() => onPick(o.value)}
-            className="flex w-full items-center justify-between rounded-[12px] px-4 py-3 text-left text-[14px]"
+            className="flex w-full items-center justify-between gap-3 rounded-[12px] px-4 py-3 text-left text-[14px]"
             style={{
               background: active ? "var(--surface-2)" : "var(--surface-0)",
               border: `1px solid ${active ? "var(--ink-2)" : "var(--line)"}`,
@@ -552,7 +688,7 @@ function Choice({ options, value, onPick }: { options: Option[]; value: string |
           >
             <span>{o.label}</span>
             {o.recommended && (
-              <span className="text-[11px] uppercase tracking-wide" style={{ color: "var(--ink-3)" }}>
+              <span className="shrink-0 text-[11px] uppercase tracking-wide" style={{ color: "var(--ink-3)" }}>
                 Recommended
               </span>
             )}
@@ -577,7 +713,7 @@ function OtherInput({ value, onChange }: { value: string; onChange: (v: string) 
   )
 }
 
-function ReviewRow({ title, value, onEdit }: { title: string; value: string; onEdit: () => void }): ReactNode {
+function ReviewRow({ title, value, onEdit }: { title: string; value: string; onEdit?: () => void }): ReactNode {
   return (
     <div className="flex items-start justify-between gap-4 py-1">
       <div className="min-w-0">
@@ -588,9 +724,11 @@ function ReviewRow({ title, value, onEdit }: { title: string; value: string; onE
           {value}
         </p>
       </div>
-      <button type="button" onClick={onEdit} className="shrink-0 text-[12px] hover:underline" style={{ color: "var(--ink-3)" }}>
-        Edit
-      </button>
+      {onEdit && (
+        <button type="button" onClick={onEdit} className="shrink-0 text-[12px] hover:underline" style={{ color: "var(--ink-3)" }}>
+          Edit
+        </button>
+      )}
     </div>
   )
 }

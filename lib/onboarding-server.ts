@@ -164,8 +164,22 @@ export async function loadProfile(supabase: SupabaseClient, workspaceId: string)
   }
 }
 
-export async function loadRules(supabase: SupabaseClient, workspaceId: string): Promise<RuleView[]> {
-  const { data } = await supabase.from("workspace_rules").select("id, preset_key, text, enabled").eq("workspace_id", workspaceId).order("created_at")
+/** Venture steps, in order. The Chief of Staff step is not part of venture mode. */
+export const VENTURE_ANSWER_STEPS = ["source", "story", "stage", "direction", "customer", "pricing", "acquisition"] as const
+
+/** Project name derived from the goal sentence (the project table needs a name of 1 to 80 characters). */
+export function ventureName(goal: string): string {
+  const text = goal.trim().replace(/\s+/g, " ")
+  if (text.length <= 60) return text
+  const cut = text.slice(0, 60)
+  const space = cut.lastIndexOf(" ")
+  return `${(space > 30 ? cut.slice(0, space) : cut).trimEnd()}…`
+}
+
+/** Workspace-level rules only (project_id is null). Venture rules are read with their venture. */
+export async function loadRules(supabase: SupabaseClient, workspaceId: string, projectId: string | null = null): Promise<RuleView[]> {
+  const scope = projectId ? supabase.from("workspace_rules").select("id, preset_key, text, enabled").eq("project_id", projectId) : supabase.from("workspace_rules").select("id, preset_key, text, enabled").eq("workspace_id", workspaceId).is("project_id", null)
+  const { data } = await scope.order("created_at")
   return (data ?? []).map((r) => ({
     id: r.id as string,
     presetKey: (r.preset_key as string | null) ?? null,

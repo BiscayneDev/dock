@@ -9,7 +9,7 @@ import {
   sessionClient,
   validateAgentName,
 } from "@/lib/tenancy"
-import { answerUpdate, loadProfile, loadRules, parseRules } from "@/lib/onboarding-server"
+import { VENTURE_ANSWER_STEPS, answerUpdate, loadProfile, loadRules, parseRules, ventureName } from "@/lib/onboarding-server"
 
 export const dynamic = "force-dynamic"
 
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
 
   // The Keep step: replaces the workspace's rule list in one go.
   if (action === "rules") {
-    const { error: delErr } = await supabase.from("workspace_rules").delete().eq("workspace_id", workspaceId)
+    const { error: delErr } = await supabase.from("workspace_rules").delete().eq("workspace_id", workspaceId).is("project_id", null)
     if (delErr) return NextResponse.json({ error: "Could not save your rules." }, { status: 500 })
     if (body?.skipped !== true) {
       const parsed = parseRules(body ?? {})
@@ -74,6 +74,55 @@ export async function POST(request: Request) {
       .upsert({ workspace_id: workspaceId, rules_skipped: body?.skipped === true, updated_at: now }, { onConflict: "workspace_id" })
     if (error) return NextResponse.json({ error: "Could not save your rules." }, { status: 500 })
     return NextResponse.json({ ok: true })
+  }
+
+  // Venture mode: one new project with its own answers and rules, written in one request. If a later
+  // insert fails, the project row is deleted and its answers and rules go with it (cascade).
+  if (action === "venture") {
+    const { data: chief } = await supabase.from("agents").select("id").eq("workspace_id", workspaceId).eq("kind", "chief_of_staff").maybeSingle()
+    if (!chief) return NextResponse.json({ error: "Name your Chief of Staff first." }, { status: 409 })
+
+    const steps = (body?.steps && typeof body.steps === "object" ? body.steps : {}) as Record<string, Record<string, unknown>>
+    const goal = answerUpdate("goal", { text: steps.goal?.text })
+    if ("error" in goal) return NextResponse.json({ error: goal.error }, { status: 400 })
+    const update: Record<string, unknown> = { ...goal.update }
+    for (const step of VENTURE_ANSWER_STEPS) {
+      const result = answerUpdate(step, steps[step] ?? {})
+      if ("error" in result) return NextResponse.json({ error: result.error }, { status: 400 })
+      Object.assign(update, result.update)
+    }
+
+    const rulesBody = (body?.rules && typeof body.rules === "object" ? body.rules : {}) as Record<string, unknown>
+    const rulesSkipped = rulesBody.skipped === true
+    const parsed = rulesSkipped ? null : parseRules(rulesBody)
+    if (parsed && "error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 })
+    const rules = parsed && !("error" in parsed) ? parsed.rules : []
+
+    const goalText = String(goal.update.goal ?? "")
+    const { data: project, error: projectErr } = await supabase
+      .from("projects")
+      .insert({ workspace_id: workspaceId, name: ventureName(goalText), goal: goalText })
+      .select("id, name")
+      .single()
+    if (projectErr || !project) return NextResponse.json({ error: "Could not create the venture." }, { status: 500 })
+    const projectId = project.id as string
+    const undo = async (message: string) => {
+      await supabase.from("projects").delete().eq("id", projectId)
+      return NextResponse.json({ error: message }, { status: 500 })
+    }
+
+    const { error: profileErr } = await supabase
+      .from("venture_profile")
+      .insert({ workspace_id: workspaceId, project_id: projectId, ...update, rules_skipped: rulesSkipped, updated_at: now })
+    if (profileErr) return undo("Could not save your answers.")
+
+    if (rules.length > 0) {
+      const { error: rulesErr } = await supabase
+        .from("workspace_rules")
+        .insert(rules.map((r) => ({ workspace_id: workspaceId, project_id: projectId, ...r })))
+      if (rulesErr) return undo("Could not save your rules.")
+    }
+    return NextResponse.json({ ok: true, projectId, name: project.name as string }, { status: 201 })
   }
 
   if (action === "check-name" || action === "chief") {
