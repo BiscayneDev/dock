@@ -300,9 +300,20 @@ export async function decideApproval(
   const now = new Date().toISOString()
   if (decision === "approve") {
     await addEvent(supabase, runId, EVENT.approvalGranted, { actionId, amountCents: plan.amountCents })
+    // Carry prior work across the approval boundary: stash the last checkpoint's snapshot into
+    // the payload so the worker can resume from it even if event lookup misses (belt-and-braces).
+    const checkpoint = [...events].reverse().find((e) => e.kind === EVENT.checkpoint)
+    const snapshot =
+      checkpoint && typeof checkpoint.data.snapshot === "object" && checkpoint.data.snapshot !== null
+        ? (checkpoint.data.snapshot as Record<string, unknown>)
+        : checkpoint
+        ? (checkpoint.data as Record<string, unknown>)
+        : null
+    const payload: Record<string, unknown> = { ...run.payload }
+    if (snapshot && typeof snapshot.output === "string") payload.resume = snapshot
     const { data, error } = await supabase
       .from("task_runs")
-      .update({ status: statusAfterDecision("approve"), updated_at: now })
+      .update({ status: statusAfterDecision("approve"), payload, updated_at: now })
       .eq("id", runId)
       .eq("status", "awaiting_approval")
       .select("*")
