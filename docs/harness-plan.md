@@ -26,6 +26,10 @@ Dinghy never depends on a Mac being on. Dock never needs Dinghy.
 
 Eleven screens: ten questions (the last of which names the Chief of Staff) and a review. Each question has Back, an "x of 11" counter, and "Skip: agent decides" (except the goal and the Chief name, which are required). A skip stores null with `skipped = true`; no value is invented. Answers save as the user moves forward. Stored in `workspace_profile` (one row per workspace) and `workspace_rules` (one row per rule), both owner-only under RLS (`db/migrations/0002_workspace_profile.sql`).
 
+**Wave background.** The sign-in page and onboarding use a looping wave video (`public/onboarding-wave.mp4`, 1280x720, muted, about 2.2 MB) with a poster (`public/onboarding-wave-poster.jpg`) and a dark scrim behind the form. Reduced motion shows the poster only. The video pauses when the tab is hidden. The form cards stay solid `--surface-1`. The video is not shown on /assistant or other app pages.
+
+**x402 network defaults (owner decision).** Solana first, then Base, both USDC.
+
 1. **Goal** (required): one sentence. Stored as `goal`, mirrored to `workspaces.building`.
 2. **Source**: start blank (recommended) or import a GitHub repo as a copy. Stored as `source_choice`. The import is not built; a TODO hook marks where it goes.
 3. **Story**: own frustration, agent infrastructure, friends kept asking, or something else.

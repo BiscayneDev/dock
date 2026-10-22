@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
+import { WaveBackground } from "@/components/onboarding/WaveBackground"
 import {
   DEFAULT_CHIEF_NAME,
   MAX_CUSTOM_RULES,
@@ -271,8 +272,9 @@ export default function OnboardingPage() {
 
   if (!loaded) {
     return (
-      <div className="flex min-h-screen items-center justify-center" style={{ background: "var(--surface-0)", color: "var(--ink-3)" }}>
-        {error ?? "Loading…"}
+      <div className="relative flex min-h-screen items-center justify-center" style={{ color: "var(--ink-3)" }}>
+        <WaveBackground />
+        <span className="relative z-10">{error ?? "Loading…"}</span>
       </div>
     )
   }
@@ -281,8 +283,9 @@ export default function OnboardingPage() {
   const total = STEP_ORDER.length
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-6" style={{ background: "var(--surface-0)" }}>
-      <div className="w-full max-w-[600px] rounded-[18px] p-8" style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}>
+    <div className="relative flex min-h-screen items-center justify-center p-6">
+      <WaveBackground />
+      <div className="relative z-10 w-full max-w-[600px] rounded-[18px] p-8" style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}>
         <div className="flex items-center justify-between">
           <p className="text-[13px] font-semibold tracking-wide" style={{ color: "var(--ink-2)" }}>
             ⚓ Dock

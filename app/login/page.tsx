@@ -3,6 +3,7 @@
 import { Suspense, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
+import { WaveBackground } from "@/components/onboarding/WaveBackground"
 
 const CODE_LENGTH = 6
 
@@ -116,8 +117,9 @@ function LoginInner() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-6" style={{ background: "var(--surface-0)" }}>
-      <div className="w-full max-w-sm rounded-[18px] p-8" style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}>
+    <div className="relative flex min-h-screen items-center justify-center p-6">
+      <WaveBackground />
+      <div className="relative z-10 w-full max-w-sm rounded-[18px] p-8" style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}>
         <p className="text-[13px] font-semibold tracking-wide" style={{ color: "var(--ink-2)" }}>
           ⚓ Dock
         </p>
