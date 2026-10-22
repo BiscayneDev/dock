@@ -1,11 +1,23 @@
 import { NextResponse } from "next/server"
 import { readFile, writeFile, mkdir } from "fs/promises"
 import { join, dirname } from "path"
-import { runtime } from "@/lib/runtime"
-import { MC_URL } from "@/lib/config"
-import { isDue, calculateNextRun, type AgentSchedule } from "@/lib/schedules"
+import { isDue, calculateNextRun, dueSchedules, scheduleFeedId, type AgentSchedule } from "@/lib/schedules"
+import { adminClient } from "@/lib/tenancy"
+import { enqueueRun } from "@/lib/queue"
+import { resolveModelRef } from "@/lib/inference"
+import { resolveAgentExplore } from "@/lib/agent-flags"
+import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
+import { getWatermark, setWatermark } from "@/lib/watermark-store"
+import { nextWatermark, shouldProcess, NO_WATERMARK, type Watermark } from "@/lib/watermarks"
 
 const DATA_PATH = join(process.cwd(), "data", "schedules.json")
+const AGENT_KEY = /^[a-z0-9_-]{1,64}$/
+const DEFAULT_BUDGET_CENTS = 100
+
+interface WorkspaceRow {
+  id: string
+  owner_id: string
+}
 
 async function readSchedules(): Promise<AgentSchedule[]> {
   try {
@@ -24,64 +36,72 @@ async function writeSchedules(schedules: AgentSchedule[]): Promise<void> {
 /**
  * POST /api/schedules/tick
  *
- * Check all schedules and execute any that are due.
- * Call this endpoint on a timer (e.g., every 5 minutes from the frontend,
- * or via an external cron job).
+ * Check all schedules and enqueue a task run for any that are due.
+ * Each schedule has a watermark (`schedule:<id>`) recording its last successful
+ * tick; a tick that errors does not advance the watermark. Duplicate cron
+ * firings are deduped via shouldProcess against that watermark.
  */
 export async function POST(request: Request) {
+  const now = new Date()
   const schedules = await readSchedules()
   const results: Array<{ id: string; name: string; status: "executed" | "skipped" | "error"; error?: string }> = []
 
+  const admin = adminClient()
+  const { data: wsData } = await admin.from("workspaces").select("id, owner_id").limit(1)
+  const workspace = (wsData as WorkspaceRow[] | null)?.[0]
+  if (!workspace) {
+    return NextResponse.json({ executed: 0, total: schedules.length, results: [], error: "no workspace" }, { status: 503 })
+  }
+
   let changed = false
 
-  for (const schedule of schedules) {
-    if (!isDue(schedule)) {
+  for (const schedule of dueSchedules(now, schedules)) {
+    if (!isDue(schedule, now)) {
+      results.push({ id: schedule.id, name: schedule.name, status: "skipped" })
+      continue
+    }
+
+    const feedId = scheduleFeedId(schedule.id)
+    const current: Watermark = workspace ? await getWatermark(workspace.owner_id, feedId) : NO_WATERMARK
+    const tickItem = { id: schedule.id, createdAt: now.toISOString() }
+    if (!shouldProcess(tickItem, current)) {
       results.push({ id: schedule.id, name: schedule.name, status: "skipped" })
       continue
     }
 
     try {
-      // Build the activation message
-      const message = [
-        `🕐 [SCHEDULED TASK]`,
-        ``,
-        `Schedule: ${schedule.name}`,
-        `Agent: ${schedule.agent}`,
-        `Frequency: ${schedule.frequency}`,
-        ``,
-        schedule.prompt,
-        ``,
-        `When done, log activity:`,
-        `curl -s -X POST ${MC_URL}/api/activity -H "Content-Type: application/json" -d '{"taskId":"schedule-${schedule.id}","taskTitle":"${schedule.name}","agent":"${schedule.agent}","action":"completed","summary":"Scheduled run completed"}'`,
-      ].join("\n")
+      const agentKey = AGENT_KEY.test(schedule.agent) ? schedule.agent : CHIEF_RUNTIME_KEY
+      const model = resolveModelRef(agentKey)
+      if (!model) throw new Error(`No model configured for agent "${agentKey}"`)
 
-      // Execute via runtime
-      await runtime.activate({
-        taskId: `schedule-${schedule.id}`,
-        title: schedule.name,
-        description: schedule.prompt,
-        assignee: schedule.agent,
-        priority: "medium",
-        callbackUrl: MC_URL,
-        message,
-      } as Parameters<typeof runtime.activate>[0] & { message: string })
+      const run = await enqueueRun(admin, {
+        workspaceId: workspace.id,
+        ownerId: workspace.owner_id,
+        projectId: null,
+        agentId: null,
+        agentKey,
+        target: "cloud",
+        prompt: schedule.prompt,
+        model,
+        budgetCents: DEFAULT_BUDGET_CENTS,
+        explore: await resolveAgentExplore(agentKey),
+      })
 
-      // Log inter-agent message
-      try {
-        const origin = new URL(request.url).origin
-        await fetch(`${origin}/api/messages`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            from: "system",
-            to: schedule.agent,
-            content: `Scheduled task "${schedule.name}" triggered.\n\n${schedule.prompt}`,
-            type: "delegation",
-          }),
-        }).catch(() => null)
-      } catch { /* non-fatal */ }
+      // Mark the run so the intel feed can badge it as scheduled, and attach
+      // the watermark the run was launched with (payload.since).
+      const markedPayload = {
+        ...run.payload,
+        prompt: schedule.prompt,
+        scheduleId: schedule.id,
+        scheduleFeedId: feedId,
+        since: current,
+      }
+      await admin.from("task_runs").update({ payload: markedPayload }).eq("id", run.id)
 
-      schedule.lastRunAt = new Date().toISOString()
+      // The watermark marks the schedule's last successful tick: only advance on enqueue success.
+      await setWatermark(workspace.id, workspace.owner_id, feedId, nextWatermark([tickItem], current))
+
+      schedule.lastRunAt = now.toISOString()
       schedule.lastStatus = "success"
       schedule.lastError = null
       schedule.nextRunAt = calculateNextRun(schedule).toISOString()

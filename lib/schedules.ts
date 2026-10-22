@@ -71,13 +71,24 @@ export function calculateNextRun(schedule: AgentSchedule): Date {
 /**
  * Check if a schedule is due to run
  */
-export function isDue(schedule: AgentSchedule): boolean {
+export function isDue(schedule: AgentSchedule, now: Date = new Date()): boolean {
   if (!schedule.enabled) return false
   if (!schedule.nextRunAt) return true
 
-  const now = new Date()
   const nextRun = new Date(schedule.nextRunAt)
   return now >= nextRun
+}
+
+/**
+ * Pure: all schedules due at `now`. Same predicate as isDue with an injected clock.
+ */
+export function dueSchedules(now: Date, schedules: AgentSchedule[]): AgentSchedule[] {
+  return schedules.filter((s) => isDue(s, now))
+}
+
+/** FeedId convention for a schedule's watermark. */
+export function scheduleFeedId(scheduleId: string): string {
+  return `schedule:${scheduleId}`
 }
 
 export const DAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]

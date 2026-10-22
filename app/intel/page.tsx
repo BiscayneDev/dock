@@ -7,6 +7,8 @@ interface ReportItem {
   detail: string
   source: string
   signal: "high" | "medium" | "low"
+  /** Set when the item came from a scheduled run's payload (has a schedule id). */
+  scheduled?: boolean
 }
 
 interface ReportSection {
@@ -300,6 +302,14 @@ export default function IntelPage() {
                         <p className="text-[11.5px] leading-[1.5]" style={{ color: "var(--ink-2)" }}>{item.detail}</p>
                         <p className="font-mono text-[9.5px] uppercase tracking-[0.08em]" style={{ color: "var(--ink-3)" }}>
                           {item.signal ? SIGNAL_LABELS[item.signal] ?? item.signal : ""} · per {item.source}
+                          {item.scheduled && (
+                            <span
+                              className="ml-2 rounded-full px-1.5 py-0.5"
+                              style={{ color: "var(--gold)", backgroundColor: "rgba(231,201,121,.09)" }}
+                            >
+                              scheduled
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>
