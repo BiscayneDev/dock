@@ -10,7 +10,8 @@
  */
 import { createHmac, randomUUID } from "crypto"
 
-export const DINGHY_DEFAULT_WEBHOOK_URL = "https://getdinghy.sh/api/dock/webhook"
+// www is canonical: the apex 308-redirects to www, and the sender refuses redirects (fail closed).
+export const DINGHY_DEFAULT_WEBHOOK_URL = "https://www.getdinghy.sh/api/dock/webhook"
 const SEND_TIMEOUT_MS = 8_000
 
 export type ConnectorEventType = "approval.requested" | "approval.closed" | "run.update" | "chief.renamed" | "link.revoked"
