@@ -12,6 +12,7 @@ export function shouldProcess(
   wm: Watermark,
 ): boolean {
   if (wm.lastItemId !== null && item.id === wm.lastItemId) return false;
+  // Lexicographic compare assumes Z-normalized UTC ISO strings; the ingest path must guarantee that.
   if (wm.seenAt !== null && item.createdAt <= wm.seenAt) return false;
   return true;
 }
