@@ -38,6 +38,7 @@ import {
 import { checkpointData, continuationPrompt } from "@/lib/run-resume"
 import { EXPLORE_MODE_INSTRUCTION, PLAN_MODE_INSTRUCTION } from "@/lib/tool-permissions"
 import { resolveRunMode } from "@/lib/agent-mode"
+import { loadInjectableSkills as loadInjectableSkillList } from "@/lib/injectable-skills"
 import { profile, skillInjectionBlock } from "@/lib/agent-templates"
 import { PLAN_GRAPH_INSTRUCTION } from "@/lib/plan-graph"
 import { topSkills, type ParsedSkill } from "@/lib/skills-skillmd"
@@ -46,25 +47,12 @@ import { join } from "path"
 
 /**
  * Skill descriptions available for prompt injection, loaded from the SKILL.md import
- * store (data/external-skills.json). Empty on any read/parse failure: skill injection
- * is an enhancement, never a run blocker.
+ * store (data/external-skills.json). Shared with home-runs via lib/injectable-skills.ts.
  */
 async function loadInjectableSkills(): Promise<ParsedSkill[]> {
-  try {
-    const raw = JSON.parse(await readFile(join(process.cwd(), "data", "external-skills.json"), "utf-8"))
-    if (!Array.isArray(raw)) return []
-    return raw
-      .filter((s: Record<string, unknown>) => typeof s?.name === "string" && typeof s?.description === "string")
-      .map((s: Record<string, unknown>) => ({
-        name: s.name as string,
-        description: s.description as string,
-        tags: Array.isArray(s.tags) ? (s.tags as unknown[]).filter((t): t is string => typeof t === "string") : [],
-        body: "",
-        sourcePath: "external-skills.json",
-      }))
-  } catch {
-    return []
-  }
+  return loadInjectableSkillList().then((skills) =>
+    skills.map((s) => ({ ...s, body: "", sourcePath: "external-skills.json" })),
+  )
 }
 
 // Cloud worker runner (P2). Each tick claims up to N runs and works them in order within a time budget.

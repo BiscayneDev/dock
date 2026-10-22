@@ -17,6 +17,9 @@ import { allowedDeviceCompletion, deviceWorkerId, DEVICE_COMPLETE_STATUSES } fro
 import { EXPLORE_MODE_INSTRUCTION, PLAN_MODE_INSTRUCTION } from "@/lib/tool-permissions"
 import { resolveRunMode } from "@/lib/agent-mode"
 import { PLAN_GRAPH_INSTRUCTION } from "@/lib/plan-graph"
+import { profile, skillInjectionBlock } from "@/lib/agent-templates"
+import { loadInjectableSkills } from "@/lib/injectable-skills"
+import { topSkills, type ParsedSkill } from "@/lib/skills-skillmd"
 
 // Home-node run actions (P2). The device holds the lease; the server does the model call and the bookkeeping,
 // so cloud and home runs share one budget ledger (task_runs.spent_cents) and one money gate.
@@ -71,7 +74,14 @@ export async function inferForDevice(
   const modeInstruction =
     planMode === "plan" ? PLAN_MODE_INSTRUCTION : planMode === "explore" ? EXPLORE_MODE_INSTRUCTION : null
   const graphInstruction = planMode === "plan" ? PLAN_GRAPH_INSTRUCTION : null
-  const effectiveSystem = [system, modeInstruction, graphInstruction].filter(Boolean).join("\n\n") || null
+  // Skill injection: mirror the cloud worker — top-2 matched skill descriptions, failures swallowed.
+  let skillBlock: string | null = null
+  const agentProfile = profile(run.agentKey)
+  if (agentProfile && agentProfile.skills.length > 0 && prompt.trim()) {
+    const skills = await loadInjectableSkills()
+    skillBlock = skillInjectionBlock(skills as ParsedSkill[], prompt, (s, q, n) => topSkills(s as ParsedSkill[], q, n))
+  }
+  const effectiveSystem = [system, modeInstruction, graphInstruction, skillBlock].filter(Boolean).join("\n\n") || null
 
   const remainingMs = 150_000
   try {
