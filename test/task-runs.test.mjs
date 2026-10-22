@@ -8,6 +8,7 @@ import {
   decideMoneyGate,
   executeApprovedAction,
   proposedActionFromPayload,
+  resumePlan,
   EVENT,
 } from "../lib/task-runs.ts"
 
@@ -76,6 +77,36 @@ test("real executors are stubs: an approved x402 spend throws 'not implemented: 
 
 test("executeApprovedAction refuses non-money actions outright", async () => {
   await assert.rejects(() => executeApprovedAction({ id: "e", type: "send_email" }, {}), /refusing to execute/)
+})
+
+test("resumePlan: running run resumes from the last checkpoint's step and snapshot", () => {
+  const plan = resumePlan(
+    "running",
+    [{ kind: "checkpoint", data: { step: 3, snapshot: { cursor: 12 } } }],
+    [],
+  )
+  assert.deepEqual(plan, { ok: true, fromStep: 3, snapshot: { cursor: 12 } })
+})
+
+test("resumePlan: terminal runs (succeeded, failed, cancelled) are never resumed", () => {
+  assert.deepEqual(resumePlan("succeeded", [{ kind: "checkpoint", data: { step: 3 } }], []), { ok: false, reason: "terminal" })
+  assert.deepEqual(resumePlan("failed", [], []), { ok: false, reason: "terminal" })
+  assert.deepEqual(resumePlan("cancelled", [], []), { ok: false, reason: "terminal" })
+})
+
+test("resumePlan: queued run with no checkpoint starts fresh at step 0", () => {
+  assert.deepEqual(resumePlan("queued", [], []), { ok: true, fromStep: 0, snapshot: null })
+})
+
+test("resumePlan: uses the LAST checkpoint; missing/invalid step defaults to 0; null snapshot when absent", () => {
+  const events = [
+    { kind: "checkpoint", data: { step: 1, snapshot: { cursor: 2 } } },
+    { kind: "checkpoint", data: { step: 5, snapshot: { cursor: 50 } } },
+  ]
+  assert.deepEqual(resumePlan("running", events, []), { ok: true, fromStep: 5, snapshot: { cursor: 50 } })
+  assert.deepEqual(resumePlan("running", [{ kind: "checkpoint", data: { snapshot: { x: 1 } } }], []), { ok: true, fromStep: 0, snapshot: { x: 1 } })
+  assert.deepEqual(resumePlan("running", [{ kind: "checkpoint", data: { step: "3" } }], []), { ok: true, fromStep: 0, snapshot: null })
+  assert.deepEqual(resumePlan("running", [{ kind: "started", data: {} }], []), { ok: true, fromStep: 0, snapshot: null })
 })
 
 test("proposedActionFromPayload: parses a valid action, rejects malformed ones", () => {

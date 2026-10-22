@@ -48,6 +48,7 @@ export interface RunEventLike {
 export const EVENT = {
   leased: "leased",
   started: "started",
+  checkpoint: "checkpoint",
   leaseExpired: "lease_expired",
   heartbeat: "heartbeat",
   budgetRefused: "budget_refused",
@@ -184,4 +185,25 @@ export function planDecision(status: string, events: RunEventLike[]): DecisionPl
 /** Status a run moves to on an owner decision. Approve re-queues it; reject cancels it. */
 export function statusAfterDecision(decision: "approve" | "reject"): "queued" | "cancelled" {
   return decision === "approve" ? "queued" : "cancelled"
+}
+
+export type ResumePlan =
+  | { ok: true; fromStep: number; snapshot: Record<string, unknown> | null }
+  | { ok: false; reason: "terminal" }
+
+/**
+ * Whether a run may be resumed, and if so where it restarts from. Terminal runs (succeeded, failed,
+ * cancelled) are never resumed. Otherwise the run restarts at the step recorded in the LAST checkpoint
+ * event (step 0 / null snapshot when there is none), so a retried run skips completed work.
+ */
+export function resumePlan(status: string, events: RunEventLike[]): ResumePlan {
+  if ((TERMINAL_STATUSES as readonly string[]).includes(status)) return { ok: false, reason: "terminal" }
+  const checkpoint = [...events].reverse().find((e) => e.kind === EVENT.checkpoint)
+  if (!checkpoint) return { ok: true, fromStep: 0, snapshot: null }
+  const step = checkpoint.data.step
+  return {
+    ok: true,
+    fromStep: typeof step === "number" && Number.isFinite(step) ? step : 0,
+    snapshot: (checkpoint.data.snapshot as Record<string, unknown> | undefined) ?? null,
+  }
 }
