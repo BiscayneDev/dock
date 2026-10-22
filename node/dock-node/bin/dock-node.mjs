@@ -10,7 +10,7 @@ import { executeRun } from "../src/executor.mjs"
 import { detectLocalTools } from "../src/local-tools.mjs"
 import { runLoop } from "../src/loop.mjs"
 
-const DEFAULT_SERVER = "https://shipyard-teal.vercel.app"
+const DEFAULT_SERVER = "https://dock-harness.vercel.app"
 
 function parseArgs(argv) {
   const positional = []
