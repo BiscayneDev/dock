@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { assistantContext, isUuid, projectInWorkspace } from "@/lib/assistant-store"
 import { enqueueRun, listEventsForRuns, listRuns } from "@/lib/queue"
+import { ownerHasOnlineDevice } from "@/lib/devices"
 import { buildModel, parseModelRef, resolveModelRef, listConfiguredProviders } from "@/lib/inference"
 import { createShipyardCapture } from "@/lib/inference/shipyard-capture"
 import { RUN_TARGETS, type RunTarget } from "@/lib/task-runs"
@@ -26,6 +27,7 @@ export async function GET() {
     runs.map((r) => r.id),
   )
   return NextResponse.json({
+    homeOnline: await ownerHasOnlineDevice(ctx.supabase),
     runs: runs.map((run) => ({
       ...run,
       events: events.filter((e) => e.runId === run.id),
@@ -54,8 +56,8 @@ export async function POST(request: Request) {
   if (!(RUN_TARGETS as readonly string[]).includes(target)) {
     return NextResponse.json({ error: "Unknown target" }, { status: 400 })
   }
-  if (target !== "cloud") {
-    return NextResponse.json({ error: `target '${target}' is not available yet` }, { status: 400 })
+  if (target === "sandbox") {
+    return NextResponse.json({ error: "target 'sandbox' is not available yet" }, { status: 400 })
   }
 
   const budget = body.budget_cents === undefined ? DEFAULT_BUDGET_CENTS : body.budget_cents

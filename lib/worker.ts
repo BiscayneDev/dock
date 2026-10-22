@@ -50,7 +50,7 @@ export interface TickSummary {
 }
 
 /** Chief-owned runs get the same prompt the interactive chat uses, built with the service-role client. */
-async function chiefPromptFor(admin: SupabaseClient, run: TaskRun): Promise<string | null> {
+export async function chiefPromptFor(admin: SupabaseClient, run: TaskRun): Promise<string | null> {
   const [profile, rules, venture] = await Promise.all([
     loadProfile(admin, run.workspaceId),
     loadRules(admin, run.workspaceId),

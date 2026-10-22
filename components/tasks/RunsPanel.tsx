@@ -57,6 +57,7 @@ export default function RunsPanel() {
   const [runs, setRuns] = useState<Run[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [homeOnline, setHomeOnline] = useState<boolean | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -66,8 +67,9 @@ export default function RunsPanel() {
         return
       }
       if (!res.ok) throw new Error("load failed")
-      const data = (await res.json()) as { runs: Run[] }
+      const data = (await res.json()) as { runs: Run[]; homeOnline?: boolean }
       setRuns(data.runs)
+      setHomeOnline(typeof data.homeOnline === "boolean" ? data.homeOnline : null)
       setError(null)
     } catch {
       setError("Could not load background runs.")
@@ -117,6 +119,7 @@ export default function RunsPanel() {
       <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {runs.map((run) => {
           const meta = STATUS_META[run.status] ?? { label: run.status, color: "#62657a" }
+          const waitingForLaptop = run.target === "home" && run.status === "queued" && homeOnline === false
           const prompt = typeof run.payload.prompt === "string" ? run.payload.prompt : ""
           const action = run.status === "awaiting_approval" ? pendingAction(run) : null
           return (
@@ -133,7 +136,7 @@ export default function RunsPanel() {
                   className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium"
                   style={{ color: meta.color, background: `${meta.color}1f` }}
                 >
-                  {meta.label}
+                  {waitingForLaptop ? "Waiting for your laptop" : meta.label}
                 </span>
               </div>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px]" style={{ color: "var(--ink-3)" }}>

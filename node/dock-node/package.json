@@ -1,0 +1,17 @@
+{
+  "name": "dock-node",
+  "version": "0.1.0",
+  "description": "Dock home-node daemon: runs your queued home tasks on this machine via Dock's model path.",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "dock-node": "bin/dock-node.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "license": "UNLICENSED"
+}

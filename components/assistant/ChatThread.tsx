@@ -176,6 +176,7 @@ export function ChatThread({
   const [model, setModelState] = useState<ModelRef>(null)
   // Background mode: the message is queued as a cloud run instead of streamed here. Off by default.
   const [background, setBackground] = useState(false)
+  const [runTarget, setRunTarget] = useState<"cloud" | "home">("cloud")
   const [queuedNote, setQueuedNote] = useState<string | null>(null)
   const { messages, sendMessage, status, setMessages, regenerate } = useChat({
     id: `chat-${conversationId}-${agent.id}`,
@@ -229,16 +230,20 @@ export function ChatThread({
     setAttachments((prev) => [...prev, ...next])
   }
 
-  async function queueBackground(prompt: string, chosen: ModelRef) {
+  async function queueBackground(prompt: string, chosen: ModelRef, target: "cloud" | "home") {
     setQueuedNote(null)
     try {
       const res = await fetch("/api/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, agent: agent.id, budget_cents: 100, ...(chosen ? { model: chosen } : {}) }),
+        body: JSON.stringify({ prompt, agent: agent.id, budget_cents: 100, target, ...(chosen ? { model: chosen } : {}) }),
       })
       const data = (await res.json().catch(() => ({}))) as { error?: string }
-      setQueuedNote(res.ok ? "Queued for the cloud worker. Follow it in Tasks." : (data.error ?? "Could not queue the run"))
+      const ok =
+        target === "home"
+          ? "Queued for your laptop. It runs when dock-node is online; nothing runs in the cloud instead."
+          : "Queued for the cloud worker. Follow it in Tasks."
+      setQueuedNote(res.ok ? ok : (data.error ?? "Could not queue the run"))
     } catch {
       setQueuedNote("Could not queue the run")
     }
@@ -252,7 +257,7 @@ export function ChatThread({
     setAttachments([])
     const full = `${text || "Here are the attached files."}${body}`
     if (background) {
-      queueBackground(full, model).catch(() => null)
+      queueBackground(full, model, runTarget).catch(() => null)
       return
     }
     sendMessage({ text: full }, model ? { body: { model } } : undefined).catch(() => null)
@@ -343,6 +348,11 @@ export function ChatThread({
           background={background}
           onBackgroundChange={(value) => {
             setBackground(value)
+            setQueuedNote(null)
+          }}
+          runTarget={runTarget}
+          onRunTargetChange={(value) => {
+            setRunTarget(value)
             setQueuedNote(null)
           }}
         />

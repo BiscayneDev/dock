@@ -167,6 +167,8 @@ export function Composer({
   projectEditable = true,
   background = false,
   onBackgroundChange,
+  runTarget = "cloud",
+  onRunTargetChange,
 }: {
   value: string
   onChange: (v: string) => void
@@ -193,6 +195,9 @@ export function Composer({
   /** Queue the message as a background run on the cloud worker instead of streaming it here. */
   background?: boolean
   onBackgroundChange?: (value: boolean) => void
+  /** Where a background run executes: the cloud worker, or the owner's paired device ("home"). */
+  runTarget?: "cloud" | "home"
+  onRunTargetChange?: (value: "cloud" | "home") => void
 }) {
   const fileInput = useRef<HTMLInputElement>(null)
   // "@" tagging: an open mention is the text from "@" to the caret. Choosing a project removes it.
@@ -323,20 +328,42 @@ export function Composer({
             <AgentPicker agents={agents} value={agent} onChange={onAgentChange} />
             <ModelPicker providers={models} value={model} onChange={onModelChange} />
             {onBackgroundChange && (
-              <button
-                type="button"
-                onClick={() => onBackgroundChange(!background)}
-                aria-pressed={background}
-                title="Queue this message as a background run on the cloud worker"
-                className="rounded-full px-2.5 py-1 text-[12px] transition-colors"
-                style={{
-                  color: background ? "var(--ink)" : "var(--ink-3)",
-                  background: background ? "rgba(231,201,121,0.14)" : "transparent",
-                  border: `1px solid ${background ? "rgba(231,201,121,0.45)" : "var(--line, rgba(255,255,255,0.08))"}`,
-                }}
-              >
-                Run in background
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => onBackgroundChange(!background)}
+                  aria-pressed={background}
+                  title="Queue this message as a background run"
+                  className="rounded-full px-2.5 py-1 text-[12px] transition-colors"
+                  style={{
+                    color: background ? "var(--ink)" : "var(--ink-3)",
+                    background: background ? "rgba(231,201,121,0.14)" : "transparent",
+                    border: `1px solid ${background ? "rgba(231,201,121,0.45)" : "var(--line, rgba(255,255,255,0.08))"}`,
+                  }}
+                >
+                  Run in background
+                </button>
+                {background && onRunTargetChange && (
+                  <div role="group" aria-label="Where to run" className="flex items-center gap-0.5 rounded-full p-0.5" style={{ border: "1px solid var(--line, rgba(255,255,255,0.08))" }}>
+                    {(["cloud", "home"] as const).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => onRunTargetChange(t)}
+                        aria-pressed={runTarget === t}
+                        title={t === "cloud" ? "Run on the cloud worker" : "Run on your laptop or Mac mini (waits while it is offline)"}
+                        className="rounded-full px-2 py-0.5 text-[11px]"
+                        style={{
+                          color: runTarget === t ? "var(--ink)" : "var(--ink-3)",
+                          background: runTarget === t ? "var(--surface-2)" : "transparent",
+                        }}
+                      >
+                        {t === "cloud" ? "Cloud" : "My laptop"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
             {onProjectChange && (
               <ProjectPicker

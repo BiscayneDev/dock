@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import DevicesSection from "@/components/settings/DevicesSection"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -541,6 +542,7 @@ export default function SettingsPage() {
       </div>
 
       <AgentBudgetsSection />
+      <DevicesSection />
       <CronsSection />
       <ConnectedServicesSection />
       <NotificationsSection />
