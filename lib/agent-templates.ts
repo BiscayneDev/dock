@@ -86,6 +86,69 @@ export const TEAM_TEMPLATES: TeamTemplate[] = [
     ],
   },
 ]
+export interface AgentSchedule {
+  frequency: "daily" | "weekly"
+  hour: number
+  dayOfWeek?: number
+}
+
+/**
+ * Unified runtime profile for an agent. Derived from the team templates (and any
+ * data/agents.json customization downstream) — no DB table: profiles are a view
+ * over existing template data (YAGNI).
+ */
+export interface AgentProfile {
+  key: string
+  name: string
+  role: string
+  /** Skill tags this agent specializes in (template tags today). */
+  skills: string[]
+  budgetCents?: number
+  mode: "plan" | "build" | "explore"
+  explore?: boolean
+  schedule?: AgentSchedule
+}
+
+/**
+ * Map a template agent id to its unified profile. Returns null for unknown keys.
+ * Chief agents run in build mode; agents flagged `explore` run read-only explore mode.
+ */
+export function profile(agentKey: string): AgentProfile | null {
+  for (const team of TEAM_TEMPLATES) {
+    const agent = team.agents.find((a) => a.id === agentKey)
+    if (!agent) continue
+    return {
+      key: agent.id,
+      name: agent.name,
+      role: agent.role,
+      skills: [...agent.tags],
+      budgetCents: agent.budget * 100,
+      mode: agent.explore ? "explore" : "build",
+      ...(agent.explore ? { explore: true } : {}),
+    }
+  }
+  return null
+}
+
 export function templateAgentExplore(agentKey: string): boolean {
-  return TEAM_TEMPLATES.some((t) => t.agents.some((a) => a.id === agentKey && a.explore === true))
+  return profile(agentKey)?.explore === true
+}
+
+/** Minimal skill shape the injection helper needs (structural: no imports, stays pure). */
+interface SkillLike {
+  name: string
+  description: string
+  tags: string[]
+}
+
+/**
+ * Build the system-prompt skill block for a run: the top-matched skill descriptions
+ * (keyword match on the prompt) capped to 2 skills and ~400 chars total. Pure.
+ */
+export function skillInjectionBlock(skills: SkillLike[], prompt: string, matchQuery: (s: SkillLike[], q: string, n: number) => SkillLike[]): string | null {
+  if (skills.length === 0 || !prompt.trim()) return null
+  const matched = matchQuery(skills, prompt, 2)
+  if (matched.length === 0) return null
+  const joined = matched.map((s) => `- ${s.name}: ${s.description}`).join("\n")
+  return joined.length <= 400 ? joined : `${joined.slice(0, 397)}...`
 }

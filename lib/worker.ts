@@ -38,6 +38,33 @@ import {
 import { checkpointData, continuationPrompt } from "@/lib/run-resume"
 import { EXPLORE_MODE_INSTRUCTION, PLAN_MODE_INSTRUCTION } from "@/lib/tool-permissions"
 import { resolveRunMode } from "@/lib/agent-mode"
+import { profile, skillInjectionBlock } from "@/lib/agent-templates"
+import { topSkills, type ParsedSkill } from "@/lib/skills-skillmd"
+import { readFile } from "fs/promises"
+import { join } from "path"
+
+/**
+ * Skill descriptions available for prompt injection, loaded from the SKILL.md import
+ * store (data/external-skills.json). Empty on any read/parse failure: skill injection
+ * is an enhancement, never a run blocker.
+ */
+async function loadInjectableSkills(): Promise<ParsedSkill[]> {
+  try {
+    const raw = JSON.parse(await readFile(join(process.cwd(), "data", "external-skills.json"), "utf-8"))
+    if (!Array.isArray(raw)) return []
+    return raw
+      .filter((s: Record<string, unknown>) => typeof s?.name === "string" && typeof s?.description === "string")
+      .map((s: Record<string, unknown>) => ({
+        name: s.name as string,
+        description: s.description as string,
+        tags: Array.isArray(s.tags) ? (s.tags as unknown[]).filter((t): t is string => typeof t === "string") : [],
+        body: "",
+        sourcePath: "external-skills.json",
+      }))
+  } catch {
+    return []
+  }
+}
 
 // Cloud worker runner (P2). Each tick claims up to N runs and works them in order within a time budget.
 // Rules: money actions are gated before any model call; every model call is budget-checked and metered.
@@ -224,7 +251,17 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
   const isPlan = mode === "plan"
   const isExplore = mode === "explore"
   const modeInstruction = isPlan ? PLAN_MODE_INSTRUCTION : isExplore ? EXPLORE_MODE_INSTRUCTION : null
-  const effectiveSystem = [system, modeInstruction].filter(Boolean).join("\n\n") || null
+  // Skill injection (P7): if the agent's unified profile has skills, match them against the
+  // run prompt and inject the top-2 descriptions. Pure enhancement; failures are swallowed.
+  let skillBlock: string | null = null
+  const agentProfile = profile(run.agentKey)
+  if (agentProfile && agentProfile.skills.length > 0 && prompt.trim()) {
+    const skills = await loadInjectableSkills()
+    skillBlock = skillInjectionBlock(skills, prompt, (s, q, n) => topSkills(s as ParsedSkill[], q, n))
+  }
+  const systemParts = [system, modeInstruction]
+  if (skillBlock) systemParts.push(`SKILLS RELEVANT TO THIS RUN (descriptions only):\n${skillBlock}`)
+  const effectiveSystem = systemParts.filter(Boolean).join("\n\n") || null
 
   await heartbeat(admin, run.id, workerId, DEFAULT_LEASE_SECONDS)
   try {
