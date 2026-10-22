@@ -9,6 +9,7 @@ import {
   sessionClient,
   validateAgentName,
 } from "@/lib/tenancy"
+import { answerUpdate, loadProfile, loadRules, parseRules } from "@/lib/onboarding-server"
 
 export const dynamic = "force-dynamic"
 
@@ -24,7 +25,8 @@ export async function GET() {
   const ctx = await context()
   if ("error" in ctx) return ctx.error
   const state = await loadWorkspaceState(ctx.supabase, ctx.workspaceId)
-  return NextResponse.json(state)
+  const [profile, rules] = await Promise.all([loadProfile(ctx.supabase, ctx.workspaceId), loadRules(ctx.supabase, ctx.workspaceId)])
+  return NextResponse.json({ ...state, profile, rules })
 }
 
 function clean(value: unknown, max: number): string {
@@ -37,32 +39,41 @@ export async function POST(request: Request) {
   const { supabase, workspaceId } = ctx
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
   const action = typeof body?.action === "string" ? body.action : ""
+  const now = new Date().toISOString()
 
-  if (action === "goals") {
-    const building = clean(body?.building, 1000)
-    const mainGoal = clean(body?.mainGoal, 1000)
-    if (!building || !mainGoal) return NextResponse.json({ error: "Tell us what you are building and your main goal." }, { status: 400 })
-    const { error } = await supabase.from("workspaces").update({ building, main_goal: mainGoal, updated_at: new Date().toISOString() }).eq("id", workspaceId)
-    if (error) return NextResponse.json({ error: "Could not save goals." }, { status: 500 })
+  // One onboarding answer, saved as the user moves forward. body.step selects the question.
+  if (action === "answer") {
+    const step = typeof body?.step === "string" ? body.step : ""
+    const result = answerUpdate(step, body ?? {})
+    if ("error" in result) return NextResponse.json({ error: result.error }, { status: 400 })
+    const { error } = await supabase
+      .from("workspace_profile")
+      .upsert({ workspace_id: workspaceId, ...result.update, updated_at: now }, { onConflict: "workspace_id" })
+    if (error) return NextResponse.json({ error: "Could not save that answer." }, { status: 500 })
+    // The goal sentence is also the workspace's building field, which the rest of the app reads.
+    if (step === "goal" && typeof result.update.goal === "string") {
+      await supabase.from("workspaces").update({ building: result.update.goal, updated_at: now }).eq("id", workspaceId)
+    }
     return NextResponse.json({ ok: true })
   }
 
-  if (action === "project") {
-    const name = clean(body?.name, 80)
-    const goal = clean(body?.goal, 1000)
-    if (!name) return NextResponse.json({ error: "Name the project." }, { status: 400 })
-    const { data: existing } = await supabase.from("projects").select("id").eq("workspace_id", workspaceId).limit(1)
-    if (existing && existing.length > 0) {
-      const { error } = await supabase
-        .from("projects")
-        .update({ name, goal, updated_at: new Date().toISOString() })
-        .eq("id", existing[0].id)
-      if (error) return NextResponse.json({ error: "Could not save the project." }, { status: 500 })
-      return NextResponse.json({ ok: true })
+  // The Keep step: replaces the workspace's rule list in one go.
+  if (action === "rules") {
+    const { error: delErr } = await supabase.from("workspace_rules").delete().eq("workspace_id", workspaceId)
+    if (delErr) return NextResponse.json({ error: "Could not save your rules." }, { status: 500 })
+    if (body?.skipped !== true) {
+      const parsed = parseRules(body ?? {})
+      if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 })
+      const { error: insErr } = await supabase
+        .from("workspace_rules")
+        .insert(parsed.rules.map((r) => ({ workspace_id: workspaceId, ...r })))
+      if (insErr) return NextResponse.json({ error: "Could not save your rules." }, { status: 500 })
     }
-    const { error } = await supabase.from("projects").insert({ workspace_id: workspaceId, name, goal })
-    if (error) return NextResponse.json({ error: "Could not save the project." }, { status: 500 })
-    return NextResponse.json({ ok: true }, { status: 201 })
+    const { error } = await supabase
+      .from("workspace_profile")
+      .upsert({ workspace_id: workspaceId, rules_skipped: body?.skipped === true, updated_at: now }, { onConflict: "workspace_id" })
+    if (error) return NextResponse.json({ error: "Could not save your rules." }, { status: 500 })
+    return NextResponse.json({ ok: true })
   }
 
   if (action === "check-name" || action === "chief") {

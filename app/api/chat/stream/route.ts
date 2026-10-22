@@ -12,6 +12,8 @@ import {
 } from "@/lib/inference"
 import { appendEvent, appendMessage, ensureConversation, finishRun, startRun } from "@/lib/conversations"
 import { createShipyardCapture } from "@/lib/inference/shipyard-capture"
+import { CHIEF_RUNTIME_AGENT } from "@/lib/tenancy"
+import { chiefSystemPrompt } from "@/lib/onboarding-server"
 
 interface IncomingMessage {
   id?: string
@@ -122,7 +124,9 @@ export async function POST(request: Request) {
       try {
         let reply = ""
 
-        const result = await inferenceStream({ message: prompt, agent, override: resolvedModel })
+        // Chief of Staff only: saved onboarding profile and enabled rules (null when none saved).
+        const system = agent === CHIEF_RUNTIME_AGENT ? await chiefSystemPrompt() : null
+        const result = await inferenceStream({ message: prompt, agent, override: resolvedModel, system: system ?? undefined })
         let telemetry: ReturnType<typeof collectRunTelemetry> = null
         if (result) {
           // Real token streaming through the inference layer

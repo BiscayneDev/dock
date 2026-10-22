@@ -22,6 +22,24 @@ Dinghy never depends on a Mac being on. Dock never needs Dinghy.
 - Replies from the Chief of Staff come back through Dinghy and show the agent's name.
 - Routing only resolves names on the same account. A name never resolves across users.
 
+## 2a. Onboarding
+
+Eleven screens: ten questions (the last of which names the Chief of Staff) and a review. Each question has Back, an "x of 11" counter, and "Skip: agent decides" (except the goal and the Chief name, which are required). A skip stores null with `skipped = true`; no value is invented. Answers save as the user moves forward. Stored in `workspace_profile` (one row per workspace) and `workspace_rules` (one row per rule), both owner-only under RLS (`db/migrations/0002_workspace_profile.sql`).
+
+1. **Goal** (required): one sentence. Stored as `goal`, mirrored to `workspaces.building`.
+2. **Source**: start blank (recommended) or import a GitHub repo as a copy. Stored as `source_choice`. The import is not built; a TODO hook marks where it goes.
+3. **Story**: own frustration, agent infrastructure, friends kept asking, or something else.
+4. **Stage**: just me, a few users, nobody yet, or something else.
+5. **Direction**: carry on as is (recommended), narrow it down, rethink it, or something else.
+6. **First paying customer**: busy professional, small business owner, solo founder, or something else.
+7. **Pricing and payments**: charging model (subscription, usage-based, free then paid, or something else) and how customers pay (USDC, recommended; card; both). USDC touches money-transmission and consumer-protection rules and needs legal review before launch. Agents never move money without the existing confirm and spend-cap rules.
+8. **Acquisition**: founder social posts, friends and referrals, paid ads, communities, or something else.
+9. **Keep (rules)**: four defaults, checked: no spending without approval, no public posts without approval, no sharing customer or private data outside the workspace, no pricing changes without asking. Plus up to ten of the user's own. Stored in `workspace_rules`.
+10. **Chief of Staff name**: suggested "Vic", unique per workspace, saved only on Confirm.
+11. **Review**: shows what is saved, with an Edit link per step, then Confirm.
+
+The Chief of Staff's system prompt includes the saved profile and enabled rules as short bullets, with the instruction that rules override user requests. A user with no profile gets no added text. Only the user's Chief of Staff receives this; other agents do not.
+
 ## 3. Home node and devices
 
 - **Mac mini:** home node. Runs the Chief of Staff, subagents, scheduler, and computer-use tasks. Needs sleep disabled and auto-login set up for GUI work.
