@@ -21,7 +21,7 @@ import {
 import { createShipyardCapture } from "@/lib/inference/shipyard-capture"
 import { CHIEF_RUNTIME_AGENT } from "@/lib/tenancy"
 import { chiefSystemPrompt } from "@/lib/onboarding-server"
-import { BRIEF_PROTOCOL_PROMPT, parseBriefBlocks, parseMention } from "@/lib/briefs"
+import { BRIEF_PROTOCOL_PROMPT, parseBriefBlocks, parseMention, pickChief } from "@/lib/briefs"
 import { createBriefs, loadRoster, maxBriefBudgetCents } from "@/lib/briefs-store"
 
 const HISTORY_TURNS = 20
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
   }
 
   const conversationId = body.conversationId ?? "main-chat"
-  let agent = body.agent ?? "vic"
+  let agent = body.agent ?? ""
   const sessionId = body.sessionId
   const taskId = body.taskId
   const messages = Array.isArray(body.messages) ? body.messages : []
@@ -108,14 +108,19 @@ export async function POST(request: Request) {
     }
   }
 
+  // Assistant chats live in Supabase and carry a project. Older file chats keep the file path, with no project.
+  const ctx = await assistantContext()
+  const roster = ctx ? await loadRoster(ctx.supabase, ctx.workspaceId).catch(() => []) : []
+  // No agent chosen: the workspace's chief answers. The runtime constant only covers signed-out, file-backed chats.
+  const chiefAgent = pickChief(roster)?.key ?? CHIEF_RUNTIME_AGENT
+  if (!agent) agent = chiefAgent
+
   await ensureConversation(conversationId, {
     title: conversationId === "main-chat" ? "Main chat" : "Untitled conversation",
     agent,
     taskId,
   })
 
-  // Assistant chats live in Supabase and carry a project. Older file chats keep the file path, with no project.
-  const ctx = await assistantContext()
   const assistantChat = ctx ? await getAssistantConversation(ctx, conversationId) : null
   const projectId = assistantChat?.projectId ?? null
   const history = assistantChat && ctx ? await priorTurns(ctx, conversationId) : []
@@ -124,7 +129,6 @@ export async function POST(request: Request) {
   // the thread keeps the owner's original text. Mentions never approve or spawn work by themselves.
   let modelPrompt = prompt
   if (assistantChat && ctx && projectId) {
-    const roster = await loadRoster(ctx.supabase, ctx.workspaceId).catch(() => [])
     const mention = parseMention(prompt, roster)
     if (mention.agentKey) {
       agent = mention.agentKey
@@ -183,7 +187,7 @@ export async function POST(request: Request) {
 
         // Chief of Staff only: saved onboarding profile and enabled rules (null when none saved).
         // Project chats teach every agent the brief protocol: work is proposed as a brief, never started from chat.
-        const base = agent === CHIEF_RUNTIME_AGENT ? await chiefSystemPrompt(projectId) : null
+        const base = agent === chiefAgent ? await chiefSystemPrompt(projectId) : null
         const system = projectId ? [base, BRIEF_PROTOCOL_PROMPT].filter(Boolean).join("\n\n") : base
         const result = await inferenceStream({
           message: modelPrompt,
@@ -226,11 +230,18 @@ export async function POST(request: Request) {
             const parsed = parseBriefBlocks(reply, maxBriefBudgetCents())
             storedText = parsed.text
             if (parsed.proposals.length > 0) {
+              // Proposals may only name roster agents; anything else falls back to the chief.
+              const known = new Set(roster.map((a) => a.key))
+              const chief = pickChief(roster)?.key ?? agent
+              const proposals = parsed.proposals.map((p) => ({ ...p, agentKey: p.agentKey && known.has(p.agentKey) ? p.agentKey : null }))
               const briefs = await createBriefs(
                 ctx.supabase,
                 { workspaceId: ctx.workspaceId, ownerId: ctx.userId },
-                { projectId, conversationId, proposals: parsed.proposals },
-              ).catch(() => [])
+                { projectId, conversationId, proposals, defaultAgentKey: chief },
+              ).catch((error) => {
+                console.error("[briefs] could not store proposals", error)
+                return []
+              })
               briefIds = briefs.map((b) => b.id)
             }
           }

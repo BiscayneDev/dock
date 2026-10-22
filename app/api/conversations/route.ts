@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createConversation } from "@/lib/conversations"
 import { assistantContext, createAssistantConversation, getAssistantConversation, projectInWorkspace } from "@/lib/assistant-store"
-import { ensureCentralConversation } from "@/lib/briefs-store"
+import { chiefKey, ensureCentralConversation } from "@/lib/briefs-store"
 import { detailForUser, listForUser } from "@/lib/assistant-api"
 
 export const dynamic = "force-dynamic"
@@ -32,7 +32,9 @@ export async function POST(request: Request) {
       }
       // A project has one central thread. Opening a project's conversation returns it, never a second one.
       if (projectId) {
-        const central = await ensureCentralConversation(ctx.supabase, { workspaceId: ctx.workspaceId, ownerId: ctx.userId }, projectId)
+        const agentKey = await chiefKey(ctx.supabase, ctx.workspaceId)
+        if (!agentKey) return NextResponse.json({ error: "No chief of staff configured" }, { status: 409 })
+        const central = await ensureCentralConversation(ctx.supabase, { workspaceId: ctx.workspaceId, ownerId: ctx.userId }, projectId, agentKey)
         const detail = await getAssistantConversation(ctx, central.id)
         if (detail) return NextResponse.json(detail, { status: 200 })
       }

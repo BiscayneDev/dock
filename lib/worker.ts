@@ -2,8 +2,7 @@ import { generateText } from "ai"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { buildModel, collectRunTelemetry, resolveModel } from "@/lib/inference"
 import { createShipyardCapture } from "@/lib/inference/shipyard-capture"
-import { CHIEF_RUNTIME_AGENT } from "@/lib/tenancy"
-import { recordRunOutcome } from "@/lib/briefs-store"
+import { chiefKey, recordRunOutcome } from "@/lib/briefs-store"
 import { buildChiefPrompt, loadProfile, loadRules, loadVentureProfile } from "@/lib/onboarding-server"
 import {
   addEvent,
@@ -139,7 +138,7 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
   if (!model) return finish(admin, run, workerId, "failed", { error: "no model configured" })
   const prompt = typeof run.payload.prompt === "string" ? run.payload.prompt : ""
   if (!prompt.trim()) return finish(admin, run, workerId, "failed", { error: "empty prompt" })
-  const system = run.agentKey === CHIEF_RUNTIME_AGENT ? await chiefPromptFor(admin, run) : null
+  const system = run.agentKey === (await chiefKey(admin, run.workspaceId)) ? await chiefPromptFor(admin, run) : null
 
   await heartbeat(admin, run.id, workerId, DEFAULT_LEASE_SECONDS)
   try {

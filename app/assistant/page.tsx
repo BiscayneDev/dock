@@ -151,9 +151,9 @@ function groupByProject(
   return keys.map((k) => groups.get(k)!)
 }
 
-// Vic (chief of staff) is the default agent unless the user picks another one.
+// The chief of staff is the default agent. The live roster lists the chief first, so no name or id is assumed.
 function defaultAgent(agents: AgentDef[]): AgentDef {
-  return agents.find((a) => a.id === "vic") ?? agents[0] ?? AGENTS[0]
+  return agents[0] ?? AGENTS[0]
 }
 
 function HomeView({

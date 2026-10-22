@@ -4,6 +4,8 @@ import { resolveModelRef } from "@/lib/inference"
 import {
   canApprove,
   canCancel,
+  pickChief,
+  type RosterEntry,
   composeRunPrompt,
   outcomeForRun,
   type BriefProposal,
@@ -124,6 +126,7 @@ export async function ensureCentralConversation(
   client: SupabaseClient,
   scope: Scope,
   projectId: string,
+  agentKey: string,
 ): Promise<{ id: string }> {
   const { data: existing, error: findError } = await client
     .from("conversations")
@@ -144,7 +147,7 @@ export async function ensureCentralConversation(
       owner_id: scope.ownerId,
       project_id: projectId,
       title: ((project?.name as string | undefined) ?? "Project").slice(0, 200),
-      agent: "vic",
+      agent: agentKey,
     })
     .select("id")
     .single()
@@ -156,7 +159,7 @@ export async function ensureCentralConversation(
 export async function createBriefs(
   client: SupabaseClient,
   scope: Scope,
-  input: { projectId: string; conversationId: string; proposals: BriefProposal[] },
+  input: { projectId: string; conversationId: string; proposals: BriefProposal[]; defaultAgentKey: string },
 ): Promise<Brief[]> {
   const out: Brief[] = []
   for (const p of input.proposals) {
@@ -167,7 +170,7 @@ export async function createBriefs(
         owner_id: scope.ownerId,
         project_id: input.projectId,
         conversation_id: input.conversationId,
-        agent_key: p.agentKey ?? "vic",
+        agent_key: p.agentKey ?? input.defaultAgentKey,
         goal: p.goal,
         context: p.context,
         deliverables: p.deliverables,
@@ -377,17 +380,20 @@ export function maxBriefBudgetCents(): number {
 }
 
 /** Workspace agents the owner can address with @mention: display name and the runtime key chat uses. */
-export async function loadRoster(
-  client: SupabaseClient,
-  workspaceId: string,
-): Promise<Array<{ key: string; displayName: string }>> {
+export async function loadRoster(client: SupabaseClient, workspaceId: string): Promise<RosterEntry[]> {
   const { data, error } = await client
     .from("agents")
-    .select("runtime_agent, display_name")
+    .select("runtime_agent, display_name, kind")
     .eq("workspace_id", workspaceId)
   if (error) throw new Error(`agents: ${error.message}`)
-  return ((data ?? []) as Array<{ runtime_agent: string; display_name: string }>).map((a) => ({
+  return ((data ?? []) as Array<{ runtime_agent: string; display_name: string; kind: string }>).map((a) => ({
     key: a.runtime_agent,
     displayName: a.display_name,
+    isChief: a.kind === "chief_of_staff",
   }))
+}
+
+/** The chief's runtime key for a workspace. Null when the workspace has no agents yet. */
+export async function chiefKey(client: SupabaseClient, workspaceId: string): Promise<string | null> {
+  return pickChief(await loadRoster(client, workspaceId))?.key ?? null
 }

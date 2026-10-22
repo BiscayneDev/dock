@@ -121,3 +121,14 @@ test("run prompt: carries goal, deliverables, budget and the approved risks", ()
 test("risk detection: plain analysis has no flags", () => {
   assert.deepEqual(detectRiskFlags("Compare three pricing models and summarise"), [])
 })
+
+test("chief: the flagged chief wins, then the first roster entry, and no name is assumed", async () => {
+  const { pickChief } = await import("../lib/briefs.ts")
+  const roster = [
+    { key: "scout", displayName: "Scout", isChief: false },
+    { key: "ops-lead", displayName: "Quinn", isChief: true },
+  ]
+  assert.equal(pickChief(roster).key, "ops-lead")
+  assert.equal(pickChief([{ key: "scout", displayName: "Scout", isChief: false }]).key, "scout")
+  assert.equal(pickChief([]), null)
+})

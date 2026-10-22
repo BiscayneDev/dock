@@ -152,6 +152,17 @@ export function parseMention(
   return { agentKey: hit.key, text: text.slice(m[0].length).trim() }
 }
 
+export interface RosterEntry {
+  key: string
+  displayName: string
+  isChief: boolean
+}
+
+/** The workspace's chief of staff: the agent flagged as chief, else the first roster entry, else null. No name is assumed. */
+export function pickChief(roster: RosterEntry[]): RosterEntry | null {
+  return roster.find((a) => a.isChief) ?? roster[0] ?? null
+}
+
 /** Only `proposed` briefs can be approved or cancelled. Everything else is terminal or already running. */
 export function canApprove(state: BriefState): boolean {
   return state === "proposed"
