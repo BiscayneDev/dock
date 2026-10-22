@@ -32,8 +32,10 @@ import {
   EVENT,
   executeApprovedAction,
   proposedActionFromPayload,
+  resumePlan,
   type MoneyExecutor,
 } from "@/lib/task-runs"
+import { checkpointData, continuationPrompt } from "@/lib/run-resume"
 
 // Cloud worker runner (P2). Each tick claims up to N runs and works them in order within a time budget.
 // Rules: money actions are gated before any model call; every model call is budget-checked and metered.
@@ -193,13 +195,29 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
   if (!model) return finish(admin, run, workerId, "failed", { error: "no model configured" })
   const prompt = typeof run.payload.prompt === "string" ? run.payload.prompt : ""
   if (!prompt.trim()) return finish(admin, run, workerId, "failed", { error: "empty prompt" })
+
+  // Resume: a retried run with a checkpoint carries its prior output as continuation context.
+  // The event history is the audit trail; nothing extra is logged. Belt-and-braces: a checkpoint
+  // stashed in the payload by the approval path is honored when the events have none.
+  const plan = resumePlan(run.status, events)
+  let snapshot: Record<string, unknown> | null = null
+  if (plan.ok && plan.fromStep > 0 && plan.snapshot) {
+    snapshot = plan.snapshot
+  } else if (plan.ok) {
+    const resume = run.payload.resume
+    if (resume && typeof resume === "object" && typeof (resume as Record<string, unknown>).output === "string") {
+      snapshot = resume as Record<string, unknown>
+    }
+  }
+  const effectivePrompt = snapshot ? continuationPrompt(prompt, snapshot) : prompt
+
   const system = run.agentKey === (await chiefKey(admin, run.workspaceId)) ? await chiefPromptFor(admin, run) : null
 
   await heartbeat(admin, run.id, workerId, DEFAULT_LEASE_SECONDS)
   try {
     const result = await generateText({
       model: model.model,
-      prompt,
+      prompt: effectivePrompt,
       ...(system ? { system } : {}),
       abortSignal: AbortSignal.timeout(Math.min(remaining, 150_000)),
     })
@@ -220,6 +238,13 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
     })
     if (reportedCents === null) await addEvent(admin, run.id, EVENT.costUnknown, { chargedCents: costCents })
     await addSpend(admin, run, workerId, costCents)
+    // Checkpoint BEFORE finishing: if the run is retried (lease loss, retry after failure),
+    // resumePlan reads this and the next attempt continues from the prior output.
+    // Wrapped as { step, snapshot } so resumePlan's step/snapshot shape matches.
+    await addEvent(admin, run.id, EVENT.checkpoint, {
+      step: 1,
+      snapshot: checkpointData(result.text, run.spentCents + costCents),
+    })
     return finish(admin, { ...run, spentCents: run.spentCents + costCents }, workerId, "succeeded", {
       output: result.text,
     })
