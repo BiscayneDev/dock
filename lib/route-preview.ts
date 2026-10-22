@@ -51,6 +51,8 @@ export interface RouteMessage {
 }
 
 export interface RoutePreviewOptions {
+  /** Gateway key to preview with (a workspace connection). Defaults to SHIPYARD_ROUTE_KEY. */
+  key?: string
   env?: Record<string, string | undefined>
   fetchImpl?: typeof fetch
   timeoutMs?: number
@@ -125,7 +127,7 @@ export async function previewRoute(
   opts: RoutePreviewOptions = {},
 ): Promise<RoutePreviewResult> {
   const env = opts.env ?? process.env
-  const key = env.SHIPYARD_ROUTE_KEY?.trim()
+  const key = opts.key?.trim() || env.SHIPYARD_ROUTE_KEY?.trim()
   if (!key) return { ok: false, reason: "not_configured" }
 
   const url = env.SHIPYARD_ROUTE_URL?.trim() || DEFAULT_ROUTE_URL

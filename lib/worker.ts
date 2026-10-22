@@ -11,6 +11,7 @@ import {
   type RouteMessage,
 } from "@/lib/route-preview"
 import { previewTargetFromRun } from "@/lib/preview-guard"
+import { routeKeyForWorkspace } from "@/lib/shipyard-connect-server"
 import { buildChiefPrompt, loadProfile, loadRules, loadVentureProfile } from "@/lib/onboarding-server"
 import {
   addEvent,
@@ -125,7 +126,10 @@ async function routeForApproval(admin: SupabaseClient, run: TaskRun) {
       ...(system ? [{ role: "system" as const, content: system }] : []),
       { role: "user" as const, content: prompt },
     ]
-    return approvalRouteFields(await previewRoute(messages))
+    // Workspace connection key first; global SHIPYARD_ROUTE_KEY only when no connection exists.
+    const route = await routeKeyForWorkspace(admin, run.workspaceId)
+    if (route.source === "error" || route.source === "none") return approvalRouteFields({ ok: false, reason: "not_configured" })
+    return approvalRouteFields(await previewRoute(messages, { key: route.key }))
   } catch {
     return approvalRouteFields({ ok: false, reason: "preview_error" })
   }
