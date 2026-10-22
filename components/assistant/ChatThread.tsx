@@ -83,6 +83,7 @@ function AnswerMessage({
   briefIds,
   kind,
   onSettled,
+  onMakeTask,
 }: {
   text: string
   agent: AgentDef
@@ -93,6 +94,7 @@ function AnswerMessage({
   briefIds?: string[]
   kind?: string
   onSettled?: () => void
+  onMakeTask?: (text: string) => void
 }) {
   const [copied, setCopied] = useState(false)
   const visible = stripBriefBlocks(text)
@@ -123,6 +125,16 @@ function AnswerMessage({
         >
           {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? "Copied" : "Copy"}
         </button>
+        {onMakeTask && visible && (
+          <button
+            type="button"
+            onClick={() => onMakeTask(visible)}
+            className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] hover:bg-white/5"
+            style={{ color: "var(--ink-3)" }}
+          >
+            Make this a task
+          </button>
+        )}
         {isLast && onRegenerate && (
           <button
             type="button"
@@ -273,6 +285,15 @@ export function ChatThread({
 
   const lastAssistantIndex = messages.map((m) => m.role).lastIndexOf("assistant")
 
+  // "Make this a task": the chief turns the selected message into a task proposal. The owner still approves it.
+  const makeTask = projectId
+    ? (text: string) => {
+        if (busy) return
+        const request = `Make this a task for the team. Propose it as a task block, or say why it is not real work:\n\n${text}`
+        sendMessage({ text: request }, model ? { body: { model } } : undefined).catch(() => null)
+      }
+    : undefined
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -292,6 +313,16 @@ export function ChatThread({
                   >
                     <p className="whitespace-pre-wrap">{getText(message)}</p>
                   </div>
+                  {makeTask && (
+                    <button
+                      type="button"
+                      onClick={() => makeTask(getText(message))}
+                      className="ml-2 self-end rounded-full px-2.5 py-1 text-[12px] hover:bg-white/5"
+                      style={{ color: "var(--ink-3)" }}
+                    >
+                      Make this a task
+                    </button>
+                  )}
                 </div>
               )
             }
@@ -309,6 +340,7 @@ export function ChatThread({
                 onSettled={() => {
                   onRefresh().catch(() => null)
                 }}
+                onMakeTask={makeTask}
               />
             )
           })}
