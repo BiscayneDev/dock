@@ -36,7 +36,7 @@ interface AgentRecord {
 
 const SUGGESTIONS = [
   "What needs me today?",
-  "Brief a new task",
+  "Delegate a new task",
   "Summarize what the agents did",
   "How much have we spent this week?",
 ]

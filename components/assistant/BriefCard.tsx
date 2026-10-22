@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { Check, X, Loader2, ScrollText } from "lucide-react"
+import { agentLabel } from "@/lib/tasks"
 
-// Brief cards and the project ledger (central thread v1). The owner's Approve is the only way work starts.
+// Task cards and the project ledger (central thread v1). Tasks are delegated to one or more subagents only after the owner approves.
 
 export type BriefState = "proposed" | "approved" | "running" | "succeeded" | "failed" | "cancelled"
 
@@ -74,7 +75,7 @@ export function BriefCard({ briefId, onSettled }: { briefId: string; onSettled?:
         setBrief(data)
         if (data.state === "approved" || data.state === "running") timer = setTimeout(load, 4000)
       } catch {
-        if (!cancelled) setError("Could not load this brief.")
+        if (!cancelled) setError("Could not load this task.")
       }
     }
     load()
@@ -97,7 +98,7 @@ export function BriefCard({ briefId, onSettled }: { briefId: string; onSettled?:
       const res = await fetch(`/api/briefs/${briefId}/${action}`, { method: "POST" })
       const data = (await res.json().catch(() => ({}))) as { error?: string; brief?: BriefView }
       if (!res.ok) {
-        setError(data.error ?? "Could not update this brief.")
+        setError(data.error ?? "Could not update this task.")
         return
       }
       if (data.brief) setBrief(data.brief)
@@ -115,7 +116,7 @@ export function BriefCard({ briefId, onSettled }: { briefId: string; onSettled?:
   if (!brief) {
     return (
       <div className="rounded-[14px] border p-4 text-[13px]" style={{ borderColor: "var(--border)", color: "var(--ink-3)" }}>
-        {error ?? "Loading brief…"}
+        {error ?? "Loading task…"}
       </div>
     )
   }
@@ -123,13 +124,13 @@ export function BriefCard({ briefId, onSettled }: { briefId: string; onSettled?:
   const proposed = brief.state === "proposed"
   return (
     <section
-      aria-label={`Brief: ${brief.goal}`}
+      aria-label={`Task: ${brief.goal}`}
       className="flex flex-col gap-3 rounded-[14px] border p-4"
       style={{ borderColor: "var(--border)", background: "var(--card)" }}
     >
       <header className="flex items-center justify-between gap-3">
         <p className="text-[12px] font-medium uppercase tracking-wide" style={{ color: "var(--ink-3)" }}>
-          Brief · {brief.agentKey}
+          Task · {agentLabel(brief.agentKey)}
         </p>
         <span className="flex items-center gap-1.5 text-[12px] font-medium" style={{ color: STATE_COLOR[brief.state] }}>
           {brief.state === "running" || brief.state === "approved" ? (
@@ -195,7 +196,7 @@ export function BriefCard({ briefId, onSettled }: { briefId: string; onSettled?:
             className="rounded-full px-4 py-1.5 text-[13px] font-medium disabled:opacity-50"
             style={{ background: "var(--accent)", color: "var(--accent-ink, #fff)" }}
           >
-            {busy ? "Starting…" : "Approve and start"}
+            {busy ? "Delegating…" : "Delegate task"}
           </button>
           <button
             type="button"
@@ -220,7 +221,7 @@ export function BriefCard({ briefId, onSettled }: { briefId: string; onSettled?:
 const KIND_LABEL: Record<string, string> = {
   brief_proposed: "Proposed",
   brief_cancelled: "Cancelled",
-  run_started: "Started",
+  run_started: "Delegated",
   run_succeeded: "Done",
   run_failed: "Stopped",
 }
@@ -364,7 +365,7 @@ export function LedgerPanel({ projectId, refreshKey }: { projectId: string; refr
           {entries === null && <li className="text-[12px]" style={{ color: "var(--ink-3)" }}>Loading…</li>}
           {entries?.length === 0 && (
             <li className="text-[12px]" style={{ color: "var(--ink-3)" }}>
-              No work yet. Approved briefs and their outcomes appear here.
+              No tasks yet. Delegated tasks and their outcomes appear here.
             </li>
           )}
           {entries?.map((e) => (

@@ -188,7 +188,7 @@ export async function POST(request: Request) {
         let reply = ""
 
         // Chief of Staff only: saved onboarding profile and enabled rules (null when none saved).
-        // Project chats teach every agent the brief protocol: work is proposed as a brief, never started from chat.
+        // Project chats teach every agent the task protocol: tasks are proposed for approval, never started from chat.
         const base = agent === chiefAgent ? await chiefSystemPrompt(projectId, prompt) : null
         const system = projectId ? [base, BRIEF_PROTOCOL_PROMPT].filter(Boolean).join("\n\n") : base
         const result = await inferenceStream({
@@ -225,7 +225,7 @@ export async function POST(request: Request) {
         writer.write({ type: "finish-step" })
 
         if (assistantChat && ctx) {
-          // Brief blocks become proposals (state: proposed). They are stripped from the stored text and shown as cards.
+          // Task blocks (fenced as brief) become proposals (state: proposed). They are stripped from the stored text and shown as task cards.
           let storedText = reply
           let briefIds: string[] = []
           if (projectId) {
