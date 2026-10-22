@@ -164,6 +164,7 @@ Vic calls these to auto-update the Kanban when spawning/completing agents:
 | `/api/tasks/agent-spawn` | POST | `{ agent, title, description?, priority?, tags? }` | `{ id, title, column }` |
 | `/api/tasks/agent-done` | POST | `{ id, summary? }` | `{ id, column }` |
 
+- All three agent POST callbacks (`agent-spawn`, `agent-done`, `/api/notify`) require `DOCK_AGENT_TOKEN` as `Authorization: Bearer` or `x-dock-agent-token`. See `docs/agent-callbacks.md`.
 - `agent-spawn` creates task in `"in-progress"` immediately
 - `agent-done` moves task to `"in-review"` + appends summary to description
 - `PATCH /api/tasks/[id]` supports `{ column }` to move to any column

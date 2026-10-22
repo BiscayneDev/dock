@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server"
 import { notificationEmitter, addRecentNotification } from "@/lib/notificationEmitter"
 import type { NotificationPayload } from "@/lib/notificationEmitter"
+import { requireAgentToken } from "@/lib/agent-auth"
 
 export async function POST(request: Request) {
+  const denied = requireAgentToken(request)
+  if (denied) return denied
+
   try {
     const body = await request.json() as { agent?: string; message?: string; type?: string }
 

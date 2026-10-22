@@ -5,9 +5,14 @@ import { createServerClient } from "@supabase/ssr"
 // - sign-in itself
 // - agent callbacks: OpenClaw agents curl these with no login (pre-existing, see docs)
 // - PayBox OAuth callback: redirected here by PayBox
-const PUBLIC_PATHS = ["/login", "/api/auth", "/api/tasks/agent-done", "/api/tasks/agent-spawn", "/api/notify", "/api/paybox/connect/callback"]
+// Agent callbacks (POST) are authenticated per-route with DOCK_AGENT_TOKEN (lib/agent-auth.ts).
+// /api/notify is exact-match only: /api/notify/stream and /api/notify/recent are browser
+// routes and must stay behind the session gate.
+const PUBLIC_PATHS = ["/login", "/api/auth", "/api/tasks/agent-done", "/api/tasks/agent-spawn", "/api/paybox/connect/callback"]
+const PUBLIC_EXACT_PATHS = ["/api/notify"]
 
 function isPublic(pathname: string): boolean {
+  if (PUBLIC_EXACT_PATHS.includes(pathname)) return true
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
 }
 

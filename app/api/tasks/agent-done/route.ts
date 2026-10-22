@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { readFile, writeFile } from "fs/promises"
 import { join } from "path"
 import type { Task } from "@/lib/tasks"
+import { requireAgentToken } from "@/lib/agent-auth"
 
 const DATA_PATH = join(process.cwd(), "data", "tasks.json")
 
@@ -51,6 +52,9 @@ async function writeTasks(tasks: Task[]): Promise<void> {
 // Moves task to "in-review", optionally appends summary to description.
 
 export async function POST(request: Request) {
+  const denied = requireAgentToken(request)
+  if (denied) return denied
+
   try {
     const body = await request.json() as { id: string; summary?: string }
 

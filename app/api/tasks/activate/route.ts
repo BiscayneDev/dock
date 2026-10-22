@@ -37,7 +37,7 @@ function buildBrief(taskId: string, title: string, description: string | undefin
     `2. Delegate to the right agent (pass them the Task ID: ${taskId})`,
     `3. Agent must call these when done:`,
     `   curl -s -X PATCH ${MC_URL}/api/tasks/${taskId} -H "Content-Type: application/json" -d '{"column":"done","description":"✅ summary"}'`,
-    `   curl -s -X POST ${MC_URL}/api/notify -H "Content-Type: application/json" -d '{"agent":"[name]","message":"✅ Done: ${title}","type":"finish"}'`,
+    `   curl -s -X POST ${MC_URL}/api/notify -H "Content-Type: application/json" -H "x-dock-agent-token: $DOCK_AGENT_TOKEN" -d '{"agent":"[name]","message":"✅ Done: ${title}","type":"finish"}'`,
     `   curl -s -X POST ${MC_URL}/api/activity -H "Content-Type: application/json" -d '{"taskId":"${taskId}","taskTitle":"${title}","agent":"[name]","action":"completed","summary":"..."}'`,
     ``,
     `Do not ask for clarification — act now.`,

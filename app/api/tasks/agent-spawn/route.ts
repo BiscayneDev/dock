@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { readFile, writeFile } from "fs/promises"
 import { join } from "path"
 import type { Task, Agent, Priority } from "@/lib/tasks"
+import { requireAgentToken } from "@/lib/agent-auth"
 
 const DATA_PATH = join(process.cwd(), "data", "tasks.json")
 
@@ -60,6 +61,9 @@ function normalizeAgent(input: string): Agent {
 // Creates a task in "in-progress" column and returns the task id.
 
 export async function POST(request: Request) {
+  const denied = requireAgentToken(request)
+  if (denied) return denied
+
   try {
     const body = await request.json() as {
       agent: string
