@@ -1,11 +1,12 @@
 import { ApiError } from "./api.mjs"
+import { runDiagnosticsTool, shouldRunDiagnostics } from "./local-tools.mjs"
 import { isMoneyAction } from "./money.mjs"
 
 // Executes one claimed home run. Money actions are never executed here: the run is reported to the approval
 // gate (complete with awaiting_approval) and the model is not called. Everything else is one model call through
 // Dock (POST /api/devices/infer), which applies the owner's budget and meters the spend.
 
-export async function executeRun(run, { api, localTools = null, log = () => {} }) {
+export async function executeRun(run, { api, localTools = null, diagnostics = false, log = () => {}, runDiagnostics }) {
   const action = run.proposedAction ?? null
 
   if (isMoneyAction(action)) {
@@ -29,6 +30,17 @@ export async function executeRun(run, { api, localTools = null, log = () => {} }
   if (localTools) {
     const kind = localTools.available ? `local tools available: ${localTools.tool}` : localTools.message
     await api.event(run.id, "local_tools", { available: localTools.available, tool: localTools.tool, message: kind })
+  }
+
+  // Optional pre-infer compile diagnostics: only when the daemon opted in and the run asked for them.
+  if (shouldRunDiagnostics({ enabled: diagnostics || localTools != null, wantDiagnostics: run.wantDiagnostics === true })) {
+    try {
+      const report = await (runDiagnostics ?? runDiagnosticsTool)()
+      await api.event(run.id, "diagnostics", { total: report.total, report: report.report })
+    } catch (err) {
+      // Diagnostics are best-effort: a broken tsc must not fail the run.
+      log(`run ${run.id}: diagnostics failed: ${err instanceof Error ? err.message : "unknown error"}`)
+    }
   }
 
   try {

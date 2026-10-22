@@ -27,6 +27,7 @@ export async function POST(request: Request) {
         attempt: run.attempts,
         leaseUntil: run.leaseUntil,
         proposedAction: proposedActionFromPayload(run.payload),
+        wantDiagnostics: run.payload?.wantDiagnostics === true,
       },
     })
   } catch {

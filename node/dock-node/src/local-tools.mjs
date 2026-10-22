@@ -55,6 +55,14 @@ function formatDiagsInline(diags, max = 40) {
   return lines.join("\n")
 }
 
+// --- diagnostics gating -----------------------------------------------------
+// Diagnostics run when the daemon has them enabled (--diagnostics, or --local-tools puts the
+// daemon in local-tools mode) AND the run payload asks for them (payload.wantDiagnostics === true,
+// surfaced by the claim endpoint as run.wantDiagnostics).
+export function shouldRunDiagnostics({ enabled = false, wantDiagnostics = false }) {
+  return Boolean(enabled) && wantDiagnostics === true
+}
+
 // Runs `npx tsc --noEmit --pretty false` in projectDir (60s timeout) and
 // returns a compact diagnostics report string.
 export async function runDiagnosticsTool({ projectDir = process.cwd() } = {}) {

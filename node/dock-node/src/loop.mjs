@@ -32,6 +32,7 @@ export async function runLoop({
   api,
   executeRun,
   localTools = null,
+  diagnostics = false,
   signal,
   log = () => {},
   heartbeatMs = 30_000,
@@ -71,7 +72,7 @@ export async function runLoop({
           continue
         }
         log(`claimed run ${run.id}`)
-        const result = await executeRun(run, { api, localTools, log })
+        const result = await executeRun(run, { api, localTools, diagnostics, log })
         runs += 1
         log(`run ${run.id}: ${result.outcome}`)
       } catch (err) {

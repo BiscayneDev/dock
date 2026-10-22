@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // dock-node: runs Dock home tasks on this machine. Commands:
 //   dock-node pair <code> [--server URL] [--name NAME]   store a device token (one-time code from Settings)
-//   dock-node run [--local-tools]                        claim and execute home runs until SIGINT
+//   dock-node run [--local-tools] [--diagnostics]         claim and execute home runs until SIGINT
 //   dock-node status                                     show pairing (never prints the token)
 import { hostname } from "node:os"
 import { createApi, pairDevice, ApiError } from "../src/api.mjs"
@@ -37,7 +37,9 @@ function usage() {
   console.log(`dock-node <command>
 
   pair <code> [--server URL] [--name NAME]   pair this machine (code from Dock Settings, valid 10 minutes)
-  run [--local-tools]                        run queued home tasks; Ctrl-C stops after the current run
+  run [--local-tools] [--diagnostics]        run queued home tasks; --diagnostics runs tsc before the
+                                             model call on runs that ask for it and reports the result
+                                             as a run event; --local-tools implies it for those runs
   status                                     show pairing state
 
 Config: ${configPath()}`)
@@ -67,6 +69,7 @@ async function cmdRun(flags) {
   if (!cfg) throw new Error("Not paired. Run: dock-node pair <code>")
   const api = createApi({ server: cfg.server, token: cfg.deviceToken })
   const localTools = detectLocalTools({ enabled: Boolean(flags["local-tools"]) })
+  const diagnostics = Boolean(flags.diagnostics) || localTools != null
   const controller = new AbortController()
   const onSignal = () => {
     console.log("stopping after the current run...")
@@ -77,7 +80,7 @@ async function cmdRun(flags) {
   const log = (msg) => console.log(`${new Date().toISOString()} ${msg}`)
   log(`dock-node ${cfg.name} online (${cfg.server})`)
   if (localTools && !localTools.available) log(localTools.message)
-  const result = await runLoop({ api, executeRun, localTools, signal: controller.signal, log })
+  const result = await runLoop({ api, executeRun, localTools, diagnostics, signal: controller.signal, log })
   log(`stopped (${result.stopped}) after ${result.runs} run(s)`)
   process.exitCode = result.stopped === "revoked" ? 2 : 0
 }

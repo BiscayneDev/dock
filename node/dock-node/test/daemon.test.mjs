@@ -8,7 +8,7 @@ import { ApiError } from "../src/api.mjs"
 import { executeRun } from "../src/executor.mjs"
 import { backoffMs, runLoop } from "../src/loop.mjs"
 import { loadConfig, saveConfig, configPath } from "../src/config.mjs"
-import { detectLocalTools } from "../src/local-tools.mjs"
+import { detectLocalTools, shouldRunDiagnostics } from "../src/local-tools.mjs"
 import { isMoneyAction } from "../src/money.mjs"
 
 // Fake API that records every call. `infer` and `complete` can be made to fail.
@@ -182,4 +182,47 @@ test("config: saved with mode 600 under DOCK_NODE_HOME and round-trips", async (
   assert.equal(cfg.deviceToken, "dockdev.x.y")
   const raw = await readFile(configPath(env), "utf8")
   assert.ok(raw.includes("dockdev.x.y"), "token is stored locally, never sent anywhere else")
+})
+
+// --- diagnostics -------------------------------------------------------------
+
+const plainRun = { id: "22222222-2222-4222-8222-222222222222", agentKey: "vic" }
+
+test("diagnostics: gate fires only when enabled AND the run asks for it", async () => {
+  const api = fakeApi()
+  const report = { total: 2, report: "ERROR a.ts:1 boom" }
+  const result = await executeRun({ ...plainRun, wantDiagnostics: true }, { api, diagnostics: true, runDiagnostics: async () => report })
+  assert.equal(result.outcome, "succeeded")
+  const diag = api.calls.find((c) => c.op === "event" && c.kind === "diagnostics")
+  assert.ok(diag, "diagnostics event emitted before infer")
+  assert.deepEqual(diag.data, { total: 2, report: "ERROR a.ts:1 boom" })
+  assert.ok(api.calls.findIndex((c) => c.op === "event" && c.kind === "diagnostics") < api.calls.findIndex((c) => c.op === "infer"), "diagnostics precede the model call")
+})
+
+test("diagnostics: no event when the run does not ask for it", async () => {
+  const api = fakeApi()
+  await executeRun(plainRun, { api, diagnostics: true, runDiagnostics: async () => ({ total: 0, report: "" }) })
+  assert.equal(api.calls.some((c) => c.op === "event" && c.kind === "diagnostics"), false)
+})
+
+test("diagnostics: no event when diagnostics are not enabled on the daemon", async () => {
+  const api = fakeApi()
+  await executeRun({ ...plainRun, wantDiagnostics: true }, { api, runDiagnostics: async () => ({ total: 0, report: "" }) })
+  assert.equal(api.calls.some((c) => c.op === "event" && c.kind === "diagnostics"), false)
+})
+
+test("diagnostics: a broken tsc is best-effort and never fails the run", async () => {
+  const api = fakeApi()
+  const result = await executeRun(
+    { ...plainRun, wantDiagnostics: true },
+    { api, diagnostics: true, runDiagnostics: async () => { throw new Error("tsc exploded") } },
+  )
+  assert.equal(result.outcome, "succeeded")
+  assert.ok(api.calls.some((c) => c.op === "complete" && c.body.status === "succeeded"))
+})
+
+test("diagnostics: shouldRunDiagnostics truth table", async () => {
+  assert.equal(shouldRunDiagnostics({ enabled: true, wantDiagnostics: true }), true)
+  assert.equal(shouldRunDiagnostics({ enabled: true, wantDiagnostics: false }), false)
+  assert.equal(shouldRunDiagnostics({ enabled: false, wantDiagnostics: true }), false)
 })
