@@ -50,8 +50,13 @@ function CodeBoxes({ value, onChange, disabled }: { value: string; onChange: (v:
           onKeyDown={(e) => {
             if (e.key === "Backspace" && !digits[i] && i > 0) refs.current[i - 1]?.focus()
           }}
-          className="h-14 w-11 rounded-[12px] text-center text-[22px] font-semibold outline-none focus:ring-2"
-          style={{ background: "var(--surface-0)", border: "1px solid var(--line-strong)", color: "var(--ink)" }}
+          className="h-14 w-11 rounded-[12px] text-center text-[22px] outline-none focus:ring-2"
+          style={{
+            background: "var(--surface-0)",
+            border: "1px solid var(--line-strong)",
+            color: "var(--ink)",
+            fontFamily: "var(--font-mono, ui-monospace, monospace)",
+          }}
         />
       ))}
     </div>
@@ -116,84 +121,124 @@ function LoginInner() {
     router.refresh()
   }
 
+  const chromeBar = (
+    <div
+      className="flex items-center gap-2 px-4 py-[9px]"
+      style={{ borderBottom: "1px solid var(--line)", background: "linear-gradient(180deg, var(--surface-2), var(--surface-1))" }}
+    >
+      <span className="flex gap-[5px]">
+        {[0, 1, 2].map((i) => (
+          <span key={i} className="h-2 w-2 rounded-full" style={{ background: "var(--line-strong)" }} />
+        ))}
+      </span>
+      <span
+        className="flex-1 text-center font-mono text-[9.5px] uppercase tracking-[0.12em]"
+        style={{ color: "var(--ink-3)" }}
+      >
+        ⚓ dock — sign in
+      </span>
+      <span className="flex items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.12em]" style={{ color: "var(--ink-2)" }}>
+        <span
+          className="h-[6px] w-[6px] rounded-full"
+          style={{ background: "var(--gold)", boxShadow: "0 0 8px var(--gold)", animation: "pulse 2.4s ease-in-out infinite" }}
+        />
+        Live
+      </span>
+    </div>
+  )
+
   return (
     <div className="relative flex min-h-screen items-center justify-center p-6">
       <WaveBackground />
-      <div className="relative z-10 w-full max-w-sm rounded-[18px] p-8" style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}>
-        <p className="text-[13px] font-semibold tracking-wide" style={{ color: "var(--ink-2)" }}>
-          ⚓ Dock
-        </p>
-
-        {step === "email" ? (
-          <form onSubmit={sendCode} className="mt-6 space-y-4">
-            <div>
-              <h1 className="text-[22px] font-semibold" style={{ color: "var(--ink)" }}>
-                Sign in
+      <div
+        className="relative z-10 w-full max-w-sm overflow-hidden rounded-[15px]"
+        style={{
+          border: "1px solid var(--line-strong)",
+          background: "var(--surface-1)",
+          boxShadow: "0 24px 80px rgba(0, 0, 0, 0.55)",
+        }}
+      >
+        {chromeBar}
+        <div className="p-8">
+          {step === "email" ? (
+            <form onSubmit={sendCode} className="space-y-4">
+              <p className="font-mono text-[9.5px] uppercase tracking-[0.16em]" style={{ color: "var(--ink-3)" }}>
+                The crew&apos;s entrance
+              </p>
+              <h1
+                className="text-[26px] tracking-[-0.01em]"
+                style={{ color: "var(--ink)", fontFamily: "var(--font-serif)", fontWeight: 400 }}
+              >
+                Come aboard
               </h1>
-              <p className="mt-1 text-[13px]" style={{ color: "var(--ink-3)" }}>
+              <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>
                 We&apos;ll email you a 6-digit code.
               </p>
-            </div>
-            <input
-              type="email"
-              required
-              autoFocus
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className="w-full rounded-[12px] px-4 py-3 text-[15px] outline-none"
-              style={{ background: "var(--surface-0)", border: "1px solid var(--line-strong)", color: "var(--ink)" }}
-            />
-            <button
-              type="submit"
-              disabled={busy || !email.trim()}
-              className="w-full rounded-[12px] py-3 text-[14px] font-medium disabled:opacity-40"
-              style={{ background: "var(--ink)", color: "var(--surface-0)" }}
+              <input
+                type="email"
+                required
+                autoFocus
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full rounded-[10px] px-4 py-3 text-[15px] outline-none"
+                style={{ background: "var(--surface-0)", border: "1px solid var(--line-strong)", color: "var(--ink)" }}
+              />
+              <button
+                type="submit"
+                disabled={busy || !email.trim()}
+                className="w-full rounded-[10px] py-3 font-mono text-[11px] uppercase tracking-[0.08em] disabled:opacity-40"
+                style={{ background: "var(--gold)", color: "#1a1508", border: "1px solid var(--gold)" }}
+              >
+                {busy ? "Sending…" : "Send code"}
+              </button>
+            </form>
+          ) : (
+            <form
+              className="space-y-5"
+              onSubmit={(e) => {
+                e.preventDefault()
+                verify(code).catch(() => null)
+              }}
             >
-              {busy ? "Sending…" : "Send code"}
-            </button>
-          </form>
-        ) : (
-          <form
-            className="mt-6 space-y-5"
-            onSubmit={(e) => {
-              e.preventDefault()
-              verify(code).catch(() => null)
-            }}
-          >
-            <div>
-              <h1 className="text-[22px] font-semibold" style={{ color: "var(--ink)" }}>
+              <p className="font-mono text-[9.5px] uppercase tracking-[0.16em]" style={{ color: "var(--ink-3)" }}>
+                Prove it&apos;s you
+              </p>
+              <h1
+                className="text-[26px] tracking-[-0.01em]"
+                style={{ color: "var(--ink)", fontFamily: "var(--font-serif)", fontWeight: 400 }}
+              >
                 Enter your code
               </h1>
-              <p className="mt-1 text-[13px]" style={{ color: "var(--ink-3)" }}>
+              <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>
                 Sent to <span style={{ color: "var(--ink-2)" }}>{email}</span>
               </p>
-            </div>
-            <CodeBoxes
-              value={code}
-              disabled={busy}
-              onChange={(v) => {
-                setCode(v)
-                if (v.length === CODE_LENGTH) verify(v).catch(() => null)
-              }}
-            />
-            <div className="flex items-center justify-between text-[13px]" style={{ color: "var(--ink-3)" }}>
-              <button type="button" onClick={() => setStep("email")} className="hover:underline">
-                Use a different email
-              </button>
-              <button type="button" onClick={() => sendCode()} disabled={busy} className="hover:underline disabled:opacity-40">
-                Send a new code
-              </button>
-            </div>
-          </form>
-        )}
+              <CodeBoxes
+                value={code}
+                disabled={busy}
+                onChange={(v) => {
+                  setCode(v)
+                  if (v.length === CODE_LENGTH) verify(v).catch(() => null)
+                }}
+              />
+              <div className="flex items-center justify-between text-[13px]" style={{ color: "var(--ink-3)" }}>
+                <button type="button" onClick={() => setStep("email")} className="hover:underline">
+                  Use a different email
+                </button>
+                <button type="button" onClick={() => sendCode()} disabled={busy} className="hover:underline disabled:opacity-40">
+                  Send a new code
+                </button>
+              </div>
+            </form>
+          )}
 
-        {error && (
-          <p role="alert" className="mt-4 text-[13px]" style={{ color: "#f59e0b" }}>
-            {error}
-          </p>
-        )}
+          {error && (
+            <p role="alert" className="mt-4 text-[13px]" style={{ color: "#f59e0b" }}>
+              {error}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   )
