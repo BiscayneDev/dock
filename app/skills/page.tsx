@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import { useToast } from "@/lib/useToast"
+import { ToastContainer } from "@/components/Toast"
 
 interface Skill {
   name: string
@@ -32,6 +34,8 @@ export default function SkillsPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   const [remoteMode, setRemoteMode] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const { toasts, addToast, removeToast } = useToast()
 
   const fetchSkills = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -54,6 +58,36 @@ export default function SkillsPage() {
       setRefreshing(false)
     }
   }, [])
+
+  const importFromFolder = useCallback(async () => {
+    setImporting(true)
+    try {
+      const res = await fetch("/api/skills/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        addToast({ agent: "Skills", message: data.error ?? "Import failed", type: "finish", timestamp: Date.now() })
+        return
+      }
+      const errCount = Array.isArray(data.errors) ? data.errors.length : 0
+      addToast({
+        agent: "Skills",
+        message:
+          `Imported ${data.imported} skill${data.imported === 1 ? "" : "s"}` +
+          (errCount ? ` · ${errCount} error${errCount === 1 ? "" : "s"}` : ""),
+        type: "finish",
+        timestamp: Date.now(),
+      })
+      fetchSkills(true)
+    } catch (err) {
+      addToast({ agent: "Skills", message: String(err), type: "finish", timestamp: Date.now() })
+    } finally {
+      setImporting(false)
+    }
+  }, [addToast, fetchSkills])
 
   // Initial load
   useEffect(() => {
@@ -125,6 +159,21 @@ export default function SkillsPage() {
         >
           <span style={{ display: "inline-block", animation: refreshing ? "spin 1s linear infinite" : "none" }}>↻</span>
           {refreshing ? "Refreshing..." : "Refresh"}
+        </button>
+      </div>
+
+      <div className="flex items-center justify-end">
+        <button
+          onClick={importFromFolder}
+          disabled={importing}
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
+          style={{
+            backgroundColor: "#1a1a2e",
+            color: importing ? "#52525b" : "#a1a1aa",
+            cursor: importing ? "not-allowed" : "pointer",
+          }}
+        >
+          {importing ? "Importing..." : "Import from folder"}
         </button>
       </div>
 
@@ -244,6 +293,7 @@ export default function SkillsPage() {
           </div>
         </>
       )}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   )
 }

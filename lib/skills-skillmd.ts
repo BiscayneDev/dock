@@ -96,6 +96,20 @@ export function matchesQuery(skill: ParsedSkill, query: string): number {
   return max > 0 ? Math.min(1, score / max) : 0;
 }
 
+// Given directory entry names, return candidate SKILL.md paths relative to the
+// directory: "SKILL.md" itself if present, plus "<entry>/SKILL.md" for each entry.
+export function findSkillMdPaths(entries: string[]): string[] {
+  const paths: string[] = [];
+  for (const entry of entries) {
+    if (entry === 'SKILL.md') paths.push(entry);
+  }
+  for (const entry of entries) {
+    if (entry === 'SKILL.md' || entry.startsWith('.')) continue;
+    paths.push(`${entry}/SKILL.md`);
+  }
+  return paths;
+}
+
 export function topSkills(skills: ParsedSkill[], query: string, n: number): ParsedSkill[] {
   return [...skills]
     .map((skill) => ({ skill, score: matchesQuery(skill, query) }))
