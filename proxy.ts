@@ -10,7 +10,7 @@ import { createServerClient } from "@supabase/ssr"
 // /api/notify is exact-match only: /api/notify/stream and /api/notify/recent are browser
 // routes and must stay behind the session gate.
 const PUBLIC_PATHS = ["/login", "/api/auth", "/api/tasks/agent-done", "/api/tasks/agent-spawn", "/api/paybox/connect/callback", "/api/worker/tick"]
-const PUBLIC_EXACT_PATHS = ["/api/notify"]
+const PUBLIC_EXACT_PATHS = ["/", "/api/notify"]
 
 // Signed-in users who are not yet allowed in may still reach these (redeeming an invite).
 const SIGNED_IN_PATHS = ["/api/invites/redeem"]

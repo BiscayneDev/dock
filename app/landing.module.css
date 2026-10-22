@@ -1,0 +1,249 @@
+/* Landing (framed-media-hero treatment). The wave clip IS the design; the page only frames it. */
+
+.wrap {
+  min-height: 100vh;
+  background: var(--surface-0);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Nav */
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1160px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 20px 24px 0;
+}
+.brand {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+.navLinks {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+.navLink {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  text-decoration: none;
+}
+.navLink:hover { color: var(--ink); }
+
+/* Hero copy — compact; the frame below is the hero */
+.hero {
+  max-width: 1160px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 64px 24px 28px;
+}
+.kicker {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+  margin: 0 0 14px;
+}
+.kicker :global(.dot) {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 8px var(--gold);
+  margin-right: 8px;
+  vertical-align: 1px;
+}
+.headline {
+  font-family: var(--font-serif);
+  font-size: clamp(1.75rem, 4vw, 2.75rem);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  margin: 0 0 10px;
+  max-width: 21ch;
+}
+.sub {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--ink-2);
+  margin: 0 0 22px;
+  max-width: 52ch;
+}
+.ctas { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.ctaPrimary {
+  display: inline-block;
+  background: var(--gold);
+  color: #1a1508;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 11px 18px;
+  border-radius: 10px;
+  text-decoration: none;
+  border: 1px solid var(--gold);
+}
+.ctaPrimary:hover { filter: brightness(1.06); }
+.ctaGhost {
+  display: inline-block;
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 11px 18px;
+  border-radius: 10px;
+  text-decoration: none;
+  border: 1px solid var(--line-strong);
+}
+.ctaGhost:hover { color: var(--ink); border-color: var(--ink-3); }
+
+/* The frame — same anatomy as the chrome-bar media treatment */
+.frame {
+  max-width: 1160px;
+  width: calc(100% - 48px);
+  margin: 0 auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 15px;
+  overflow: hidden;
+  background: var(--surface-1);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+.chromeBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
+}
+.dots { display: flex; gap: 5px; }
+.dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); }
+.chromeLabel { flex: 1; text-align: center; }
+.live {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+}
+.liveDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 8px var(--gold);
+  animation: pulse 2.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.media {
+  display: block;
+  width: 100%;
+  height: max(46vh, 400px);
+  object-fit: cover;
+  background: var(--surface-0);
+}
+.caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* Feature strip — restyled to the frame's tokens */
+.strip {
+  max-width: 1160px;
+  width: calc(100% - 48px);
+  margin: 96px auto 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+@media (max-width: 820px) {
+  .strip { grid-template-columns: 1fr; }
+  .media { height: 38vh; }
+  .hero { padding-top: 44px; }
+}
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: linear-gradient(180deg, var(--surface-1), var(--surface-0));
+  padding: 18px 18px 16px;
+}
+.panelBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+.panelTitle {
+  font-family: var(--font-serif);
+  font-size: 19px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  margin: 0 0 6px;
+}
+.panelBody {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--ink-2);
+  margin: 0;
+}
+.panelBody b { color: var(--ink); font-weight: 500; }
+
+/* Footer */
+.footer {
+  max-width: 1160px;
+  width: calc(100% - 48px);
+  margin: 96px auto 0;
+  padding: 22px 0 40px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.footer a { color: var(--ink-3); text-decoration: none; }
+.footer a:hover { color: var(--ink); }
+@media (prefers-reduced-motion: reduce) {
+  .liveDot { animation: none; }
+}

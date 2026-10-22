@@ -7,8 +7,9 @@ import { CommandPalette } from "@/components/CommandPalette"
 export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isSetup = pathname.startsWith("/setup")
+  const isLanding = pathname === "/"
 
-  if (isSetup || pathname === "/login") {
+  if (isSetup || isLanding || pathname === "/login") {
     return <>{children}</>
   }
 
