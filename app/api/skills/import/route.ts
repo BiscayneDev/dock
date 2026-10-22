@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server"
 import { readFile, readdir, writeFile, mkdir } from "fs/promises"
-import { join, resolve } from "path"
+import { join, resolve, isAbsolute, relative } from "path"
 import { existsSync } from "fs"
 import { parseSkillMd, findSkillMdPaths } from "@/lib/skills-skillmd"
+import { currentUser, sessionClient } from "@/lib/tenancy"
+import { agentTokenAuthorized } from "@/lib/agent-auth"
 
 // POST /api/skills/import { dir?: string }
 // Reads SKILL.md files from a skills directory (default: <cwd>/skills),
 // parses each with parseSkillMd, and upserts into data/external-skills.json
-// with source: "skillmd". Mirrors sibling skills routes (no session gate).
+// with source: "skillmd".
+// Auth: browser session or DOCK_AGENT_TOKEN (same gate as sibling agent routes).
+// The `dir` param is confined to paths inside process.cwd(); traversal is
+// rejected with 400 and the resolved absolute path is never echoed back.
 const MAX_FILES = 200
 const EXTERNAL_SKILLS_PATH = join(process.cwd(), "data", "external-skills.json")
 
@@ -35,12 +40,38 @@ async function writeExternalSkills(skills: ExternalSkill[]): Promise<void> {
 }
 
 export async function POST(req: Request) {
-  let dir: string
+  // Gate: signed-in browser session or valid agent token.
+  let authed = agentTokenAuthorized(req)
+  if (!authed) {
+    try {
+      const supabase = await sessionClient()
+      authed = Boolean(await currentUser(supabase))
+    } catch {
+      authed = false
+    }
+  }
+  if (!authed) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
+  }
+
+  let dirInput: string
   try {
     const body = (await req.json().catch(() => ({}))) as { dir?: string }
-    dir = resolve(process.cwd(), body.dir && body.dir.trim() ? body.dir.trim() : "skills")
+    dirInput = body.dir && body.dir.trim() ? body.dir.trim() : "skills"
   } catch {
     return NextResponse.json({ ok: false, error: "invalid request body" }, { status: 400 })
+  }
+
+  // Path confinement: the dir must resolve INSIDE process.cwd().
+  const cwd = process.cwd()
+  const dir = resolve(cwd, dirInput)
+  const relToCwd = relative(cwd, dir)
+  const inside = relToCwd !== "" && !relToCwd.startsWith("..") && !isAbsolute(relToCwd)
+  if (!inside) {
+    return NextResponse.json(
+      { ok: false, error: `directory must be inside the project: ${dirInput}` },
+      { status: 400 }
+    )
   }
 
   let entries: string[]
@@ -48,7 +79,7 @@ export async function POST(req: Request) {
     entries = await readdir(dir)
   } catch {
     return NextResponse.json(
-      { ok: false, error: `directory not readable: ${dir}` },
+      { ok: false, error: `directory not readable: ${dirInput}` },
       { status: 400 }
     )
   }

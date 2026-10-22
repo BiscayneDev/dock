@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { readFile, writeFile, mkdir } from "fs/promises"
 import { join, dirname } from "path"
+import { currentUser, sessionClient } from "@/lib/tenancy"
+import { agentTokenAuthorized } from "@/lib/agent-auth"
 import { isDue, calculateNextRun, dueSchedules, scheduleFeedId, type AgentSchedule } from "@/lib/schedules"
 import { adminClient } from "@/lib/tenancy"
 import { enqueueRun } from "@/lib/queue"
@@ -41,7 +43,26 @@ async function writeSchedules(schedules: AgentSchedule[]): Promise<void> {
  * tick; a tick that errors does not advance the watermark. Duplicate cron
  * firings are deduped via shouldProcess against that watermark.
  */
+/**
+ * Gate: allow either a signed-in browser session or a valid agent token
+ * (DOCK_AGENT_TOKEN via Authorization: Bearer / x-dock-agent-token).
+ * Anonymous callers must not be able to force paid runs.
+ */
+async function authorized(request: Request): Promise<boolean> {
+  if (agentTokenAuthorized(request)) return true
+  try {
+    const supabase = await sessionClient()
+    const user = await currentUser(supabase)
+    return Boolean(user)
+  } catch {
+    return false
+  }
+}
+
 export async function POST(request: Request) {
+  if (!(await authorized(request))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
   const now = new Date()
   const schedules = await readSchedules()
   const results: Array<{ id: string; name: string; status: "executed" | "skipped" | "error"; error?: string }> = []
