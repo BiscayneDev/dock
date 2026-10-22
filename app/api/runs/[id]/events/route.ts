@@ -2,13 +2,37 @@ import { NextResponse } from "next/server"
 import { adminClient } from "@/lib/tenancy"
 import { isUuid } from "@/lib/assistant-store"
 import { authenticateDevice, heldRun, touchDevice } from "@/lib/devices"
-import { addEvent, markRunning } from "@/lib/queue"
+import { addEvent, getRun, listEvents, markRunning } from "@/lib/queue"
+import { assistantContext } from "@/lib/assistant-store"
+import { agentTokenAuthorized } from "@/lib/agent-auth"
 import { deviceWorkerId, isDeviceEventKind } from "@/lib/device-rules"
 
 export const dynamic = "force-dynamic"
 
 interface Context {
   params: Promise<{ id: string }>
+}
+
+/** GET: list a run's events (oldest first). Session or agent token; devices keep POST. */
+export async function GET(request: Request, context: Context) {
+  const { id } = await context.params
+  if (!isUuid(id)) return NextResponse.json({ error: "Run not found" }, { status: 404 })
+  const session = await assistantContext()
+  let client
+  if (session) {
+    client = session.supabase
+  } else if (agentTokenAuthorized(request)) {
+    client = adminClient()
+  } else {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  try {
+    const run = await getRun(client, id)
+    if (!run) return NextResponse.json({ error: "Run not found" }, { status: 404 })
+    return NextResponse.json({ events: await listEvents(client, id) })
+  } catch {
+    return NextResponse.json({ error: "Events lookup failed" }, { status: 500 })
+  }
 }
 
 /** Appends an allowed event to a run this device holds. 'started' moves the run to running. */

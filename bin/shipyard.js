@@ -6,6 +6,7 @@ import { resolve, join, dirname } from "node:path"
 import { createInterface } from "node:readline"
 import { homedir } from "node:os"
 import { callTool } from "./mcp-client.js"
+import { runRunsCommand } from "./runs-cli.mjs"
 
 // ── Colors (no dependencies) ────────────────────────────────────────────────
 
@@ -1102,6 +1103,11 @@ async function main() {
           console.log(dim("  Available: skill search, skill list, skill add, skill info, skill remove"))
           process.exit(1)
       }
+      break
+
+    case "run":
+    case "runs":
+      await runRunsCommand([command === "run" ? "" : subcommand, ...restArgs])
       break
 
     case "dev":

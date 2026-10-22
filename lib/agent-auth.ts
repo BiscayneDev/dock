@@ -34,3 +34,8 @@ export function requireAgentToken(request: Request): NextResponse | null {
   const ok = timingSafeEqual(digest(provided), digest(expected))
   return ok ? null : unauthorized()
 }
+
+/** True when the request carries a valid DOCK_AGENT_TOKEN bearer/x-dock-agent-token header. */
+export function agentTokenAuthorized(request: Request): boolean {
+  return requireAgentToken(request) === null
+}

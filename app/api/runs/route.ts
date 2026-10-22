@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { assistantContext, isUuid, projectInWorkspace } from "@/lib/assistant-store"
 import { enqueueRun, listEventsForRuns, listRuns } from "@/lib/queue"
 import { ownerHasOnlineDevice } from "@/lib/devices"
+import { agentTokenAuthorized } from "@/lib/agent-auth"
+import { adminClient } from "@/lib/tenancy"
 import { buildModel, parseModelRef, resolveModelRef, listConfiguredProviders } from "@/lib/inference"
 import { createShipyardCapture } from "@/lib/inference/shipyard-capture"
 import { SHIPYARD_AUTO_MODEL } from "@/lib/route-preview"
@@ -20,9 +22,29 @@ function maxBudgetCents(): number {
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 2000
 }
 
-/** Owner's background runs with their events, newest first. Signed out = 401. */
-export async function GET() {
+/**
+ * Browser session first (existing behavior); machine clients (DOCK_AGENT_TOKEN
+ * bearer) fall back to the service-role client acting as the first workspace's
+ * owner — headless single-tenant deployments.
+ */
+async function resolveContext(request: Request) {
   const ctx = await assistantContext()
+  if (ctx) return ctx
+  if (!agentTokenAuthorized(request)) return null
+  const admin = adminClient()
+  const { data: ws } = await admin
+    .from("workspaces")
+    .select("id, owner_id")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  if (!ws) return null
+  return { supabase: admin, userId: ws.owner_id as string, workspaceId: ws.id as string }
+}
+
+/** Owner's background runs with their events, newest first. Session or agent token. */
+export async function GET(request: Request) {
+  const ctx = await resolveContext(request)
   if (!ctx) return NextResponse.json({ error: "Sign in required" }, { status: 401 })
   const runs = await listRuns(ctx.supabase, 50)
   const events = await listEventsForRuns(
@@ -38,9 +60,9 @@ export async function GET() {
   })
 }
 
-/** Queue a background run for the signed-in owner. Target 'cloud' only in P2. */
+/** Queue a background run. Target 'cloud' only in P2. Session or agent token. */
 export async function POST(request: Request) {
-  const ctx = await assistantContext()
+  const ctx = await resolveContext(request)
   if (!ctx) return NextResponse.json({ error: "Sign in required" }, { status: 401 })
 
   let body: Record<string, unknown>
