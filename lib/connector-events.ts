@@ -5,7 +5,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { EVENT } from "@/lib/task-runs"
-import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
+import { CHIEF_RUNTIME_KEY, DEFAULT_CHIEF_NAME } from "@/lib/chief-key"
 import { CONNECTOR_APPROVAL_TTL_MS, approvalDetailsHash, type ApprovalDetails } from "@/lib/connector-rules"
 import { clipRunText, sendConnectorEvent } from "@/lib/connector-webhook"
 
@@ -50,7 +50,7 @@ async function agentDisplayName(admin: SupabaseClient, workspaceId: string, agen
     .eq("workspace_id", workspaceId)
     .eq("kind", "chief_of_staff")
     .maybeSingle()
-  return ((data as { display_name?: string } | null)?.display_name ?? "Vic").slice(0, 40)
+  return ((data as { display_name?: string } | null)?.display_name ?? DEFAULT_CHIEF_NAME).slice(0, 40)
 }
 
 /**
