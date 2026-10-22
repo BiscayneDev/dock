@@ -14,7 +14,7 @@ export async function POST(_: Request, context: Context) {
   if (!ctx) return NextResponse.json({ error: "Sign in required" }, { status: 401 })
   const { id } = await context.params
   if (!isUuid(id)) return NextResponse.json({ error: "Run not found" }, { status: 404 })
-  const result = await decideApproval(ctx.supabase, id, "approve")
+  const result = await decideApproval(ctx.supabase, id, "approve", ctx.userId)
   if (!result.ok) {
     const status = result.reason === "not_found" ? 404 : 409
     return NextResponse.json({ error: result.reason }, { status })

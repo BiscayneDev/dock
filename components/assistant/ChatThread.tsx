@@ -10,6 +10,7 @@ import type { ConversationEvent, ConversationRun } from "@/lib/conversations"
 import { Composer, type IntegrationStatus } from "./Composer"
 import { readStoredModel, storeModel, type ModelCatalog, type ModelRef } from "./ModelPicker"
 import { BriefCard, LedgerPanel } from "./BriefCard"
+import { ApprovalCards } from "./ApprovalCard"
 import { stripBriefBlocks } from "@/lib/briefs"
 
 export interface Attachment {
@@ -236,7 +237,14 @@ export function ChatThread({
       const res = await fetch("/api/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, agent: agent.id, budget_cents: 100, target, ...(chosen ? { model: chosen } : {}) }),
+        body: JSON.stringify({
+          prompt,
+          agent: agent.id,
+          budget_cents: 100,
+          target,
+          conversation_id: conversationId,
+          ...(chosen ? { model: chosen } : {}),
+        }),
       })
       const data = (await res.json().catch(() => ({}))) as { error?: string }
       const ok =
@@ -304,6 +312,7 @@ export function ChatThread({
               />
             )
           })}
+          {conversationId && <ApprovalCards conversationId={conversationId} refreshKey={messages.length} />}
           {busy && (
             <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>
               {agent.name} is working…

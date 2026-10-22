@@ -150,3 +150,38 @@ export function proposedActionFromPayload(payload: Record<string, unknown>): Pro
     description: typeof a.description === "string" ? a.description.slice(0, 500) : undefined,
   }
 }
+
+/** Owner check for a decision. Service-role callers (the Dinghy connector) pass no user and are trusted. */
+export function canDecideRun(ownerId: string, userId: string | null | undefined): boolean {
+  return userId === null || userId === undefined || ownerId === userId
+}
+
+export type DecisionPlan =
+  | { ok: true; actionId: string; amountCents: number | null }
+  | { ok: false; reason: "not_awaiting_approval" | "no_pending_action" | "already_decided" }
+
+/**
+ * Whether an owner decision can be recorded now. A second decision on the same action is refused
+ * (already_decided), so a double click never writes a second grant or rejection.
+ */
+export function planDecision(status: string, events: RunEventLike[]): DecisionPlan {
+  if (status !== "awaiting_approval") return { ok: false, reason: "not_awaiting_approval" }
+  const requested = [...events].reverse().find((e) => e.kind === EVENT.approvalRequested)
+  if (!requested) return { ok: false, reason: "no_pending_action" }
+  const actionId = requested.data.actionId
+  const decided = events.some(
+    (e) => (e.kind === EVENT.approvalGranted || e.kind === EVENT.approvalRejected) && e.data.actionId === actionId,
+  )
+  if (decided) return { ok: false, reason: "already_decided" }
+  const amount = requested.data.amountCents
+  return {
+    ok: true,
+    actionId: String(actionId ?? ""),
+    amountCents: typeof amount === "number" && Number.isFinite(amount) ? amount : null,
+  }
+}
+
+/** Status a run moves to on an owner decision. Approve re-queues it; reject cancels it. */
+export function statusAfterDecision(decision: "approve" | "reject"): "queued" | "cancelled" {
+  return decision === "approve" ? "queued" : "cancelled"
+}

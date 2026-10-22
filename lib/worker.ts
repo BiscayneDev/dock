@@ -101,6 +101,16 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
       amountCents: a.amountCents ?? null,
       destination: a.destination ?? null,
       description: a.description ?? null,
+      // Card fields (approval card in /assistant). Null means unknown; the card never guesses.
+      proposal: a.description ?? null,
+      target: a.destination ?? null,
+      estimatedCents: a.amountCents ?? null,
+      budgetCents: run.budgetCents,
+      model: run.model,
+      modelReason: typeof run.payload.modelReason === "string" ? run.payload.modelReason : null,
+      projectId: run.projectId,
+      conversationId: typeof run.payload.conversationId === "string" ? run.payload.conversationId : null,
+      screenshotUrl: typeof run.payload.screenshotUrl === "string" ? run.payload.screenshotUrl : null,
     })
     await parkForApproval(admin, run.id, workerId)
     return "awaiting_approval"

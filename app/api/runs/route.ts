@@ -91,8 +91,25 @@ export async function POST(request: Request) {
     projectId = project.id
   }
 
+  // The thread the run came from. Owner-checked, so a run can only be tied to the caller's own conversation.
+  let conversationId: string | null = null
+  if (body.conversation_id !== undefined && body.conversation_id !== null) {
+    if (typeof body.conversation_id !== "string" || !isUuid(body.conversation_id)) {
+      return NextResponse.json({ error: "Invalid conversation_id" }, { status: 400 })
+    }
+    const { data } = await ctx.supabase
+      .from("conversations")
+      .select("id")
+      .eq("id", body.conversation_id)
+      .eq("workspace_id", ctx.workspaceId)
+      .maybeSingle()
+    if (!data) return NextResponse.json({ error: "Conversation not found" }, { status: 400 })
+    conversationId = body.conversation_id
+  }
+
   // The model is recorded on the run at enqueue time. Explicit model must be a configured provider.
   let model: string | null = null
+  let modelReason: string | null = null
   if (typeof body.model === "string" && body.model.trim()) {
     const ref = body.model.trim()
     const parsed = parseModelRef(ref)
@@ -101,8 +118,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Model provider is not configured on this server" }, { status: 400 })
     }
     model = ref
+    modelReason = "Chosen in the composer for this message"
   } else {
     model = resolveModelRef(agentKey)
+    modelReason = "Agent default (no model chosen in the composer)"
   }
   if (!model) return NextResponse.json({ error: "No model configured for this agent" }, { status: 400 })
 
@@ -117,6 +136,8 @@ export async function POST(request: Request) {
       prompt,
       model,
       budgetCents: budget,
+      conversationId,
+      modelReason,
     })
     return NextResponse.json({ id: run.id, status: run.status, budgetCents: run.budgetCents }, { status: 201 })
   } catch {

@@ -1,5 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { EVENT, RUN_TARGETS, type ProposedAction, type RunStatus, type RunTarget } from "@/lib/task-runs"
+import {
+  EVENT,
+  RUN_TARGETS,
+  canDecideRun,
+  planDecision,
+  statusAfterDecision,
+  type ProposedAction,
+  type RunStatus,
+  type RunTarget,
+} from "@/lib/task-runs"
 import { connectorApprovalParked, connectorRunFinished } from "@/lib/connector-events"
 
 // Task queue data layer (migration 0005). Owner calls pass the signed-in session client (RLS applies).
@@ -90,6 +99,10 @@ export interface EnqueueInput {
   proposedAction?: ProposedAction | null
   /** Set when the run was approved from a project brief. The worker uses it to write the outcome back. */
   briefId?: string | null
+  /** Assistant conversation the run was started from. The approval card for the thread matches on it. */
+  conversationId?: string | null
+  /** Why this model was used: chosen in the composer, or the agent's default. Shown on the approval card. */
+  modelReason?: string | null
   /** Set when the run came from a Dinghy connector. Used for run dedupe and for the webhook back to Dinghy. */
   connector?: { connectionId: string; clientMessageId: string } | null
 }
@@ -100,6 +113,8 @@ export async function enqueueRun(supabase: SupabaseClient, input: EnqueueInput):
   const payload: Record<string, unknown> = { prompt: input.prompt }
   if (input.proposedAction) payload.proposedAction = input.proposedAction
   if (input.briefId) payload.briefId = input.briefId
+  if (input.conversationId) payload.conversationId = input.conversationId
+  if (input.modelReason) payload.modelReason = input.modelReason
   if (input.connector) {
     payload.connector = { connection_id: input.connector.connectionId, client_message_id: input.connector.clientMessageId }
   }
@@ -272,25 +287,22 @@ export async function decideApproval(
   supabase: SupabaseClient,
   runId: string,
   decision: "approve" | "reject",
+  userId?: string | null,
 ): Promise<{ ok: true; run: TaskRun } | { ok: false; reason: string }> {
   const run = await getRun(supabase, runId)
-  if (!run) return { ok: false, reason: "not_found" }
-  if (run.status !== "awaiting_approval") return { ok: false, reason: "not_awaiting_approval" }
+  // Not-owner is reported as not_found so a run's existence is not revealed to other users.
+  if (!run || !canDecideRun(run.ownerId, userId)) return { ok: false, reason: "not_found" }
   const events = await listEvents(supabase, runId)
-  const requested = [...events].reverse().find((e) => e.kind === EVENT.approvalRequested)
-  if (!requested) return { ok: false, reason: "no_pending_action" }
-  const actionId = requested.data.actionId
-  const decided = events.some(
-    (e) => (e.kind === EVENT.approvalGranted || e.kind === EVENT.approvalRejected) && e.data.actionId === actionId,
-  )
-  if (decided) return { ok: false, reason: "already_decided" }
+  const plan = planDecision(run.status, events)
+  if (!plan.ok) return { ok: false, reason: plan.reason }
+  const actionId = plan.actionId
 
   const now = new Date().toISOString()
   if (decision === "approve") {
-    await addEvent(supabase, runId, EVENT.approvalGranted, { actionId, amountCents: requested.data.amountCents })
+    await addEvent(supabase, runId, EVENT.approvalGranted, { actionId, amountCents: plan.amountCents })
     const { data, error } = await supabase
       .from("task_runs")
-      .update({ status: "queued", updated_at: now })
+      .update({ status: statusAfterDecision("approve"), updated_at: now })
       .eq("id", runId)
       .eq("status", "awaiting_approval")
       .select("*")
@@ -300,7 +312,7 @@ export async function decideApproval(
   await addEvent(supabase, runId, EVENT.approvalRejected, { actionId })
   const { data, error } = await supabase
     .from("task_runs")
-    .update({ status: "cancelled", error: "rejected by owner", finished_at: now, updated_at: now })
+    .update({ status: statusAfterDecision("reject"), error: "rejected by owner", finished_at: now, updated_at: now })
     .eq("id", runId)
     .eq("status", "awaiting_approval")
     .select("*")
