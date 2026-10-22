@@ -13,6 +13,8 @@ export interface AgentTemplate {
   tags: string[]
   budget: number
   isChief?: boolean
+  /** Read-only scout profile: runs are forced into explore (read-only) mode. */
+  explore?: boolean
 }
 
 export interface TeamTemplate {
@@ -31,7 +33,7 @@ export const TEAM_TEMPLATES: TeamTemplate[] = [
     icon: "🚀",
     agents: [
       { id: "chief", name: "Chief", emoji: "🤖", role: "Chief of Staff", accent: "#7c3aed", description: "Coordinates everything. Delegates tasks, keeps memory sharp, makes sure nothing falls through.", tags: ["Orchestration", "Memory", "Execution"], budget: 50, isChief: true },
-      { id: "researcher", name: "Scout", emoji: "🔭", role: "Researcher", accent: "#06b6d4", description: "Monitors the web for market signals, competitor moves, and emerging trends.", tags: ["Research", "Analysis", "Signals"], budget: 30 },
+      { id: "researcher", name: "Scout", emoji: "🔭", role: "Researcher", accent: "#06b6d4", description: "Monitors the web for market signals, competitor moves, and emerging trends.", tags: ["Research", "Analysis", "Signals"], budget: 30, explore: true },
       { id: "engineer", name: "Builder", emoji: "⚡", role: "Engineer", accent: "#10b981", description: "Ships code. Builds and maintains projects, automates workflows.", tags: ["Code", "Automation", "DevOps"], budget: 100 },
       { id: "deal-flow", name: "Deal Flow", emoji: "🤝", role: "Business Dev", accent: "#f59e0b", description: "Tracks partnerships, opportunities, and strategic moves.", tags: ["Partnerships", "Outreach", "Strategy"], budget: 20 },
       { id: "treasurer", name: "Treasurer", emoji: "🏦", role: "Finance", accent: "#ec4899", description: "Manages budgets, tracks spending, and handles financial operations.", tags: ["Finance", "Budgets", "Reporting"], budget: 20 },
@@ -58,7 +60,7 @@ export const TEAM_TEMPLATES: TeamTemplate[] = [
     agents: [
       { id: "chief", name: "Director", emoji: "🧠", role: "Research Director", accent: "#7c3aed", description: "Guides research direction, synthesizes findings, identifies gaps.", tags: ["Strategy", "Synthesis", "Planning"], budget: 50, isChief: true },
       { id: "analyst", name: "Analyst", emoji: "📊", role: "Data Analyst", accent: "#06b6d4", description: "Collects data, runs analyses, creates visualizations and reports.", tags: ["Data", "Analysis", "Charts"], budget: 40 },
-      { id: "scout", name: "Scout", emoji: "🔭", role: "Field Researcher", accent: "#10b981", description: "Monitors sources, tracks trends, surfaces emerging signals.", tags: ["Monitoring", "Trends", "Signals"], budget: 40 },
+      { id: "scout", name: "Scout", emoji: "🔭", role: "Field Researcher", accent: "#10b981", description: "Monitors sources, tracks trends, surfaces emerging signals.", tags: ["Monitoring", "Trends", "Signals"], budget: 40, explore: true },
       { id: "writer", name: "Writer", emoji: "✍️", role: "Technical Writer", accent: "#f59e0b", description: "Writes reports, documentation, and research summaries.", tags: ["Writing", "Docs", "Reports"], budget: 30 },
     ],
   },
