@@ -49,13 +49,13 @@ function useCommands(): CommandItem[] {
 
   return [
     // Navigation
-    { id: "nav-vic", label: "Ask Vic", description: "Chief of staff, default in Assistant", icon: Sparkles, category: "navigation", keywords: ["vic", "chief", "staff", "ask", "chat", "⌘k"], action: go("/assistant") },
+    { id: "nav-chief", label: "Ask your chief of staff", description: "Chief of staff, default in Assistant", icon: Sparkles, category: "navigation", keywords: ["chief", "staff", "ask", "chat", "⌘k"], action: go("/assistant") },
     { id: "nav-dashboard", label: "Dashboard", description: "Command center overview", icon: LayoutDashboard, category: "navigation", keywords: ["home", "overview", "briefing"], action: go("/dashboard") },
     { id: "nav-conversations", label: "Conversations", description: "Unified run and transcript inbox", icon: PanelRightOpen, category: "navigation", keywords: ["inbox", "transcript", "runs", "timeline"], action: go("/conversations") },
     { id: "nav-alerts", label: "Alerts", description: "Canonical failed-run inbox", icon: Bell, category: "navigation", keywords: ["incidents", "failures", "attention"], action: go("/alerts") },
     { id: "nav-chat", label: "Chat", description: "Talk to your agents", icon: MessageSquare, category: "navigation", keywords: ["message", "talk", "agent"], action: go("/assistant") },
     { id: "nav-tasks", label: "Tasks", description: "Kanban board", icon: CheckSquare, category: "navigation", keywords: ["kanban", "board", "todo"], action: go("/tasks") },
-    { id: "nav-agents", label: "Agents", description: "Agent team management", icon: Users, category: "navigation", keywords: ["team", "vic", "scout", "builder", "baron"], action: go("/agents") },
+    { id: "nav-agents", label: "Agents", description: "Agent team management", icon: Users, category: "navigation", keywords: ["team", "scout", "builder", "baron"], action: go("/agents") },
     { id: "nav-skills", label: "Agent Skills", description: "Installed skills list", icon: SlidersHorizontal, category: "navigation", keywords: ["openclaw", "abilities"], action: go("/agents/skills") },
     { id: "nav-projects", label: "Projects", description: "GitHub repos + CI status", icon: Folder, category: "navigation", keywords: ["github", "repos", "ci", "pr"], action: go("/projects") },
     { id: "nav-calendar", label: "Calendar", description: "Google Calendar events", icon: Calendar, category: "navigation", keywords: ["events", "schedule", "meetings"], action: go("/calendar") },
@@ -120,7 +120,7 @@ export function CommandPalette() {
         setQuery("")
         setSelectedIndex(0)
       }
-      // ⌘K: jump to the Assistant with Vic selected (replaces the old floating Vic panel).
+      // ⌘K: jump to the Assistant with the chief of staff selected.
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault()
         setOpen(false)
@@ -286,7 +286,7 @@ export function CommandPalette() {
             <kbd className="px-1 rounded" style={{ backgroundColor: "#1a1a2e" }}>esc</kbd> close
           </span>
           <span className="ml-auto flex items-center gap-1">
-            <Command size={10} />K Ask Vic
+            <Command size={10} />K Ask chief
           </span>
         </div>
       </div>

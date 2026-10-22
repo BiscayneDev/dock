@@ -19,7 +19,7 @@ const AGENT_MAP: Record<string, string> = {
   scout: "🔭 Scout",
   "deal-flow": "🤝 Deal Flow",
   baron: "🏦 Baron",
-  vic: "🦞 Vic",
+  [CHIEF_RUNTIME_KEY]: "🧭 Chief of staff",
   unassigned: "unassigned",
 }
 

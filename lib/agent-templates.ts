@@ -30,7 +30,7 @@ export const TEAM_TEMPLATES: TeamTemplate[] = [
     description: "Research, build, sell, manage money — the full founding team",
     icon: "🚀",
     agents: [
-      { id: "chief", name: "Vic", emoji: "🤖", role: "Chief of Staff", accent: "#7c3aed", description: "Coordinates everything. Delegates tasks, keeps memory sharp, makes sure nothing falls through.", tags: ["Orchestration", "Memory", "Execution"], budget: 50, isChief: true },
+      { id: "chief", name: "Chief", emoji: "🤖", role: "Chief of Staff", accent: "#7c3aed", description: "Coordinates everything. Delegates tasks, keeps memory sharp, makes sure nothing falls through.", tags: ["Orchestration", "Memory", "Execution"], budget: 50, isChief: true },
       { id: "researcher", name: "Scout", emoji: "🔭", role: "Researcher", accent: "#06b6d4", description: "Monitors the web for market signals, competitor moves, and emerging trends.", tags: ["Research", "Analysis", "Signals"], budget: 30 },
       { id: "engineer", name: "Builder", emoji: "⚡", role: "Engineer", accent: "#10b981", description: "Ships code. Builds and maintains projects, automates workflows.", tags: ["Code", "Automation", "DevOps"], budget: 100 },
       { id: "deal-flow", name: "Deal Flow", emoji: "🤝", role: "Business Dev", accent: "#f59e0b", description: "Tracks partnerships, opportunities, and strategic moves.", tags: ["Partnerships", "Outreach", "Strategy"], budget: 20 },
@@ -80,7 +80,7 @@ export const TEAM_TEMPLATES: TeamTemplate[] = [
     description: "Just a chief of staff — add your own agents later",
     icon: "✨",
     agents: [
-      { id: "chief", name: "Vic", emoji: "🤖", role: "Chief of Staff", accent: "#7c3aed", description: "Your AI assistant. Coordinates tasks and helps you get started.", tags: ["Orchestration", "General"], budget: 50, isChief: true },
+      { id: "chief", name: "Chief", emoji: "🤖", role: "Chief of Staff", accent: "#7c3aed", description: "Your AI assistant. Coordinates tasks and helps you get started.", tags: ["Orchestration", "General"], budget: 50, isChief: true },
     ],
   },
 ]

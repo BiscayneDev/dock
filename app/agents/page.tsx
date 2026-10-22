@@ -5,7 +5,6 @@ import type { AgentData } from "@/app/api/agents/route"
 
 // Session key → agent display info
 const SESSION_AGENT_MAP: Record<string, { emoji: string; name: string }> = {
-  main: { emoji: "🦞", name: "Vic" },
   subagent: { emoji: "⚡", name: "Builder" },
   builder: { emoji: "⚡", name: "Builder" },
   scout: { emoji: "🔭", name: "Scout" },
@@ -421,8 +420,8 @@ export default function AgentsPage() {
     await fetchAgents()
   }
 
-  const vicAgent = agents.find((a) => a.isVic)
-  const otherAgents = agents.filter((a) => !a.isVic)
+  const chiefAgent = agents.find((a) => a.isChief)
+  const otherAgents = agents.filter((a) => !a.isChief)
   const displayEvents = activity?.events?.slice(0, 8) ?? []
 
   return (
@@ -452,7 +451,7 @@ export default function AgentsPage() {
         The <em style={{ color: "var(--ink-2)" }}>fleet</em>
       </h1>
       <p className="mt-2.5 max-w-[62ch] text-[14px] leading-[1.6]" style={{ color: "var(--ink-2)" }}>
-        Vic orchestrates; the specialists execute. Everything below runs itself —
+        The chief of staff orchestrates; the specialists execute. Everything below runs itself —
         you are here for exceptions and direction.
       </p>
 
@@ -465,7 +464,7 @@ export default function AgentsPage() {
         protocols, and agent economies while automating everything that does not need me in it.
       </p>
 
-      {/* Vic hero */}
+      {/* Chief of staff hero */}
       {agentsLoading ? (
         <div
           className="mt-10 rounded-[15px] border p-5"
@@ -473,31 +472,31 @@ export default function AgentsPage() {
         >
           <div className="h-6 w-1/3 animate-pulse rounded" style={{ backgroundColor: "var(--surface-3)" }} />
         </div>
-      ) : vicAgent ? (
+      ) : chiefAgent ? (
         <section
           className="relative mt-10 overflow-hidden rounded-[17px] border p-6"
           style={{ borderColor: "var(--line)", background: "linear-gradient(180deg, var(--surface-1), #08080b)" }}
         >
           <div className="flex items-center gap-3.5">
-            <span className="text-[22px]">{vicAgent.emoji}</span>
+            <span className="text-[22px]">{chiefAgent.emoji}</span>
             <span
               className="h-[7px] w-[7px] shrink-0 rounded-full"
-              style={{ backgroundColor: vicAgent.accent, boxShadow: `0 0 8px ${vicAgent.accent}` }}
+              style={{ backgroundColor: chiefAgent.accent, boxShadow: `0 0 8px ${chiefAgent.accent}` }}
             />
             <span className="font-serif text-[20px]" style={{ color: "var(--ink)" }}>
-              {vicAgent.name}
+              {chiefAgent.name}
             </span>
             <span className="font-mono text-[9.5px] uppercase tracking-[0.16em]" style={{ color: "var(--ink-3)" }}>
               orchestrator
             </span>
-            {vicAgent.tags.length > 0 && (
+            {chiefAgent.tags.length > 0 && (
               <span className="ml-auto hidden font-mono text-[10px] tracking-[0.05em] sm:block" style={{ color: "var(--ink-3)" }}>
-                {vicAgent.tags.join(" · ")}
+                {chiefAgent.tags.join(" · ")}
               </span>
             )}
             <button
-              onClick={() => setEditAgent(vicAgent)}
-              title="Edit Vic"
+              onClick={() => setEditAgent(chiefAgent)}
+              title="Edit chief of staff"
               className="ml-auto shrink-0 text-[13px] transition-colors sm:ml-4"
               style={{ color: "var(--ink-3)" }}
             >
@@ -505,7 +504,7 @@ export default function AgentsPage() {
             </button>
           </div>
           <p className="mt-3 max-w-[62ch] text-[13.5px] leading-[1.65]" style={{ color: "var(--ink-2)" }}>
-            {vicAgent.description}
+            {chiefAgent.description}
           </p>
         </section>
       ) : null}
@@ -514,7 +513,7 @@ export default function AgentsPage() {
       <p className="mt-5 flex items-center justify-center gap-2 font-mono text-[9.5px] uppercase tracking-[0.16em]" style={{ color: "var(--ink-3)" }}>
         <span>input</span>
         <span>→</span>
-        <span style={{ color: "var(--gold)" }}>vic</span>
+        <span style={{ color: "var(--gold)" }}>{chiefAgent?.name ?? "chief of staff"}</span>
         <span>→</span>
         <span>specialists</span>
       </p>

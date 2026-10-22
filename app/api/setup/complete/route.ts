@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { writeFile, readFile, mkdir } from "fs/promises"
 import { join, dirname } from "path"
 import { TEAM_TEMPLATES } from "@/lib/agent-templates"
+import { DEFAULT_CHIEF_NAME } from "@/lib/chief-key"
 
 const SETUP_PATH = join(process.cwd(), "data", "setup.json")
 const ENV_LOCAL_PATH = join(process.cwd(), ".env.local")
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
       demoMode: isDemoMode,
       runtimeType,
       userName: body.userName || "",
-      assistantName: body.assistantName || "Vic",
+      assistantName: body.assistantName || DEFAULT_CHIEF_NAME,
       gatewayUrl: isDemoMode ? "" : (body.gatewayUrl || ""),
       ollamaUrl: runtimeType === "ollama" ? (body.ollamaUrl || "http://127.0.0.1:11434") : "",
       ollamaModel: runtimeType === "ollama" ? (body.ollamaModel || "") : "",
@@ -122,7 +123,7 @@ export async function POST(request: Request) {
           ...a,
           // Override the chief agent's name with the user's chosen assistant name
           name: a.isChief && body.assistantName ? body.assistantName : a.name,
-          isVic: a.isChief || undefined,
+          isChief: a.isChief || undefined,
         }))
         await writeFile(agentsPath, JSON.stringify(seedAgents, null, 2), "utf-8")
       }

@@ -228,7 +228,7 @@ export default function IntelPage() {
           <p className="font-serif text-[34px]" style={{ color: "var(--ink-2)" }}>🔭</p>
           <p className="mt-3 text-[14px] font-semibold" style={{ color: "var(--ink)" }}>Scout hasn&apos;t reported yet</p>
           <p className="mt-1.5 text-[12.5px]" style={{ color: "var(--ink-3)" }}>
-            Hit &quot;Deploy Scout&quot; or ask Vic &quot;what&apos;s the latest in agent land&quot;
+            Hit &quot;Deploy Scout&quot; or ask your chief of staff &quot;what&apos;s the latest in agent land&quot;
           </p>
         </div>
       ) : (

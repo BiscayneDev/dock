@@ -7,7 +7,7 @@
     "accent": "#7c3aed",
     "description": "Coordinates everything. Reads context, keeps memory sharp, makes sure nothing falls through the cracks.",
     "tags": ["Orchestration", "Memory", "Execution"],
-    "isVic": true,
+    "isChief": true,
     "budget": 50
   },
   {

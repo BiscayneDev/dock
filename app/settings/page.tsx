@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import DevicesSection from "@/components/settings/DevicesSection"
+import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -68,7 +69,7 @@ function relativeTime(dateStr: string | null): string {
 }
 
 const AGENT_SPEND_KEYS: Record<string, string[]> = {
-  vic: ["main", "vic"],
+  [CHIEF_RUNTIME_KEY]: ["main", CHIEF_RUNTIME_KEY],
   scout: ["scout"],
   "deal-flow": ["deal-flow", "dealflow"],
   builder: ["builder", "subagent"],

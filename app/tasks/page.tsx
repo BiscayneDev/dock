@@ -17,6 +17,7 @@ import {
 } from "@/lib/tasks"
 import AgentInbox from "@/components/tasks/AgentInbox"
 import RunsPanel from "@/components/tasks/RunsPanel"
+import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 type TasksView = "board" | "inbox"
 const TASKS_VIEW_STORAGE_KEY = "dock:tasks-view"
@@ -372,7 +373,7 @@ function TaskCard({
                   value={editAssignee}
                   onChange={(e) => setEditAssignee(e.target.value as Agent)}
                 >
-                  <option value="vic">🦞 Vic</option>
+                  <option value={CHIEF_RUNTIME_KEY}>🧭 Chief of staff</option>
                   <option value="scout">🔭 Scout</option>
                   <option value="builder">⚡ Builder</option>
                   <option value="deal-flow">🤝 Deal Flow</option>
@@ -777,7 +778,7 @@ export default function TasksPage() {
           description: quickIdea.trim(),
           column: "planning",
           priority: "medium",
-          assignee: "vic",
+          assignee: CHIEF_RUNTIME_KEY,
           tags: ["chat-first"],
         }),
       })
@@ -855,7 +856,7 @@ export default function TasksPage() {
         <div className="space-y-1">
           <h1 className="text-3xl font-bold text-white">Tasks</h1>
           <p className="text-sm text-zinc-600">
-            Vic delegates. Agents execute.
+            The chief of staff delegates. Agents execute.
           </p>
         </div>
         <div className="flex items-center gap-4 pb-1">
@@ -894,7 +895,7 @@ export default function TasksPage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Chat first</p>
-            <p className="mt-1 text-sm text-zinc-300">Drop a rough idea and Vic will turn it into a Planning draft.</p>
+            <p className="mt-1 text-sm text-zinc-300">Drop a rough idea and the chief of staff will turn it into a Planning draft.</p>
           </div>
           <span className="rounded-full border border-fuchsia-500/20 bg-fuchsia-500/10 px-2 py-1 text-[10px] text-fuchsia-300">Backlog → Planning</span>
         </div>
@@ -912,7 +913,7 @@ export default function TasksPage() {
             className="rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
             style={{ backgroundColor: "#7c3aed", color: "white" }}
           >
-            {draftingIdea ? "Drafting..." : "Draft with Vic"}
+            {draftingIdea ? "Drafting..." : "Draft with chief of staff"}
           </button>
         </div>
       </section>
@@ -1121,7 +1122,7 @@ export default function TasksPage() {
                 <p className="text-[11px] text-zinc-500">Ready to Go when title, description, and at least one implementation step are filled.</p>
                 {planningDraft?.conversationId && (
                   <Link href={`/conversations?id=${planningDraft.conversationId}`} className="inline-flex rounded-full border border-fuchsia-500/20 bg-fuchsia-500/10 px-2 py-1 text-[11px] text-fuchsia-300 hover:bg-fuchsia-500/15">
-                    Open Vic thread
+                    Open chief of staff thread
                   </Link>
                 )}
               </div>
@@ -1130,7 +1131,7 @@ export default function TasksPage() {
               {pendingActivation.enrichment && (
                 <div className="rounded-lg border border-zinc-800 bg-black/20 p-3 space-y-2">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Vic summary</p>
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Chief of staff summary</p>
                     <span className="text-[10px] text-zinc-600">Generated brief</span>
                   </div>
                   <p className="text-sm text-white leading-5">{pendingActivation.enrichment.enrichedDescription}</p>

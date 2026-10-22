@@ -48,7 +48,7 @@ interface WorkspaceAgents {
   chief: { id: string; displayName: string; role: string; runtimeAgent: string } | null
 }
 
-// The user's Chief of Staff comes first. It runs on the runtime key "vic" (runtimeAgent),
+// The user's Chief of Staff comes first. It runs on its runtime key (runtimeAgent),
 // so chat, model routing (AGENT_MODEL_VIC) and conversations keep using the existing path.
 // File-based roster agents stay below it; a file agent with the same runtime key is hidden.
 function useAgents(): { agents: AgentDef[]; roster: AgentRecord[] } {

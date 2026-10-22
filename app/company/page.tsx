@@ -41,7 +41,6 @@ interface TaskSummary {
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const AGENT_EMOJI: Record<string, string> = {
-  vic: "🦞",
   scout: "🔭",
   builder: "⚡",
   "deal-flow": "🤝",
@@ -384,6 +383,7 @@ interface AgentInfo {
   emoji: string
   role: string
   accent: string
+  isChief?: boolean
 }
 
 export default function CompanyPage() {
@@ -518,9 +518,9 @@ export default function CompanyPage() {
         >
           <OrgChart
             userName={setup.userName || ""}
-            chiefAgent={agents.find((a) => a.id === "vic" || a.id === "chief" || a.role?.toLowerCase().includes("chief")) ?? agents[0] ?? null}
+            chiefAgent={agents.find((a) => a.isChief || a.id === "chief" || a.role?.toLowerCase().includes("chief")) ?? agents[0] ?? null}
             otherAgents={agents.filter((a) => {
-              const chief = agents.find((ag) => ag.id === "vic" || ag.id === "chief" || ag.role?.toLowerCase().includes("chief")) ?? agents[0]
+              const chief = agents.find((ag) => ag.isChief || ag.id === "chief" || ag.role?.toLowerCase().includes("chief")) ?? agents[0]
               return chief ? a.id !== chief.id : true
             })}
           />

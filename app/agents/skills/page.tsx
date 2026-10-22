@@ -1,11 +1,12 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 const AMBER = "#f59e0b"
 
 const AGENTS = [
-  { id: "vic",       name: "Vic",       emoji: "⚡" },
+  { id: CHIEF_RUNTIME_KEY, name: "Chief of staff", emoji: "🧭" },
   { id: "scout",     name: "Scout",     emoji: "🔭" },
   { id: "builder",   name: "Builder",   emoji: "🏗️" },
   { id: "baron",     name: "Baron",     emoji: "🏦" },
@@ -29,7 +30,7 @@ interface Skill {
 }
 
 export default function AgentSkillsPage() {
-  const [activeAgent, setActiveAgent] = useState("vic")
+  const [activeAgent, setActiveAgent] = useState(CHIEF_RUNTIME_KEY)
   const [assignments, setAssignments] = useState<Record<string, string[]>>({})
   const [catalog, setCatalog] = useState<Skill[]>([])
   const [original, setOriginal] = useState<Record<string, string[]>>({})

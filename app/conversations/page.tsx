@@ -66,7 +66,6 @@ interface RunDetail {
 }
 
 const AGENT_META: Record<string, { emoji: string; color: string; label: string }> = {
-  vic: { emoji: "🦞", color: "#7c3aed", label: "Vic" },
   scout: { emoji: "🔭", color: "#06b6d4", label: "Scout" },
   builder: { emoji: "⚡", color: "#10b981", label: "Builder" },
   baron: { emoji: "🏦", color: "#ec4899", label: "Baron" },

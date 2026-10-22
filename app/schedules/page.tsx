@@ -33,7 +33,6 @@ interface AgentInfo {
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 const FALLBACK_AGENTS: Record<string, { name: string; emoji: string; accent: string }> = {
-  vic: { name: "Vic", emoji: "🦞", accent: "#7c3aed" },
   scout: { name: "Scout", emoji: "🔭", accent: "#06b6d4" },
   builder: { name: "Builder", emoji: "⚡", accent: "#10b981" },
   "deal-flow": { name: "Deal Flow", emoji: "🤝", accent: "#f59e0b" },

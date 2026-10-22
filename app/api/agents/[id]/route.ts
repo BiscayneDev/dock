@@ -66,7 +66,7 @@ export async function PATCH(
       ...agents[index],
       ...body,
       id: agents[index].id,
-      isVic: agents[index].isVic, // preserve isVic — can't be changed via API
+      isChief: agents[index].isChief, // preserve the chief flag — can't be changed via API
     }
 
     const updated = agents.map((a, i) => (i === index ? updatedAgent : a))
@@ -91,8 +91,8 @@ export async function DELETE(
       return NextResponse.json({ error: "Agent not found" }, { status: 404 })
     }
 
-    if (target.isVic) {
-      return NextResponse.json({ error: "Cannot delete Vic" }, { status: 403 })
+    if (target.isChief) {
+      return NextResponse.json({ error: "The chief of staff cannot be deleted" }, { status: 403 })
     }
 
     const updated = agents.filter((a) => a.id !== id)

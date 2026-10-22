@@ -1,6 +1,6 @@
 export type Priority = "high" | "medium" | "low"
 export type Column = "backlog" | "planning" | "in-progress" | "in-review" | "done"
-export type Agent = "vic" | "scout" | "deal-flow" | "builder" | "baron" | "unassigned"
+export type Agent = string
 
 export interface Task {
   id: string
@@ -54,8 +54,9 @@ export const COLUMNS: { id: Column; label: string }[] = [
   { id: "done", label: "Done" },
 ]
 
-export const AGENT_EMOJI: Record<Agent, string> = {
-  vic: "🦞",
+import { CHIEF_ROLE_LABEL, CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
+
+const SPECIALIST_EMOJI: Record<string, string> = {
   scout: "🔭",
   "deal-flow": "🤝",
   builder: "⚡",
@@ -63,13 +64,33 @@ export const AGENT_EMOJI: Record<Agent, string> = {
   unassigned: "⚪",
 }
 
-export const AGENT_LABELS: Record<Agent, string> = {
-  vic: "Vic",
+const SPECIALIST_LABELS: Record<string, string> = {
   scout: "Scout",
   "deal-flow": "Deal Flow",
   builder: "Builder",
   baron: "Baron",
   unassigned: "Unassigned",
+}
+
+/** Emoji for an agent key. The chief gets the neutral compass; unknown keys get a robot. */
+export function agentEmoji(key: string): string {
+  if (key === CHIEF_RUNTIME_KEY) return "🧭"
+  return SPECIALIST_EMOJI[key] ?? "🤖"
+}
+
+/** Label for an agent key. Pages with a live roster should prefer the stored display name. */
+export function agentLabel(key: string): string {
+  if (key === CHIEF_RUNTIME_KEY) return CHIEF_ROLE_LABEL
+  return SPECIALIST_LABELS[key] ?? key
+}
+
+export const AGENT_EMOJI: Record<string, string> = new Proxy({} as Record<string, string>, {
+  get: (_t, key: string) => agentEmoji(key),
+})
+
+export const AGENT_LABELS: Record<string, string> = {
+  ...SPECIALIST_LABELS,
+  [CHIEF_RUNTIME_KEY]: CHIEF_ROLE_LABEL,
 }
 
 export const PRIORITY_CONFIG: Record<Priority, { color: string; border: string; label: string }> = {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { CHIEF_ROLE_LABEL, CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 /**
  * GET /api/company/budgets/check?agent=builder
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     // Map agent IDs to display names
     const AGENT_ID_TO_NAME: Record<string, string> = {
-      vic: "Vic",
+      [CHIEF_RUNTIME_KEY]: CHIEF_ROLE_LABEL,
       scout: "Scout",
       builder: "Builder",
       "deal-flow": "Deal Flow",

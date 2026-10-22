@@ -94,7 +94,7 @@ interface EmailEntry {
 const PINNED = ["shipyard", "mission-control", "superteam-miami", "arken"]
 
 const AGENT_DEFS = [
-  { name: "Vic", emoji: "🦞", accent: "#7c3aed", keys: ["main"] },
+  { name: "Chief of staff", emoji: "🧭", accent: "#7c3aed", keys: ["main"] },
   { name: "Scout", emoji: "🔭", accent: "#06b6d4", keys: ["scout"] },
   { name: "Deal Flow", emoji: "🤝", accent: "#f59e0b", keys: ["deal-flow", "dealflow"] },
   { name: "Builder", emoji: "⚡", accent: "#10b981", keys: ["builder", "subagent"] },
@@ -110,7 +110,6 @@ const TASK_COLUMNS = [
 ] as const
 
 const AGENT_EMOJI_MAP: Record<string, string> = {
-  vic: "🦞",
   scout: "🔭",
   "deal-flow": "🤝",
   builder: "⚡",
@@ -455,7 +454,7 @@ export default function DashboardPage() {
               boxShadow: "0 1px 0 rgba(255,255,255,.4) inset, 0 6px 22px rgba(231,201,121,.25)",
             }}
           >
-            Discuss with Vic
+            Discuss with your chief of staff
           </button>
           <Link
             href="/tasks"

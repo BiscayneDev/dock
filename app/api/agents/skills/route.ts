@@ -3,6 +3,7 @@ import { readFile, writeFile, mkdir, readdir } from "fs/promises"
 import { join, dirname } from "path"
 import { existsSync } from "fs"
 import { homedir } from "os"
+import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 const ASSIGNMENTS_PATH = join(process.cwd(), "data", "agents-skills.json")
 
@@ -83,7 +84,7 @@ async function readAssignments(): Promise<Record<string, string[]>> {
   try {
     return JSON.parse(await readFile(ASSIGNMENTS_PATH, "utf-8"))
   } catch {
-    return { vic: [], scout: [], builder: [], baron: [], "deal-flow": [] }
+    return { [CHIEF_RUNTIME_KEY]: [], scout: [], builder: [], baron: [], "deal-flow": [] }
   }
 }
 

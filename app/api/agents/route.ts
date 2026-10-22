@@ -12,7 +12,7 @@ export interface AgentData {
   accent: string
   description: string
   tags: string[]
-  isVic?: boolean
+  isChief?: boolean
   budget?: number
 }
 

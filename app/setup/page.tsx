@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { TEAM_TEMPLATES } from "@/lib/agent-templates"
+import { DEFAULT_CHIEF_NAME } from "@/lib/chief-key"
 
 // ── Agent definitions ──────────────────────────────────────────────────────
 
@@ -99,7 +100,7 @@ export default function SetupPage() {
     deliveryTarget: "",
     workspace: "~/clawd",
     userName: "",
-    assistantName: "Vic",
+    assistantName: DEFAULT_CHIEF_NAME,
     companyName: "",
     anthropicAdminKey: "",
   })
@@ -695,7 +696,7 @@ function SailboatScene() {
               <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Connect OpenClaw</h2>
               <p style={{ color: "#a1a1aa", marginBottom: 32, lineHeight: 1.6 }}>
                 Dock runs on OpenClaw — your personal chief-of-staff agent runtime.
-                Each user connects their own Vic and keeps their own task threads, delivery target,
+                Each user connects their own chief of staff and keeps their own task threads, delivery target,
                 and workspace in sync.
               </p>
 
@@ -890,8 +891,8 @@ function SailboatScene() {
                 Connect your channel
               </h2>
               <p style={{ color: "#a1a1aa", marginBottom: 32, lineHeight: 1.6 }}>
-                When Vic activates a task, Dock sends it to your personal delivery target
-                as a live turn. Connect the Telegram inbox you want Vic to use for this workspace.
+                When the chief of staff activates a task, Dock sends it to your personal delivery target
+                as a live turn. Connect the Telegram inbox you want the chief of staff to use for this workspace.
               </p>
 
               <label style={labelStyle}>Channel</label>

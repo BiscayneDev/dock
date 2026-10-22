@@ -8,7 +8,7 @@ export async function GET() {
   const active = runtime.name
   const activeId = (runtime as { id?: string }).id ?? "unknown"
   const modelRef = resolveModelRef()
-  const vicModel = resolveModel(CHIEF_RUNTIME_KEY)
+  const chiefModel = resolveModel(CHIEF_RUNTIME_KEY)
 
   return NextResponse.json({
     active: activeId,
@@ -16,7 +16,7 @@ export async function GET() {
     available: runtimes,
     inference: {
       defaultModel: modelRef,
-      vicModel: vicModel?.label ?? null,
+      chiefModel: chiefModel?.label ?? null,
       providers: listConfiguredProviders(),
     },
   })

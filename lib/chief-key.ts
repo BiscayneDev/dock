@@ -1,6 +1,8 @@
 /**
- * Runtime key of the chief of staff on the file-backed and fallback paths. The one place the literal lives.
- * Workspaces resolve the real chief from the agents table (see lib/briefs.ts pickChief); only signed-out and
- * legacy file paths use this constant.
+ * Chief of staff identity on the file-backed and fallback paths. This file is the only place the chief's runtime
+ * key appears in code. Workspaces resolve the real chief from the agents table (lib/briefs.ts pickChief), and the
+ * display name comes from the agent's stored display_name. Nothing else in the codebase names the chief.
  */
 export const CHIEF_RUNTIME_KEY = "vic"
+export const CHIEF_ROLE_LABEL = "Chief of staff"
+export const DEFAULT_CHIEF_NAME = "Chief"

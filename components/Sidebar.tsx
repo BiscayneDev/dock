@@ -118,7 +118,7 @@ export function Sidebar() {
             </div>
           ) : null}
           <p className="mt-2 px-2.5 font-mono text-[10px]" style={{ color: "var(--ink-3)" }}>
-            ⌘K Vic · ⌘P commands
+            ⌘K chief · ⌘P commands
           </p>
           <button
             type="button"

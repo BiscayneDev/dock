@@ -14,7 +14,6 @@ interface ActivityEntry {
 }
 
 const AGENT_EMOJI: Record<string, string> = {
-  vic: "🦞",
   scout: "🔭",
   "deal-flow": "🤝",
   builder: "⚡",

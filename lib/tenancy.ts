@@ -10,7 +10,7 @@ import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 export const CHIEF_ROLE = "Chief of Staff"
 export const CHIEF_RUNTIME_AGENT = CHIEF_RUNTIME_KEY
-export const DEFAULT_CHIEF_NAME = "Vic"
+export { DEFAULT_CHIEF_NAME } from "@/lib/chief-key"
 export const DEFAULT_CHIEF_PERSONA =
   "You are the user's Chief of Staff. You coordinate their projects, keep track of what matters, and answer directly. " +
   "Be concise, say when you are unsure, and ask before taking any action that spends money or changes an account."

@@ -3,6 +3,7 @@ import { readFile, writeFile } from "fs/promises"
 import { join } from "path"
 import type { Task, Agent, Priority } from "@/lib/tasks"
 import { requireAgentToken } from "@/lib/agent-auth"
+import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 const DATA_PATH = join(process.cwd(), "data", "tasks.json")
 
@@ -49,7 +50,7 @@ async function writeTasks(tasks: Task[]): Promise<void> {
 
 // ── Valid agent types ────────────────────────────────────────────────────────
 
-const VALID_AGENTS: Agent[] = ["vic", "scout", "deal-flow", "builder", "baron", "unassigned"]
+const VALID_AGENTS: Agent[] = [CHIEF_RUNTIME_KEY, "scout", "deal-flow", "builder", "baron", "unassigned"]
 
 function normalizeAgent(input: string): Agent {
   if (VALID_AGENTS.includes(input as Agent)) return input as Agent

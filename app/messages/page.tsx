@@ -20,6 +20,7 @@ interface AgentInfo {
   name: string
   emoji: string
   accent: string
+  isChief?: boolean
 }
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
@@ -31,7 +32,6 @@ const TYPE_CONFIG: Record<string, { label: string; color: string; icon: string }
 }
 
 const FALLBACK_AGENTS: Record<string, { name: string; emoji: string; accent: string }> = {
-  vic: { name: "Vic", emoji: "🦞", accent: "#7c3aed" },
   scout: { name: "Scout", emoji: "🔭", accent: "#06b6d4" },
   builder: { name: "Builder", emoji: "⚡", accent: "#10b981" },
   "deal-flow": { name: "Deal Flow", emoji: "🤝", accent: "#f59e0b" },
@@ -136,7 +136,7 @@ export default function MessagesPage() {
           onClick={() => {
             setComposing(true)
             if (agents.length > 0 && !composeFrom) {
-              const chief = agents.find((a) => a.id === "vic" || a.id === "chief")
+              const chief = agents.find((a) => a.isChief || a.id === "chief")
               setComposeFrom(chief?.id ?? agents[0].id)
               setComposeTo(agents.find((a) => a.id !== (chief?.id ?? agents[0].id))?.id ?? "")
             }

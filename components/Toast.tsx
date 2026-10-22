@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import type { Toast } from "@/lib/useToast"
 
 const AGENT_CONFIG: Record<string, { color: string; emoji: string; label: string }> = {
-  vic: { color: "#7c3aed", emoji: "🦞", label: "Vic" },
   scout: { color: "#06b6d4", emoji: "🔭", label: "Scout" },
   builder: { color: "#10b981", emoji: "⚡", label: "Builder" },
   "deal-flow": { color: "#f59e0b", emoji: "🤝", label: "Deal Flow" },

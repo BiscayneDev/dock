@@ -1,4 +1,5 @@
 import type { UIMessage } from "ai"
+import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 export interface ConversationSummary {
   id: string
@@ -41,7 +42,7 @@ export interface AgentDef {
 
 // Fallback roster; the live list comes from /api/agents.
 export const AGENTS: AgentDef[] = [
-  { id: "vic", name: "Vic", emoji: "🦞", accent: "#7c3aed", description: "Chief of Staff" },
+  { id: CHIEF_RUNTIME_KEY, name: "Chief of staff", emoji: "🧭", accent: "#7c3aed", description: "Chief of Staff" },
   { id: "scout", name: "Scout", emoji: "🔭", accent: "#06b6d4", description: "Market Intel" },
   { id: "builder", name: "Builder", emoji: "⚡", accent: "#10b981", description: "Full-Stack Dev" },
   { id: "baron", name: "Baron", emoji: "🏦", accent: "#ec4899", description: "The Banker" },

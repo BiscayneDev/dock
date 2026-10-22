@@ -4,6 +4,7 @@ import { homedir } from "os"
 import path from "path"
 import { join } from "path"
 import { kv } from "@vercel/kv"
+import { CHIEF_ROLE_LABEL, CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 interface AgentData {
   id: string
@@ -28,8 +29,8 @@ interface BudgetsResponse {
 
 // Map session labels to agent names
 const AGENT_KEY_MAP: Record<string, string> = {
-  main: "Vic",
-  vic: "Vic",
+  main: CHIEF_ROLE_LABEL,
+  [CHIEF_RUNTIME_KEY]: CHIEF_ROLE_LABEL,
   scout: "Scout",
   "deal-flow": "Deal Flow",
   dealflow: "Deal Flow",

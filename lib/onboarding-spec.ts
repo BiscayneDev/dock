@@ -117,7 +117,7 @@ export const PRESET_RULES: Array<{ key: string; text: string }> = [
 export const MAX_CUSTOM_RULES = 10
 export const MAX_RULE_LENGTH = 300
 
-export const DEFAULT_CHIEF_NAME = "Vic"
+export { DEFAULT_CHIEF_NAME } from "@/lib/chief-key"
 
 export const PAYMENT_NOTE =
   "USDC payments touch money-transmission and consumer-protection rules. This needs legal review before launch. Agents never move money without your confirm and spend-cap rules."

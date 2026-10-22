@@ -237,7 +237,7 @@ export default function MemoryPage() {
         <span className="text-xl">🧠</span>
         <div>
           <h1 className="text-2xl font-bold text-white leading-none">Memory</h1>
-          <p className="text-xs text-zinc-500 mt-0.5">Vic&apos;s working and long-term memory</p>
+          <p className="text-xs text-zinc-500 mt-0.5">Your chief of staff&apos;s working and long-term memory</p>
         </div>
       </div>
 
