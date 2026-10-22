@@ -16,6 +16,7 @@ import {
   PRIORITY_CONFIG,
 } from "@/lib/tasks"
 import AgentInbox from "@/components/tasks/AgentInbox"
+import RunsPanel from "@/components/tasks/RunsPanel"
 
 type TasksView = "board" | "inbox"
 const TASKS_VIEW_STORAGE_KEY = "dock:tasks-view"
@@ -917,7 +918,10 @@ export default function TasksPage() {
       </section>
 
       {view === "inbox" ? (
-        <AgentInbox tasks={tasks} onRefresh={() => fetchTasks(true)} />
+        <>
+          <RunsPanel />
+          <AgentInbox tasks={tasks} onRefresh={() => fetchTasks(true)} />
+        </>
       ) : (
       <DragDropContext onDragEnd={onDragEnd}>
         <div

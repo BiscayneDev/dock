@@ -112,7 +112,11 @@ Not built:
 6. Onboarding: goals, the project to launch, and naming the Chief of Staff.
 
 **P2: home node and delegation**
-7. Home-node daemon on the Mac mini: runs the Chief of Staff, scheduler, task leases, Supabase sync.
+7. Run targets share one queue (`task_runs`, migration 0005) with leases and heartbeats:
+   (a) home node: Mac mini, or laptop when open; the daemon runs the Chief of Staff, scheduler and Supabase sync. Not built yet.
+   (b) cloud worker: always on, built first. Vercel cron ticks every minute, works runs in a time budget, meters each model call against the run budget.
+   (c) cloud sandbox for computer use: interface only until P4.
+   Money-moving actions (x402 spend, MoonPay refunds, payout changes) park in `awaiting_approval` and run once after the owner approves. x402 execution stays stubbed until its own task.
 8. Subagent roster (Research, GTM, Engineering, Design/brand, Ops/finance) and `delegate(role, task, model)`.
 9. Model routing per delegated task, recorded on the run.
 
@@ -134,5 +138,5 @@ Not built:
 1. Dinghy-only users: same named character as the Chief of Staff, or a separate lighter assistant? Dinghy's voice stays unchanged either way.
 2. Closed beta: Dinghy alone first, or Dinghy and Dock together?
 3. Should agent names be unique across a user's agents? (Proposed: yes, enforced at onboarding.)
-4. Cloud fallback for Dock tasks when the home node is off? (Proposed: no. Dinghy stays up; Dock work waits.)
+4. Cloud fallback for Dock tasks when the home node is off? (Decided 2026-10-22: yes, for the cloud worker target only, paid from the user's x402 channel and metered. Home-node work waits while the node is off. Computer use in a cloud sandbox needs owner approval.)
 5. Mobile beyond iPhone: iMessage is iPhone only. Android needs a separate channel. Not in the beta.

@@ -159,6 +159,9 @@ export function ChatThread({
   const [attachError, setAttachError] = useState<string | null>(null)
   // Effective model: null = Auto (no `model` field is sent).
   const [model, setModelState] = useState<ModelRef>(null)
+  // Background mode: the message is queued as a cloud run instead of streamed here. Off by default.
+  const [background, setBackground] = useState(false)
+  const [queuedNote, setQueuedNote] = useState<string | null>(null)
   const { messages, sendMessage, status, setMessages, regenerate } = useChat({
     id: `chat-${conversationId}-${agent.id}`,
     messages: initialMessages,
@@ -211,16 +214,33 @@ export function ChatThread({
     setAttachments((prev) => [...prev, ...next])
   }
 
+  async function queueBackground(prompt: string, chosen: ModelRef) {
+    setQueuedNote(null)
+    try {
+      const res = await fetch("/api/runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, agent: agent.id, budget_cents: 100, ...(chosen ? { model: chosen } : {}) }),
+      })
+      const data = (await res.json().catch(() => ({}))) as { error?: string }
+      setQueuedNote(res.ok ? "Queued for the cloud worker. Follow it in Tasks." : (data.error ?? "Could not queue the run"))
+    } catch {
+      setQueuedNote("Could not queue the run")
+    }
+  }
+
   function submit() {
     const text = input.trim()
     if ((!text && attachments.length === 0) || busy) return
     const body = attachments.map((a) => `\n\n--- Attached: ${a.name} ---\n${a.content}`).join("")
     setInput("")
     setAttachments([])
-    sendMessage(
-      { text: `${text || "Here are the attached files."}${body}` },
-      model ? { body: { model } } : undefined,
-    ).catch(() => null)
+    const full = `${text || "Here are the attached files."}${body}`
+    if (background) {
+      queueBackground(full, model).catch(() => null)
+      return
+    }
+    sendMessage({ text: full }, model ? { body: { model } } : undefined).catch(() => null)
   }
 
   const lastAssistantIndex = messages.map((m) => m.role).lastIndexOf("assistant")
@@ -294,7 +314,17 @@ export function ChatThread({
           projectId={projectId}
           onProjectChange={onProjectChange}
           projectEditable={projectEditable}
+          background={background}
+          onBackgroundChange={(value) => {
+            setBackground(value)
+            setQueuedNote(null)
+          }}
         />
+        {queuedNote && (
+          <p className="px-3 pt-1 text-[12px]" style={{ color: "var(--ink-3)" }} role="status">
+            {queuedNote}
+          </p>
+        )}
       </div>
     </div>
   )

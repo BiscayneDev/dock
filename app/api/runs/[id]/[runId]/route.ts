@@ -2,11 +2,11 @@ import { NextResponse } from "next/server"
 import { getRun } from "@/lib/conversations"
 
 interface Context {
-  params: Promise<{ conversationId: string; runId: string }>
+  params: Promise<{ id: string; runId: string }>
 }
 
 export async function GET(_: Request, context: Context) {
-  const { conversationId, runId } = await context.params
+  const { id: conversationId, runId } = await context.params
   const payload = await getRun(conversationId, runId)
   if (!payload) {
     return NextResponse.json({ error: "Run not found" }, { status: 404 })

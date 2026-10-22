@@ -165,6 +165,8 @@ export function Composer({
   projectId = null,
   onProjectChange,
   projectEditable = true,
+  background = false,
+  onBackgroundChange,
 }: {
   value: string
   onChange: (v: string) => void
@@ -188,6 +190,9 @@ export function Composer({
   onProjectChange?: (projectId: string | null) => void
   /** False for older chats, which cannot be moved between projects. */
   projectEditable?: boolean
+  /** Queue the message as a background run on the cloud worker instead of streaming it here. */
+  background?: boolean
+  onBackgroundChange?: (value: boolean) => void
 }) {
   const fileInput = useRef<HTMLInputElement>(null)
   // "@" tagging: an open mention is the text from "@" to the caret. Choosing a project removes it.
@@ -317,6 +322,22 @@ export function Composer({
             </button>
             <AgentPicker agents={agents} value={agent} onChange={onAgentChange} />
             <ModelPicker providers={models} value={model} onChange={onModelChange} />
+            {onBackgroundChange && (
+              <button
+                type="button"
+                onClick={() => onBackgroundChange(!background)}
+                aria-pressed={background}
+                title="Queue this message as a background run on the cloud worker"
+                className="rounded-full px-2.5 py-1 text-[12px] transition-colors"
+                style={{
+                  color: background ? "var(--ink)" : "var(--ink-3)",
+                  background: background ? "rgba(231,201,121,0.14)" : "transparent",
+                  border: `1px solid ${background ? "rgba(231,201,121,0.45)" : "var(--line, rgba(255,255,255,0.08))"}`,
+                }}
+              >
+                Run in background
+              </button>
+            )}
             {onProjectChange && (
               <ProjectPicker
                 projects={projects}
