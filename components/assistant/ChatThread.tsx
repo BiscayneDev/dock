@@ -289,8 +289,9 @@ export function ChatThread({
   const makeTask = projectId
     ? (text: string) => {
         if (busy) return
-        const request = `Make this a task for the team. Propose it as a task block, or say why it is not real work:\n\n${text}`
-        sendMessage({ text: request }, model ? { body: { model } } : undefined).catch(() => null)
+        const request = `Make this a task for the team:\n\n${text}`
+        // makeTask tells the server to send the whole thread so the chief can decide the task from it.
+        sendMessage({ text: request }, { body: { makeTask: true, ...(model ? { model } : {}) } }).catch(() => null)
       }
     : undefined
 

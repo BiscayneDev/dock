@@ -23,24 +23,31 @@ import { createShipyardCapture } from "@/lib/inference/shipyard-capture"
 import { CHIEF_RUNTIME_AGENT } from "@/lib/tenancy"
 import { chiefSystemPrompt } from "@/lib/onboarding-server"
 import { recordTurn } from "@/lib/memory"
-import { BRIEF_PROTOCOL_PROMPT, parseBriefBlocks, parseMention, pickChief } from "@/lib/briefs"
+import { buildProtocolPrompt, MAKE_TASK_INSTRUCTION, parseBriefBlocks, parseMention, pickChief } from "@/lib/briefs"
 import { createBriefs, loadRoster, maxBriefBudgetCents } from "@/lib/briefs-store"
 
 const HISTORY_TURNS = 20
 const HISTORY_CHARS = 12000
+// "Make this a task" reads the whole thread before the chief decides what the task is.
+const TASK_HISTORY_TURNS = 400
+const TASK_HISTORY_CHARS = 150000
 
 /** Recent turns of an assistant chat, oldest first, within a fixed budget. Fails open to no history. */
-async function priorTurns(ctx: AssistantContext, conversationId: string): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
-  const messages = await listAssistantMessages(ctx, conversationId).catch(() => [])
+async function priorTurns(
+  ctx: AssistantContext,
+  conversationId: string,
+  limits: { turns: number; chars: number } = { turns: HISTORY_TURNS, chars: HISTORY_CHARS },
+): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
+  const messages = await listAssistantMessages(ctx, conversationId, 1000).catch(() => [])
   const turns = messages
     .filter((m) => (m.role === "user" || m.role === "assistant") && m.content.trim().length > 0)
-    .slice(-HISTORY_TURNS)
+    .slice(-limits.turns)
     .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }))
   const kept: typeof turns = []
   let total = 0
   for (let i = turns.length - 1; i >= 0; i--) {
     total += turns[i].content.length
-    if (total > HISTORY_CHARS) break
+    if (total > limits.chars) break
     kept.unshift(turns[i])
   }
   return kept
@@ -75,6 +82,8 @@ export async function POST(request: Request) {
     taskId?: string
     /** Optional per-message model, `provider/model-id`. Absent = agent default. */
     model?: unknown
+    /** Set by "Make this a task": the chief reads the whole thread and decides the task. */
+    makeTask?: boolean
   }
 
   const conversationId = body.conversationId ?? "main-chat"
@@ -125,7 +134,10 @@ export async function POST(request: Request) {
 
   const assistantChat = ctx ? await getAssistantConversation(ctx, conversationId) : null
   const projectId = assistantChat?.projectId ?? null
-  const history = assistantChat && ctx ? await priorTurns(ctx, conversationId) : []
+  const makeTask = body.makeTask === true
+  const history = assistantChat && ctx
+    ? await priorTurns(ctx, conversationId, makeTask ? { turns: TASK_HISTORY_TURNS, chars: TASK_HISTORY_CHARS } : undefined)
+    : []
 
   // @mention routes this turn to a roster agent. The mention is stripped from what the model sees;
   // the thread keeps the owner's original text. Mentions never approve or spawn work by themselves.
@@ -190,7 +202,9 @@ export async function POST(request: Request) {
         // Chief of Staff only: saved onboarding profile and enabled rules (null when none saved).
         // Project chats teach every agent the task protocol: tasks are proposed for approval, never started from chat.
         const base = agent === chiefAgent ? await chiefSystemPrompt(projectId, prompt) : null
-        const system = projectId ? [base, BRIEF_PROTOCOL_PROMPT].filter(Boolean).join("\n\n") : base
+        const system = projectId
+          ? [base, buildProtocolPrompt(roster), makeTask ? MAKE_TASK_INSTRUCTION : null].filter(Boolean).join("\n\n")
+          : base
         const result = await inferenceStream({
           message: modelPrompt,
           agent,
@@ -235,7 +249,13 @@ export async function POST(request: Request) {
               // Proposals may only name roster agents; anything else falls back to the chief.
               const known = new Set(roster.map((a) => a.key))
               const chief = pickChief(roster)?.key ?? agent
-              const proposals = parsed.proposals.map((p) => ({ ...p, agentKey: p.agentKey && known.has(p.agentKey) ? p.agentKey : null }))
+              // Unknown agents fall back to the chief; a proposal never names an agent outside the roster.
+              const resolve = (key: string | null) => (key && known.has(key) ? key : chief)
+              const proposals = parsed.proposals.map((p) => ({
+                ...p,
+                agentKey: resolve(p.agentKey),
+                assignments: p.assignments.map((a) => ({ ...a, agentKey: resolve(a.agentKey) })),
+              }))
               const briefs = await createBriefs(
                 ctx.supabase,
                 { workspaceId: ctx.workspaceId, ownerId: ctx.userId },

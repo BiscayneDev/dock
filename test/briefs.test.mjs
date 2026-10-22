@@ -159,3 +159,55 @@ test("cap check: no cap always passes; spent plus reserved must fit under the ca
   assert.equal(over.ok, false)
   assert.equal(over.remainingCents, -1)
 })
+
+// ── Task assignments (one task, one or more subagents) ──
+import { buildProtocolPrompt, MAKE_TASK_INSTRUCTION, assignmentRunPrompt, MAX_ASSIGNMENTS } from "../lib/briefs.ts"
+
+test("assignments: explicit list is kept in order, each with its own prompt and skills", () => {
+  const p = validateBrief(
+    {
+      goal: "Launch the waitlist page",
+      deliverables: ["page", "copy"],
+      assignments: [
+        { agent: "builder", prompt: "Build the page.", skills: ["frontend-design"] },
+        { agent: "scout", prompt: "Write the launch copy." },
+      ],
+    },
+    MAX,
+  )
+  assert.equal(p.assignments.length, 2)
+  assert.equal(p.assignments[0].agentKey, "builder")
+  assert.deepEqual(p.assignments[0].skills, ["frontend-design"])
+  assert.deepEqual(p.assignments[1].skills, [])
+  assert.equal(p.agentKey, "builder", "first assignee is the task's agent_key")
+})
+
+test("assignments: no list means one assignment with the standard prompt", () => {
+  const p = validateBrief({ goal: "Research pricing", deliverables: ["table"], agent: "scout" }, MAX)
+  assert.equal(p.assignments.length, 1)
+  assert.equal(p.assignments[0].agentKey, "scout")
+  assert.match(p.assignments[0].prompt, /Goal: Research pricing/)
+})
+
+test("assignments: an empty prompt, a bad key, or too many entries reject the block", () => {
+  assert.equal(typeof validateBrief({ goal: "x", deliverables: ["y"], assignments: [{ agent: "scout", prompt: "  " }] }, MAX), "string")
+  assert.equal(typeof validateBrief({ goal: "x", deliverables: ["y"], assignments: [{ agent: "Bad Key!", prompt: "p" }] }, MAX), "string")
+  const many = Array.from({ length: MAX_ASSIGNMENTS + 1 }, () => ({ agent: "scout", prompt: "p" }))
+  assert.equal(typeof validateBrief({ goal: "x", deliverables: ["y"], assignments: many }, MAX), "string")
+})
+
+test("assignments: run prompt carries skills, budget and the report contract", () => {
+  const text = assignmentRunPrompt({ prompt: "Do X.", skills: ["summarize"] }, 250, ["spends_money"])
+  assert.match(text, /^Do X\./)
+  assert.match(text, /Skills to use if available: summarize/)
+  assert.match(text, /2\.50 USD/)
+  assert.match(text, /Report what you produced/)
+})
+
+test("protocol: the chief sees the roster, the assignment shape and its distilling role", () => {
+  const text = buildProtocolPrompt([{ key: "builder", displayName: "Builder" }, { key: "scout", displayName: "Scout" }])
+  assert.match(text, /"builder": Builder/)
+  assert.match(text, /"assignments"/)
+  assert.match(text, /distill the owner's request/)
+  assert.match(MAKE_TASK_INSTRUCTION, /Read the whole thread above/)
+})

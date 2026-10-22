@@ -30,12 +30,28 @@ export const BRIEF_DELIVERABLE_MAX = 200
 export const DEFAULT_BRIEF_BUDGET_CENTS = 100
 const AGENT_KEY = /^[a-z0-9_-]{1,64}$/
 
+/** One subagent's share of a task: who does it and the self-contained prompt it receives. */
+export interface Assignment {
+  /** Roster key. Null in a raw proposal means "the chief decides"; the server resolves it. */
+  agentKey: string | null
+  prompt: string
+  /** Skill names the chief expects this subagent to use. Free text, capped; resolved against the skill library later. */
+  skills: string[]
+}
+
+export const MAX_SKILLS_PER_ASSIGNMENT = 8
+
+export const MAX_ASSIGNMENTS = 4
+export const ASSIGNMENT_PROMPT_MAX = 4000
+
 export interface BriefProposal {
   goal: string
   context: string
   deliverables: string[]
   budgetCents: number
+  /** The first assignment's agent, kept for display and the agent_key column. */
   agentKey: string | null
+  assignments: Assignment[]
   riskFlags: RiskFlag[]
 }
 
@@ -78,7 +94,38 @@ function asStringArray(value: unknown, maxItems: number, maxLen: number): string
   return items
 }
 
+function detectRiskFlagsFor(goal: string, deliverables: string[], context: string, b: Record<string, unknown>): RiskFlag[] {
+  const declared = Array.isArray(b.risk_flags)
+    ? b.risk_flags.filter((f): f is RiskFlag => typeof f === "string" && (RISK_FLAGS as readonly string[]).includes(f))
+    : []
+  return Array.from(new Set<RiskFlag>([...declared, ...detectRiskFlags(`${goal} ${deliverables.join(" ")} ${context}`)]))
+}
+
 /** Validates one parsed brief object. Returns a proposal or a human-readable rejection reason. */
+function parseAssignments(raw: unknown): Assignment[] | string {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) return "assignments must be a list"
+  if (raw.length === 0 || raw.length > MAX_ASSIGNMENTS) return `assignments needs 1 to ${MAX_ASSIGNMENTS} entries`
+  const out: Assignment[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== "object") return "each assignment must be an object"
+    const a = item as Record<string, unknown>
+    const prompt = typeof a.prompt === "string" ? a.prompt.trim() : ""
+    if (!prompt) return "each assignment needs a prompt"
+    if (prompt.length > ASSIGNMENT_PROMPT_MAX) return "an assignment prompt is too long"
+    let agentKey: string | null = null
+    if (a.agent !== undefined && a.agent !== null) {
+      if (typeof a.agent !== "string" || !AGENT_KEY.test(a.agent)) return "assignment agent is not a valid key"
+      agentKey = a.agent
+    }
+    const skills = Array.isArray(a.skills)
+      ? a.skills.filter((x): x is string => typeof x === "string").map((x) => x.trim().slice(0, 80)).filter(Boolean).slice(0, MAX_SKILLS_PER_ASSIGNMENT)
+      : []
+    out.push({ agentKey, prompt, skills })
+  }
+  return out
+}
+
 export function validateBrief(raw: unknown, maxBudgetCents: number): BriefProposal | string {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return "brief is not an object"
   const b = raw as Record<string, unknown>
@@ -112,7 +159,15 @@ export function validateBrief(raw: unknown, maxBudgetCents: number): BriefPropos
     : []
   const riskFlags = Array.from(new Set<RiskFlag>([...declared, ...detectRiskFlags(`${goal} ${deliverables.join(" ")} ${context}`)]))
 
-  return { goal, context, deliverables, budgetCents, agentKey, riskFlags }
+  const parsed = parseAssignments(b.assignments)
+  if (typeof parsed === "string") return parsed
+  // Without explicit assignments, the whole task goes to the single agent named (or the chief) with the standard prompt.
+  const assignments: Assignment[] =
+    parsed.length > 0
+      ? parsed
+      : [{ agentKey, prompt: composeRunPrompt({ goal, context, deliverables, budgetCents, riskFlags: [] }), skills: [] }]
+  const firstAgent = assignments[0].agentKey ?? agentKey
+  return { goal, context, deliverables, budgetCents, agentKey: firstAgent, assignments, riskFlags: detectRiskFlagsFor(goal, deliverables, context, b) }
 }
 
 /** Finds every ```brief block, validates it, and returns the cleaned text. */
@@ -202,21 +257,59 @@ export function composeRunPrompt(brief: {
   return lines.join("\n")
 }
 
-/** System-prompt block that teaches the chief of staff the brief protocol. Appended for project chats. */
-export const BRIEF_PROTOCOL_PROMPT = `
+/** Wraps one assignment's prompt with its budget and the report contract. */
+export function assignmentRunPrompt(a: { prompt: string; skills: string[] }, budgetCents: number, riskFlags: RiskFlag[]): string {
+  const lines = [a.prompt]
+  if (a.skills.length > 0) lines.push("", `Skills to use if available: ${a.skills.join(", ")}.`)
+  lines.push("", `Budget: ${(budgetCents / 100).toFixed(2)} USD. Stop and report if you cannot finish within it.`)
+  if (riskFlags.length > 0) {
+    lines.push(`The owner approved this knowing it may: ${riskFlags.join(", ").replace(/_/g, " ")}.`)
+  }
+  lines.push("", "Report what you produced, what you checked, and anything left undone.")
+  return lines.join("\n")
+}
+
+/** How a task block is written. Shared by the protocol prompt and the make-a-task instruction. */
+const BLOCK_SHAPE = `\`\`\`brief
+{"goal": "one sentence", "context": "shared facts every assignee needs", "deliverables": ["concrete output 1"], "budget_cents": 300, "assignments": [{"agent": "<roster key>", "prompt": "self-contained prompt for this agent", "skills": ["optional skill names"]}]}
+\`\`\``
+
+/** System-prompt block that teaches the chief of staff the task protocol. Appended for project chats. */
+export function buildProtocolPrompt(roster: Array<{ key: string; displayName: string }>): string {
+  const who = roster.length > 0
+    ? roster.map((a) => `- "${a.key}": ${a.displayName}`).join("\n")
+    : "- (no roster agents yet; leave agent out and the chief will do it)"
+  return `
 You work inside a project's central thread. Chat, questions and discussion happen here freely.
 Real tasks (building, writing, researching, sending, publishing, changing anything, spending money) are
-delegated to subagents, and they must never start from chat. Instead, when the owner asks for a task, reply in
-one or two sentences and then append exactly one fenced block tagged brief, containing JSON and nothing else.
-The block is the task proposal. The owner approves it before any subagent runs:
+delegated to subagents, and they never start from chat. When the owner asks for a task, reply in one or two
+sentences and then append exactly one fenced block tagged brief, containing JSON and nothing else. The block
+is the task proposal. The owner approves it before any subagent runs.
 
-\`\`\`brief
-{"goal": "one sentence", "context": "what the agent needs to know", "deliverables": ["concrete output 1", "concrete output 2"], "budget_cents": 100, "agent": "optional agent key"}
-\`\`\`
+Roster agents you may assign (use the key in "agent"):
+${who}
 
-Rules: deliverables are concrete and checkable. Keep budget_cents as small as the job allows. Do not
-claim the task is done or started. The owner approves the task before anything runs. If the request is
-a question, answer it and do not emit a task block.`
+${BLOCK_SHAPE}
+
+Rules:
+- "assignments" has one entry per subagent that does part of the task (1 to 4). Each prompt must stand on its
+  own: the goal, the facts and decisions from this thread that matter to that agent, what to produce, what done
+  looks like, and what to leave alone. A subagent cannot see this thread.
+- Your job is to distill the owner's request into a task that the roster can carry out. Choose the agents,
+  split the work, and name skills where a subagent should use one.
+- Deliverables are concrete and checkable. Keep budget_cents as small as the job allows.
+- Do not claim the task is done or started. If the request is a question, answer it and emit no task block.`
+}
+
+/** Extra instruction for the "Make this a task" action. The owner selected a message and wants it turned into work. */
+export const MAKE_TASK_INSTRUCTION = `
+The owner asked you to make this conversation a task. Read the whole thread above before deciding:
+the earlier messages, decisions and corrections are the context. Then decide:
+1. The single outcome the team should deliver.
+2. Which roster agents should do it (one or more), and what each one does.
+3. For each agent, a self-contained prompt that carries the context it needs from the thread.
+Emit one brief block with that task. If the thread does not describe real work, say why in one or two
+sentences and emit no block.`
 
 // ── Project monthly spend cap ───────────────────────────────────────────────
 

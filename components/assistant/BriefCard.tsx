@@ -8,9 +8,16 @@ import { agentLabel } from "@/lib/tasks"
 
 export type BriefState = "proposed" | "approved" | "running" | "succeeded" | "failed" | "cancelled"
 
+export interface AssignmentView {
+  agentKey: string
+  prompt: string
+  skills: string[]
+}
+
 export interface BriefView {
   id: string
   agentKey: string
+  assignments: AssignmentView[]
   goal: string
   context: string
   deliverables: string[]
@@ -152,6 +159,22 @@ export function BriefCard({ briefId, onSettled }: { briefId: string; onSettled?:
         <p className="whitespace-pre-wrap text-[13px] leading-relaxed" style={{ color: "var(--ink-2)" }}>
           {brief.context}
         </p>
+      )}
+
+      {brief.assignments.length > 0 && (
+        <div className="flex flex-col gap-1.5 text-[13px]" style={{ color: "var(--ink-2)" }}>
+          <p className="text-[12px]" style={{ color: "var(--ink-3)" }}>
+            Delegated to {brief.assignments.map((a) => agentLabel(a.agentKey)).join(", ")}
+          </p>
+          {brief.assignments.map((a, i) => (
+            <details key={i} className="rounded-md border px-3 py-2" style={{ borderColor: "var(--border)" }}>
+              <summary className="cursor-pointer text-[12px]" style={{ color: "var(--ink-3)" }}>
+                {agentLabel(a.agentKey)} prompt{a.skills.length > 0 ? ` · skills: ${a.skills.join(", ")}` : ""}
+              </summary>
+              <p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed">{a.prompt}</p>
+            </details>
+          ))}
+        </div>
       )}
 
       <ul className="flex flex-col gap-1 text-[13px]" style={{ color: "var(--ink-2)" }}>

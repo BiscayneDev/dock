@@ -10,6 +10,8 @@ import {
   type RosterEntry,
   composeRunPrompt,
   outcomeForRun,
+  type Assignment,
+  assignmentRunPrompt,
   type BriefProposal,
   type BriefState,
   type LedgerKind,
@@ -31,6 +33,7 @@ export interface Brief {
   context: string
   deliverables: string[]
   budgetCents: number
+  assignments: Assignment[]
   riskFlags: RiskFlag[]
   state: BriefState
   outputSummary: string
@@ -54,7 +57,7 @@ export interface LedgerEntry {
 }
 
 const BRIEF_COLS =
-  "id, workspace_id, owner_id, project_id, conversation_id, run_id, agent_key, goal, context, deliverables, budget_cents, risk_flags, state, output_summary, error, created_at, updated_at, decided_at, finished_at"
+  "id, workspace_id, owner_id, project_id, conversation_id, run_id, agent_key, goal, context, deliverables, budget_cents, assignments, risk_flags, state, output_summary, error, created_at, updated_at, decided_at, finished_at"
 
 type Row = Record<string, unknown>
 
@@ -71,6 +74,7 @@ function toBrief(r: Row): Brief {
     context: (r.context as string) ?? "",
     deliverables: (r.deliverables as string[]) ?? [],
     budgetCents: r.budget_cents as number,
+    assignments: ((r.assignments as Assignment[]) ?? []) as Assignment[],
     riskFlags: ((r.risk_flags as RiskFlag[]) ?? []) as RiskFlag[],
     state: r.state as BriefState,
     outputSummary: (r.output_summary as string) ?? "",
@@ -172,10 +176,11 @@ export async function createBriefs(
         owner_id: scope.ownerId,
         project_id: input.projectId,
         conversation_id: input.conversationId,
-        agent_key: p.agentKey ?? input.defaultAgentKey,
+        agent_key: p.assignments[0]?.agentKey ?? p.agentKey ?? input.defaultAgentKey,
         goal: p.goal,
         context: p.context,
         deliverables: p.deliverables,
+        assignments: p.assignments.map((a) => ({ agentKey: a.agentKey ?? p.agentKey ?? input.defaultAgentKey, prompt: a.prompt, skills: a.skills })),
         budget_cents: p.budgetCents,
         risk_flags: p.riskFlags,
         state: "proposed",
@@ -290,7 +295,7 @@ export async function approveBrief(
   scope: Scope,
   briefId: string,
   maxBudgetCents: number,
-): Promise<{ brief: Brief; run: TaskRun }> {
+): Promise<{ brief: Brief; runs: TaskRun[] }> {
   const current = await getBrief(client, briefId)
   if (!current) throw new Error("not_found")
   if (!canApprove(current.state)) throw new BriefConflictError(`brief is ${current.state}`)
@@ -317,50 +322,63 @@ export async function approveBrief(
     }
   }
 
-  const model = resolveModelRef(current.agentKey)
-  let run: TaskRun
+  // One run per assignment. Each gets an equal share of the brief's budget, so the total never exceeds the cap.
+  const total = Math.min(current.budgetCents, maxBudgetCents)
+  const assignments = current.assignments.length > 0 ? current.assignments : [{ agentKey: current.agentKey, prompt: composeRunPrompt({ goal: current.goal, context: current.context, deliverables: current.deliverables, budgetCents: total, riskFlags: current.riskFlags }), skills: [] }]
+  const share = Math.max(1, Math.floor(total / assignments.length))
+  const runs: TaskRun[] = []
   try {
-    if (!model) throw new Error("No model configured for this agent")
-    run = await enqueueRun(client, {
-      workspaceId: scope.workspaceId,
-      ownerId: scope.ownerId,
-      projectId: current.projectId,
-      agentId: null,
-      agentKey: current.agentKey,
-      target: "cloud",
-      prompt: composeRunPrompt({
-        goal: current.goal,
-        context: current.context,
-        deliverables: current.deliverables,
-        budgetCents: Math.min(current.budgetCents, maxBudgetCents),
-        riskFlags: current.riskFlags,
-      }),
-      model,
-      budgetCents: Math.min(current.budgetCents, maxBudgetCents),
-      briefId: current.id,
-    })
+    for (const a of assignments) {
+      const agentKey = a.agentKey ?? current.agentKey
+      const model = resolveModelRef(agentKey)
+      if (!model) throw new Error(`No model configured for ${agentKey}`)
+      runs.push(
+        await enqueueRun(client, {
+          workspaceId: scope.workspaceId,
+          ownerId: scope.ownerId,
+          projectId: current.projectId,
+          agentId: null,
+          agentKey,
+          target: "cloud",
+          prompt: assignmentRunPrompt(a, share, current.riskFlags),
+          model,
+          budgetCents: share,
+          briefId: current.id,
+        }),
+      )
+    }
   } catch (error) {
+    // Partial failure: cancel what was queued, put the brief back to proposed, and surface the error.
+    if (runs.length > 0) {
+      await client
+        .from("task_runs")
+        .update({ status: "cancelled", error: "task approval did not complete", finished_at: new Date().toISOString() })
+        .in("id", runs.map((r) => r.id))
+        .eq("status", "queued")
+    }
     await client.from("project_briefs").update({ state: "proposed", decided_at: null }).eq("id", briefId)
     throw error
   }
 
   const { data: updated, error: linkError } = await client
     .from("project_briefs")
-    .update({ state: "running", run_id: run.id, updated_at: new Date().toISOString() })
+    .update({ state: "running", run_id: runs[0].id, updated_at: new Date().toISOString() })
     .eq("id", briefId)
     .select(BRIEF_COLS)
     .single()
   if (linkError || !updated) throw new Error(`briefs: ${linkError?.message ?? "link failed"}`)
 
-  await writeLedger(client, scope, {
-    projectId: current.projectId,
-    briefId: current.id,
-    runId: run.id,
-    kind: "run_started",
-    agentKey: current.agentKey,
-    summary: `Approved: ${current.goal}`,
-  })
-  return { brief: toBrief(updated as unknown as Row), run }
+  for (const run of runs) {
+    await writeLedger(client, scope, {
+      projectId: current.projectId,
+      briefId: current.id,
+      runId: run.id,
+      kind: "run_started",
+      agentKey: run.agentKey,
+      summary: `Delegated: ${current.goal}`,
+    })
+  }
+  return { brief: toBrief(updated as unknown as Row), runs }
 }
 
 export async function cancelBrief(client: SupabaseClient, scope: Scope, briefId: string): Promise<Brief> {
@@ -400,20 +418,12 @@ export async function recordRunOutcome(
 ): Promise<void> {
   const brief = await getBrief(admin, briefId)
   if (!brief) return
-  const { briefState, ledgerKind } = outcomeForRun(status)
+  const { ledgerKind } = outcomeForRun(status)
   const summary = (detail.output ?? "").trim().slice(0, 2000)
-  await admin
-    .from("project_briefs")
-    .update({
-      state: briefState,
-      output_summary: summary,
-      error: detail.error ? detail.error.slice(0, 1000) : null,
-      finished_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", briefId)
+  const scope = { workspaceId: run.workspaceId, ownerId: run.ownerId }
 
-  await writeLedger(admin, { workspaceId: run.workspaceId, ownerId: run.ownerId }, {
+  // This subagent's outcome: its own ledger line and its own result message in the thread.
+  await writeLedger(admin, scope, {
     projectId: run.projectId,
     briefId,
     runId: run.id,
@@ -425,12 +435,8 @@ export async function recordRunOutcome(
         : `${brief.goal}: ${detail.error ?? status}`,
     costCents: run.spentCents,
   })
-
   if (brief.conversationId) {
-    const content =
-      status === "succeeded"
-        ? summary || "Finished with no output."
-        : `The run stopped: ${detail.error ?? status}.`
+    const content = status === "succeeded" ? summary || "Finished with no output." : `The run stopped: ${detail.error ?? status}.`
     await admin.from("messages").insert({
       conversation_id: brief.conversationId,
       role: "agent",
@@ -440,6 +446,34 @@ export async function recordRunOutcome(
     })
     await admin.from("conversations").update({ updated_at: new Date().toISOString() }).eq("id", brief.conversationId)
   }
+
+  // The task settles only when every run it spawned has finished.
+  const { data: runRows, error } = await admin
+    .from("task_runs")
+    .select("id, status, output")
+    .contains("payload", { briefId })
+  if (error) throw new Error(`task_runs: ${error.message}`)
+  const rows = (runRows ?? []) as Array<{ id: string; status: string; output: string | null }>
+  const terminal = new Set(["succeeded", "failed", "cancelled"])
+  if (rows.length === 0 || !rows.every((r) => terminal.has(r.status))) return
+
+  const allSucceeded = rows.every((r) => r.status === "succeeded")
+  const digest = rows
+    .filter((r) => r.status === "succeeded" && r.output)
+    .map((r) => (r.output ?? "").trim().split("\n")[0])
+    .filter(Boolean)
+    .join(" · ")
+    .slice(0, 2000)
+  await admin
+    .from("project_briefs")
+    .update({
+      state: allSucceeded ? "succeeded" : "failed",
+      output_summary: digest,
+      error: allSucceeded ? null : "one or more subagents did not finish",
+      finished_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", briefId)
 }
 
 /** Hard ceiling on any brief's budget. Same env knob the run queue uses. */

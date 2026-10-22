@@ -11,8 +11,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: "Not found" }, { status: 404 })
   try {
-    const { brief, run } = await approveBrief(ctx.supabase, { workspaceId: ctx.workspaceId, ownerId: ctx.userId }, id, maxBriefBudgetCents())
-    return NextResponse.json({ brief, runId: run.id }, { status: 201 })
+    const { brief, runs } = await approveBrief(ctx.supabase, { workspaceId: ctx.workspaceId, ownerId: ctx.userId }, id, maxBriefBudgetCents())
+    return NextResponse.json({ brief, runIds: runs.map((r) => r.id) }, { status: 201 })
   } catch (error) {
     if (error instanceof BriefConflictError || error instanceof CapExceededError) {
       return NextResponse.json({ error: error.message }, { status: 409 })
