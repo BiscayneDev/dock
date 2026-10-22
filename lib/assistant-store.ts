@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { currentUser, sessionClient } from "@/lib/tenancy"
 import { loadWorkspaceId } from "@/lib/onboarding-server"
+import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 // Assistant conversations in Supabase (migration 0004). Every call runs with the signed-in user's session,
 // so RLS limits rows to the user's own workspace. project_id null = "No project".
@@ -116,7 +117,7 @@ export async function createAssistantConversation(
       owner_id: ctx.userId,
       project_id: input.projectId ?? null,
       title: input.title?.trim().slice(0, 200) || NEW_CHAT_TITLE,
-      agent: input.agent ?? "vic",
+      agent: input.agent ?? CHIEF_RUNTIME_KEY,
     })
     .select(SELECT)
     .single()

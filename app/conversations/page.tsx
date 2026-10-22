@@ -4,6 +4,7 @@ import Link from "next/link"
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { MessageSquarePlus, Search, Loader2, PlayCircle, CheckCircle2, AlertTriangle } from "lucide-react"
+import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 interface ConversationSummary {
   id: string
@@ -230,7 +231,7 @@ function ConversationsPageInner() {
       const res = await fetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "New conversation", agent: "vic" }),
+        body: JSON.stringify({ title: "New conversation", agent: CHIEF_RUNTIME_KEY }),
       })
 
       if (!res.ok) {
@@ -258,7 +259,7 @@ function ConversationsPageInner() {
         body: JSON.stringify({
           message: draft.trim(),
           conversationId: selectedId,
-          agent: detail?.agent ?? selectedSummary?.agent ?? "vic",
+          agent: detail?.agent ?? selectedSummary?.agent ?? CHIEF_RUNTIME_KEY,
         }),
       })
       if (res.ok) {

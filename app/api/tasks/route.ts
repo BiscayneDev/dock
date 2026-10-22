@@ -5,6 +5,7 @@ import type { Task } from "@/lib/tasks"
 import { enrichTaskBrief } from "@/lib/task-enrichment"
 import { quoteBriefTools } from "@/lib/brief-quote"
 import { appendEvent, ensureTaskConversation } from "@/lib/conversations"
+import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 const DATA_PATH = join(process.cwd(), "data", "tasks.json")
 
@@ -101,11 +102,11 @@ export async function POST(request: Request) {
       const conversation = await ensureTaskConversation({
         taskId: newTask.id,
         title: newTask.enrichedTitle ?? newTask.title,
-        agent: newTask.assignee === "unassigned" ? "vic" : newTask.assignee,
+        agent: newTask.assignee === "unassigned" ? CHIEF_RUNTIME_KEY : newTask.assignee,
       })
       await appendEvent(conversation.id, {
         type: "task.linked",
-        agent: newTask.assignee === "unassigned" ? "vic" : newTask.assignee,
+        agent: newTask.assignee === "unassigned" ? CHIEF_RUNTIME_KEY : newTask.assignee,
         summary: `Linked task ${newTask.title} to planning conversation`,
         data: {
           taskId: newTask.id,

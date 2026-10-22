@@ -3,13 +3,13 @@ import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 import type { User } from "@supabase/supabase-js"
+import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 // Tenancy helpers (P1). Session client = the signed-in user, RLS applies.
 // Admin client = service role, bypasses RLS; server-only, never sent to browsers.
 
 export const CHIEF_ROLE = "Chief of Staff"
-// The existing chat path runs the Chief of Staff on the "vic" runtime key until per-agent runtimes exist.
-export const CHIEF_RUNTIME_AGENT = "vic"
+export const CHIEF_RUNTIME_AGENT = CHIEF_RUNTIME_KEY
 export const DEFAULT_CHIEF_NAME = "Vic"
 export const DEFAULT_CHIEF_PERSONA =
   "You are the user's Chief of Staff. You coordinate their projects, keep track of what matters, and answer directly. " +

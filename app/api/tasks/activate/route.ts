@@ -3,6 +3,7 @@ import { MC_URL } from "@/lib/config"
 import { runtime } from "@/lib/runtime"
 import { appendEvent, ensureTaskConversation, updateConversation } from "@/lib/conversations"
 import { enrichTaskBrief } from "@/lib/task-enrichment"
+import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 interface BudgetCheckResult {
   allowed: boolean
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
     const conversation = await ensureTaskConversation({
       taskId,
       title: enrichment.enrichedTitle,
-      agent: assignee || "vic",
+      agent: assignee || CHIEF_RUNTIME_KEY,
     })
 
     await updateConversation(conversation.id, {
@@ -73,13 +74,13 @@ export async function POST(request: Request) {
     })
     await appendEvent(conversation.id, {
       type: "task.linked",
-      agent: assignee || "vic",
+      agent: assignee || CHIEF_RUNTIME_KEY,
       summary: `Task ${title} linked to conversation`,
       data: { taskId, title, priority, assignee },
     })
     await appendEvent(conversation.id, {
       type: "run.started",
-      agent: assignee || "vic",
+      agent: assignee || CHIEF_RUNTIME_KEY,
       summary: `Activation started for ${title}`,
       data: { taskId, title, priority, assignee, status: "in-progress" },
     })
@@ -91,7 +92,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         taskId,
         taskTitle: title,
-        agent: assignee || "vic",
+        agent: assignee || CHIEF_RUNTIME_KEY,
         action: "started",
         summary: `Activated: ${title}`,
       }),
@@ -143,7 +144,7 @@ export async function POST(request: Request) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          from: "vic",
+          from: CHIEF_RUNTIME_KEY,
           to: assignee || "unassigned",
           content: `Delegating task: ${title}${description ? `\n${description}` : ""}`,
           type: "delegation",

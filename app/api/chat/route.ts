@@ -4,6 +4,7 @@ import { inferenceChat, resolveModel } from "@/lib/inference"
 import { appendEvent, appendMessage, ensureConversation, finishRun, startRun } from "@/lib/conversations"
 import { addRecentNotification, notificationEmitter } from "@/lib/notificationEmitter"
 import type { NotificationPayload } from "@/lib/notificationEmitter"
+import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 function emitRunNotification(agent: string, message: string, type: NotificationPayload["type"]) {
   const payload: NotificationPayload = {
@@ -19,7 +20,7 @@ function emitRunNotification(agent: string, message: string, type: NotificationP
 
 export async function POST(request: Request) {
   let conversationId = "main-chat"
-  let agent = "vic"
+  let agent = CHIEF_RUNTIME_KEY
   let runId: string | undefined
 
   try {
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
     }
     const { message, sessionId, taskId } = body
     conversationId = body.conversationId ?? "main-chat"
-    agent = body.agent ?? "vic"
+    agent = body.agent ?? CHIEF_RUNTIME_KEY
 
     if (!message?.trim()) {
       return NextResponse.json({ error: "Message is required" }, { status: 400 })

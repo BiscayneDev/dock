@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir } from "fs/promises"
 import { dirname, join } from "path"
 import { randomUUID } from "crypto"
+import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 export type ConversationStatus = "active" | "completed" | "failed" | "paused"
 export type EventType =
@@ -262,7 +263,7 @@ export async function createConversation(input: {
   const conversation: ConversationRecord = {
     id: conversationId,
     title: input.title?.trim() || "Untitled conversation",
-    agent: input.agent ?? "vic",
+    agent: input.agent ?? CHIEF_RUNTIME_KEY,
     status: "active",
     createdAt: now,
     updatedAt: now,
@@ -278,8 +279,8 @@ export async function createConversation(input: {
         conversationId,
         type: "conversation.created",
         timestamp: now,
-        agent: input.agent ?? "vic",
-        summary: `Conversation created for ${(input.agent ?? "vic").replace(/-/g, " ")}`,
+        agent: input.agent ?? CHIEF_RUNTIME_KEY,
+        summary: `Conversation created for ${(input.agent ?? CHIEF_RUNTIME_KEY).replace(/-/g, " ")}`,
       },
     ],
   }
@@ -304,7 +305,7 @@ export async function ensureTaskConversation(input: {
 }): Promise<ConversationRecord> {
   return ensureConversation(taskConversationId(input.taskId), {
     title: input.title,
-    agent: input.agent ?? "vic",
+    agent: input.agent ?? CHIEF_RUNTIME_KEY,
     taskId: input.taskId,
   })
 }
@@ -462,7 +463,7 @@ export async function getRun(
 export async function getDefaultConversation(): Promise<ConversationRecord> {
   return ensureConversation(DEFAULT_CONVERSATION_ID, {
     title: "Main chat",
-    agent: "vic",
+    agent: CHIEF_RUNTIME_KEY,
   })
 }
 

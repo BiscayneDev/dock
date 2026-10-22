@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useMemo, useState } from "react"
+import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 interface Task {
   id: string
@@ -156,7 +157,7 @@ export function CopilotSidebar({ activeGoals, urgentTasks, repos, recentActivity
       await postJson("/api/activity", {
         taskId: item.taskId,
         taskTitle: item.taskTitle ?? item.label,
-        agent: item.assignee ?? "vic",
+        agent: item.assignee ?? CHIEF_RUNTIME_KEY,
         action: "started",
         summary: `Approved: ${item.taskTitle ?? item.label}`,
       })
@@ -180,7 +181,7 @@ export function CopilotSidebar({ activeGoals, urgentTasks, repos, recentActivity
       await postJson("/api/activity", {
         taskId: item.taskId,
         taskTitle: item.taskTitle ?? item.label,
-        agent: item.assignee ?? "vic",
+        agent: item.assignee ?? CHIEF_RUNTIME_KEY,
         action: "reviewed",
         summary: `Held: ${item.taskTitle ?? item.label}`,
       })
@@ -201,7 +202,7 @@ export function CopilotSidebar({ activeGoals, urgentTasks, repos, recentActivity
         taskId: item.taskId,
         title: item.taskTitle ?? item.label,
         description: item.taskDescription,
-        assignee: item.assignee ?? "vic",
+        assignee: item.assignee ?? CHIEF_RUNTIME_KEY,
         priority: item.priority ?? "medium",
       })
       setStatusMessage(`Delegated ${item.taskTitle ?? item.label}`)

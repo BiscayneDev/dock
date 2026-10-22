@@ -5,6 +5,7 @@ import { ownerHasOnlineDevice } from "@/lib/devices"
 import { buildModel, parseModelRef, resolveModelRef, listConfiguredProviders } from "@/lib/inference"
 import { createShipyardCapture } from "@/lib/inference/shipyard-capture"
 import { RUN_TARGETS, type RunTarget } from "@/lib/task-runs"
+import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 export const dynamic = "force-dynamic"
 
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `budget_cents must be 1..${maxBudgetCents()}` }, { status: 400 })
   }
 
-  const agentKey = typeof body.agent === "string" ? body.agent : "vic"
+  const agentKey = typeof body.agent === "string" ? body.agent : CHIEF_RUNTIME_KEY
   if (!AGENT_KEY.test(agentKey)) return NextResponse.json({ error: "Invalid agent" }, { status: 400 })
 
   let agentId: string | null = null
