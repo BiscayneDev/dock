@@ -42,8 +42,18 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString()
 }
 
+interface RunFailure {
+  id: string
+  agentKey: string
+  error: string | null
+  finishedAt: string | null
+  model: string | null
+  attempts: number
+}
+
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<AlertRecord[]>([])
+  const [failures, setFailures] = useState<RunFailure[]>([])
   const [loading, setLoading] = useState(true)
   const [pendingId, setPendingId] = useState<string>("")
 
@@ -61,6 +71,10 @@ export default function AlertsPage() {
 
   useEffect(() => {
     fetchAlerts().catch(() => null)
+    fetch("/api/runs/failures", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setFailures(Array.isArray(data) ? data : []))
+      .catch(() => setFailures([]))
   }, [fetchAlerts])
 
   async function updateStatus(id: string, status: "acknowledged" | "resolved") {
@@ -85,6 +99,30 @@ export default function AlertsPage() {
         <h1 className="text-3xl font-bold text-white">Alerts</h1>
         <p className="mt-1 text-sm text-zinc-500">Canonical failed-run inbox.</p>
       </div>
+
+      <section className="rounded-xl p-4" style={{ backgroundColor: "#111118", border: "1px solid #1a1a2e" }}>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">Recent failures</h2>
+        <p className="mt-1 text-xs text-zinc-600">Last 50 failed runs with their error output.</p>
+        {failures.length === 0 ? (
+          <p className="mt-3 text-sm text-zinc-600">No failed runs.</p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {failures.map((f) => (
+              <li key={f.id} className="rounded-lg px-3 py-2" style={{ backgroundColor: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.18)" }}>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                  <span className="font-mono text-zinc-400">{f.agentKey}</span>
+                  {f.model ? <span>{f.model}</span> : null}
+                  <span>attempt {f.attempts}</span>
+                  {f.finishedAt ? <span>{relativeTime(f.finishedAt)}</span> : null}
+                </div>
+                <p className="mt-1 break-words text-xs text-zinc-400">
+                  {f.error ? f.error.slice(0, 300) : "No error message recorded."}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       {loading ? (
         <div className="rounded-xl p-8 text-center" style={{ backgroundColor: "#111118", border: "1px solid #1a1a2e" }}>
