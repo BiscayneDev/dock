@@ -31,3 +31,31 @@ test("continuationPrompt builds a continuation prompt from a snapshot", () => {
   assert.ok(trunc.length < 8300, "prior output truncated");
   assert.ok(trunc.includes("END"));
 });
+
+// End-to-end-style composition: checkpoint event -> resumePlan -> continuationPrompt,
+// mirroring how lib/worker.ts wires the pieces together for a retried run.
+import { resumePlan } from "../lib/task-runs.ts";
+
+test("resumed run wiring: a checkpoint event produces a continuation prompt", () => {
+  const events = [
+    { kind: "model_call", data: { costCents: 5 } },
+    { kind: "checkpoint", data: { step: 1, snapshot: checkpointData("partial output so far", 5) } },
+  ];
+  const plan = resumePlan("queued", events);
+  assert.ok(plan.ok, "non-terminal run with a checkpoint is resumable");
+  assert.equal(plan.fromStep, 1);
+  const prompt = continuationPrompt("original request", plan.snapshot);
+  assert.ok(prompt.includes("CONTINUATION"), "prompt marks the run as a continuation");
+  assert.ok(prompt.includes("partial output so far"), "prior output carried through");
+  assert.ok(prompt.includes("original request"), "original prompt preserved");
+});
+
+test("resumed run wiring: empty-output failure checkpoint resumes ledger state, prompt unchanged", () => {
+  // Failure-path checkpoint written by the worker: empty output, spend carried forward.
+  const events = [{ kind: "checkpoint", data: { step: 1, snapshot: checkpointData("", 12) } }];
+  const plan = resumePlan("queued", events);
+  assert.ok(plan.ok);
+  assert.equal(plan.fromStep, 1, "fromStep > 0 so resumePlan reports the run as resumed");
+  assert.equal(continuationPrompt("original request", plan.snapshot), "original request",
+    "empty snapshot output leaves the prompt unchanged");
+});

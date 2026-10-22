@@ -269,6 +269,13 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "model call failed"
+    // Checkpoint on the failure path too: a retried run resumes from this event. The failed
+    // call carries no partial output we can rely on, so store an empty-output snapshot with
+    // the run's spend so the retry at least resumes the ledger state (fromStep > 0).
+    await addEvent(admin, run.id, EVENT.checkpoint, {
+      step: 1,
+      snapshot: checkpointData("", run.spentCents),
+    })
     return finish(admin, run, workerId, "failed", { error: message.slice(0, 1000) })
   }
 }

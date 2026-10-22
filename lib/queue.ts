@@ -306,17 +306,11 @@ export async function decideApproval(
   const now = new Date().toISOString()
   if (decision === "approve") {
     await addEvent(supabase, runId, EVENT.approvalGranted, { actionId, amountCents: plan.amountCents })
-    // Carry prior work across the approval boundary: stash the last checkpoint's snapshot into
-    // the payload so the worker can resume from it even if event lookup misses (belt-and-braces).
-    const checkpoint = [...events].reverse().find((e) => e.kind === EVENT.checkpoint)
-    const snapshot =
-      checkpoint && typeof checkpoint.data.snapshot === "object" && checkpoint.data.snapshot !== null
-        ? (checkpoint.data.snapshot as Record<string, unknown>)
-        : checkpoint
-        ? (checkpoint.data as Record<string, unknown>)
-        : null
-    const payload: Record<string, unknown> = { ...run.payload }
-    if (snapshot && typeof snapshot.output === "string") payload.resume = snapshot
+    // NOTE: no checkpoint is stashed into the payload here. As built, the money gate is decided
+    // BEFORE any model call, so there is no prior output to carry across the approval boundary.
+    // Approval-resume works via checkpoint events once checkpoints exist pre-gate; the worker
+    // keeps its payload.resume fallback as belt-and-braces for retries re-queued by any path.
+    const payload = { ...run.payload }
     const { data, error } = await supabase
       .from("task_runs")
       .update({ status: statusAfterDecision("approve"), payload, updated_at: now })

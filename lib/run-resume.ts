@@ -24,6 +24,10 @@ export function checkpointData(output: string, spentCents: number): Record<strin
  * Prompt for a resumed run. When the snapshot carries a non-empty prior output, wraps the
  * original prompt in a CONTINUATION note asking the model to pick up where it left off.
  * Otherwise the original prompt is returned unchanged.
+ *
+ * The double-cap on output length (checkpointData caps when storing, and the slice below caps
+ * again here) is intentional: belt-and-braces for the JSON-round-trip payload.resume path, where
+ * the snapshot may not have passed through checkpointData's cap.
  */
 export function continuationPrompt(
   originalPrompt: string,
