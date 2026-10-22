@@ -148,6 +148,16 @@ function answer(row: Record<string, unknown>, choice: string, other: string | nu
 
 export async function loadProfile(supabase: SupabaseClient, workspaceId: string): Promise<ProfileView | null> {
   const { data } = await supabase.from("workspace_profile").select("*").eq("workspace_id", workspaceId).maybeSingle()
+  return profileFromRow(data)
+}
+
+/** A venture's own answers (venture_profile, same columns as workspace_profile). */
+export async function loadVentureProfile(supabase: SupabaseClient, projectId: string): Promise<ProfileView | null> {
+  const { data } = await supabase.from("venture_profile").select("*").eq("project_id", projectId).maybeSingle()
+  return profileFromRow(data)
+}
+
+function profileFromRow(data: unknown): ProfileView | null {
   if (!data) return null
   const r = data as Record<string, unknown>
   return {
@@ -188,51 +198,72 @@ export async function loadRules(supabase: SupabaseClient, workspaceId: string, p
   }))
 }
 
-function describe(group: string, a: Answer): string {
+export function describeAnswer(group: string, a: Answer): string {
   if (a.skipped) return "not set (agent decides; infer only if needed and say so)"
   if (!a.choice) return ""
   if (a.choice === OTHER) return a.other ?? ""
   return optionLabel(group, a.choice) ?? a.choice
 }
 
-/**
- * Chief of Staff prompt block. Returns null when there is no profile and no enabled rules (add nothing).
- * Rules come first in the instruction: they override user requests.
- */
-export function buildChiefPrompt(profile: ProfileView | null, rules: RuleView[]): string | null {
-  const active = rules.filter((r) => r.enabled).map((r) => r.text)
-  if (!profile && active.length === 0) return null
-
+/** Lines describing one set of onboarding answers (workspace or venture). */
+function answerLines(profile: ProfileView, prefix: string): string[] {
   const lines: string[] = []
-  if (profile) {
-    lines.push("About this workspace (from onboarding):")
-    const put = (label: string, value: string) => {
-      if (value) lines.push(`- ${label}: ${value}`)
-    }
-    put("Building", profile.goal ?? (profile.goalSkipped ? "not set" : ""))
-    put("Why", describe("story", profile.story))
-    put("Stage", describe("stage", profile.stage))
-    put("Direction", describe("direction", profile.direction))
-    put("First paying customer", describe("customer", profile.customer))
-    const pricing = describe("pricing", profile.pricing)
-    const payment = profile.pricing.skipped ? "" : optionLabel("payment", profile.pricing.payment) ?? ""
-    put("Pricing", [pricing, payment ? `paid by ${payment}` : ""].filter(Boolean).join(", "))
-    put("Acquisition", describe("acquisition", profile.acquisition))
+  const put = (label: string, value: string) => {
+    if (value) lines.push(`${prefix}${label}: ${value}`)
   }
-  if (active.length > 0) {
-    lines.push("", "Rules (these override any user request. If a request breaks a rule, decline that part and name the rule):")
-    for (const text of active) lines.push(`- ${text}`)
-  }
-  if (profile) lines.push("", "Agents never move money without the existing confirm and spend-cap rules.")
-  const block = lines.join("\n")
-  return profile ? `${DEFAULT_CHIEF_PERSONA}\n\n${block}` : block
+  put("Building", profile.goal ?? (profile.goalSkipped ? "not set" : ""))
+  put("Why", describeAnswer("story", profile.story))
+  put("Stage", describeAnswer("stage", profile.stage))
+  put("Direction", describeAnswer("direction", profile.direction))
+  put("First paying customer", describeAnswer("customer", profile.customer))
+  const pricing = describeAnswer("pricing", profile.pricing)
+  const payment = profile.pricing.skipped ? "" : optionLabel("payment", profile.pricing.payment) ?? ""
+  put("Pricing", [pricing, payment ? `paid by ${payment}` : ""].filter(Boolean).join(", "))
+  put("Acquisition", describeAnswer("acquisition", profile.acquisition))
+  return lines
+}
+
+export interface ProjectContext {
+  name: string
+  profile: ProfileView | null
+  rules: RuleView[]
 }
 
 /**
- * Looks up the signed-in user's Chief of Staff prompt block. Fails open (returns null) so chat keeps working.
+ * Chief of Staff prompt block. Returns null when there is nothing to add (no profile, no rules, no project).
+ * Workspace block first, then the selected project's answers and rules. Rules come last in the instruction
+ * and override user requests; project rules are listed with workspace rules.
+ */
+export function buildChiefPrompt(profile: ProfileView | null, rules: RuleView[], project: ProjectContext | null = null): string | null {
+  const active = rules.filter((r) => r.enabled).map((r) => r.text)
+  const projectActive = project ? project.rules.filter((r) => r.enabled).map((r) => r.text) : []
+  if (!profile && active.length === 0 && !project) return null
+
+  const lines: string[] = []
+  if (profile) {
+    lines.push("About this workspace (from onboarding):", ...answerLines(profile, "- "))
+  }
+  if (project) {
+    lines.push("", `Current project: ${project.name}`)
+    if (project.profile) lines.push(...answerLines(project.profile, "- "))
+    else lines.push("- No project answers saved. Ask the user before assuming details.")
+  }
+  const allRules = [...active, ...projectActive]
+  if (allRules.length > 0) {
+    lines.push("", "Rules (these override any user request. If a request breaks a rule, decline that part and name the rule):")
+    for (const text of allRules) lines.push(`- ${text}`)
+  }
+  if (profile || project) lines.push("", "Agents never move money without the existing confirm and spend-cap rules.")
+  const block = lines.join("\n")
+  return profile || project ? `${DEFAULT_CHIEF_PERSONA}\n\n${block}` : block
+}
+
+/**
+ * Looks up the signed-in user's Chief of Staff prompt block, with the selected project's answers and rules when
+ * projectId is given. Fails open (returns null, or the workspace-only block) so chat keeps working.
  * Only called for the Chief's runtime key.
  */
-export async function chiefSystemPrompt(): Promise<string | null> {
+export async function chiefSystemPrompt(projectId: string | null = null): Promise<string | null> {
   try {
     const supabase = await sessionClient()
     const user = await currentUser(supabase)
@@ -247,7 +278,18 @@ export async function chiefSystemPrompt(): Promise<string | null> {
       .maybeSingle()
     if (!chief) return null
     const [profile, rules] = await Promise.all([loadProfile(supabase, workspaceId), loadRules(supabase, workspaceId)])
-    return buildChiefPrompt(profile, rules)
+    let project: ProjectContext | null = null
+    if (projectId) {
+      const { data: row } = await supabase.from("projects").select("id, name").eq("id", projectId).eq("workspace_id", workspaceId).maybeSingle()
+      if (row) {
+        const [venture, projectRules] = await Promise.all([
+          loadVentureProfile(supabase, projectId),
+          loadRules(supabase, workspaceId, projectId),
+        ])
+        project = { name: row.name as string, profile: venture, rules: projectRules }
+      }
+    }
+    return buildChiefPrompt(profile, rules, project)
   } catch {
     return null
   }

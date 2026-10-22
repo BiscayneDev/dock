@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Plus, RotateCcw } from "lucide-react"
 import { ChatThread } from "@/components/assistant/ChatThread"
 import { Composer, type IntegrationStatus } from "@/components/assistant/Composer"
+import { ProjectPicker } from "@/components/assistant/ProjectPicker"
 import {
   readStoredModel,
   storeModel,
@@ -20,6 +21,7 @@ import {
   type AgentDef,
   type ConversationDetail,
   type ConversationSummary,
+  type ProjectOption,
 } from "@/components/assistant/shared"
 
 interface AgentRecord {
@@ -110,6 +112,45 @@ function useIntegrations(): IntegrationStatus[] {
   return items
 }
 
+// The user's projects (ventures) for the project picker and "@" tagging.
+function useProjects(): ProjectOption[] {
+  const [items, setItems] = useState<ProjectOption[]>([])
+  useEffect(() => {
+    fetch("/api/workspace", { cache: "no-store" })
+      .then((r) => (r.ok ? (r.json() as Promise<{ projects?: ProjectOption[] }>) : null))
+      .then((ws) => setItems(ws?.projects?.map((p) => ({ id: p.id, name: p.name })) ?? []))
+      .catch(() => null)
+  }, [])
+  return items
+}
+
+/** Sidebar groups: each project in project order, then "No project" last. Empty groups are not shown. */
+function groupByProject(
+  list: ConversationSummary[],
+  projects: ProjectOption[],
+  filter: string,
+): Array<{ key: string; label: string; items: ConversationSummary[] }> {
+  const visible = list.filter((c) => {
+    if (filter === "all") return true
+    if (filter === "none") return !c.projectId
+    return c.projectId === filter
+  })
+  const groups = new Map<string, { key: string; label: string; items: ConversationSummary[] }>()
+  for (const c of visible) {
+    const key = c.projectId ?? "none"
+    if (!groups.has(key)) {
+      groups.set(key, { key, label: c.projectId ? (c.projectName ?? "Project") : "No project", items: [] })
+    }
+    groups.get(key)!.items.push(c)
+  }
+  const order = projects.map((p) => p.id)
+  const keys = [...groups.keys()]
+    .filter((k) => k !== "none")
+    .sort((a, b) => (order.indexOf(a) === -1 ? 1e9 : order.indexOf(a)) - (order.indexOf(b) === -1 ? 1e9 : order.indexOf(b)))
+  if (groups.has("none")) keys.push("none")
+  return keys.map((k) => groups.get(k)!)
+}
+
 // Vic (chief of staff) is the default agent unless the user picks another one.
 function defaultAgent(agents: AgentDef[]): AgentDef {
   return agents.find((a) => a.id === "vic") ?? agents[0] ?? AGENTS[0]
@@ -120,11 +161,13 @@ function HomeView({
   integrations,
   catalog,
   prefill,
+  projects,
 }: {
   agents: AgentDef[]
   integrations: IntegrationStatus[]
   catalog: ModelCatalog
   prefill: string | null
+  projects: ProjectOption[]
 }) {
   const router = useRouter()
   const [userName, setUserName] = useState("")
@@ -132,6 +175,8 @@ function HomeView({
   const [agentId, setAgentId] = useState<string | null>(null)
   const [text, setText] = useState("")
   const [sending, setSending] = useState(false)
+  // The project for the chat being started. Null = "No project". Sent with the first message.
+  const [projectId, setProjectId] = useState<string | null>(null)
   // Stored in sessionStorage ("dock:model") so the thread picks it up on navigation.
   const [model, setModelState] = useState<ModelRef>(null)
 
@@ -174,7 +219,7 @@ function HomeView({
         const res = await fetch("/api/conversations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: trimmed.slice(0, 60), agent: selected.id }),
+          body: JSON.stringify({ title: trimmed.slice(0, 60), agent: selected.id, projectId }),
         })
         if (!res.ok) throw new Error("create failed")
         const conversation = (await res.json()) as { id: string }
@@ -183,7 +228,7 @@ function HomeView({
         setSending(false)
       }
     },
-    [router, selected.id, sending],
+    [router, selected.id, sending, projectId],
   )
 
   return (
@@ -213,6 +258,9 @@ function HomeView({
             models={catalog.providers}
             model={model}
             onModelChange={setModel}
+            projects={projects}
+            projectId={projectId}
+            onProjectChange={setProjectId}
           />
         </div>
 
@@ -247,6 +295,7 @@ function HomeView({
                     {c.title}
                   </span>
                   <span className="shrink-0 text-[12px]" style={dim}>
+                    {c.projectName ? `${c.projectName} · ` : ""}
                     {c.agent} · {relativeTime(c.updatedAt)}
                   </span>
                 </button>
@@ -265,12 +314,14 @@ function ThreadView({
   integrations,
   catalog,
   conversationId,
+  projects,
 }: {
   agents: AgentDef[]
   roster: AgentRecord[]
   integrations: IntegrationStatus[]
   catalog: ModelCatalog
   conversationId: string
+  projects: ProjectOption[]
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -279,8 +330,14 @@ function ThreadView({
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [detail, setDetail] = useState<ConversationDetail | null>(null)
   const [agentId, setAgentId] = useState<string | null>(null)
+  // Sidebar filter: "all", "none" (No project) or a project id.
+  const [filter, setFilter] = useState<string>("all")
+  const [notice, setNotice] = useState<string | null>(null)
   const agent = agents.find((a) => a.id === agentId) ?? defaultAgent(agents)
   const setAgent = useCallback((a: AgentDef) => setAgentId(a.id), [])
+  const groups = useMemo(() => groupByProject(conversations, projects, filter), [conversations, projects, filter])
+  const currentProjectId = detail?.projectId ?? null
+  const projectEditable = detail ? detail.editable !== false : true
 
   const fetchConversations = useCallback(async () => {
     const res = await fetch("/api/conversations", { cache: "no-store" })
@@ -298,6 +355,26 @@ function ThreadView({
       if (match) setAgent(match)
     },
     [agents, setAgent],
+  )
+
+  // Attaches this chat to a project (or moves it; null = No project). Server checks the project is the user's.
+  const changeProject = useCallback(
+    async (next: string | null) => {
+      setNotice(null)
+      const res = await fetch(`/api/conversations/${conversationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: next }),
+      })
+      const data = (await res.json().catch(() => ({}))) as ConversationDetail & { error?: string }
+      if (!res.ok) {
+        setNotice(data.error ?? "Could not change the project.")
+        return
+      }
+      setDetail(data)
+      await fetchConversations()
+    },
+    [conversationId, fetchConversations],
   )
 
   useEffect(() => {
@@ -329,40 +406,83 @@ function ThreadView({
         >
           <Plus size={14} /> New chat
         </button>
-        <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
-          {conversations.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => router.push(`/assistant?id=${encodeURIComponent(c.id)}`)}
-              className="w-full rounded-[10px] px-3 py-2 text-left hover:bg-white/5"
-              style={{ background: c.id === conversationId ? "var(--surface-2)" : "transparent" }}
-            >
-              <p className="truncate text-[13px]" style={{ color: "var(--ink-2)" }}>
-                {c.title}
-              </p>
-              <p className="text-[11px]" style={dim}>
-                {c.agent} · {relativeTime(c.updatedAt)}
-              </p>
-            </button>
+        <select
+          aria-label="Filter chats by project"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className="mb-3 w-full rounded-[10px] px-3 py-2 text-[13px] outline-none"
+          style={{ background: "var(--surface-0)", border: "1px solid var(--line)", color: "var(--ink-2)" }}
+        >
+          <option value="all">All chats</option>
+          <option value="none">No project</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
           ))}
+        </select>
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
+          {groups.map((group) => (
+            <div key={group.key}>
+              <p className="px-3 pb-1 text-[11px] font-medium uppercase tracking-wide" style={dim}>
+                {group.label}
+              </p>
+              <div className="space-y-0.5">
+                {group.items.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => router.push(`/assistant?id=${encodeURIComponent(c.id)}`)}
+                    className="w-full rounded-[10px] px-3 py-2 text-left hover:bg-white/5"
+                    style={{ background: c.id === conversationId ? "var(--surface-2)" : "transparent" }}
+                  >
+                    <p className="truncate text-[13px]" style={{ color: "var(--ink-2)" }}>
+                      {c.title}
+                    </p>
+                    <p className="text-[11px]" style={dim}>
+                      {c.agent} · {relativeTime(c.updatedAt)}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {conversations.length > 0 && groups.length === 0 && (
+            <p className="px-3 text-[12px]" style={dim}>
+              No chats in this project yet.
+            </p>
+          )}
         </div>
       </aside>
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="flex items-center justify-between px-6 py-3">
-          <h1 className="truncate text-[14px] font-medium" style={ink}>
-            {detail?.title ?? "New chat"}
-          </h1>
+        <div className="flex items-center justify-between gap-3 px-6 py-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <h1 className="truncate text-[14px] font-medium" style={ink}>
+              {detail?.title ?? "New chat"}
+            </h1>
+            <ProjectPicker
+              projects={projects}
+              value={currentProjectId}
+              onChange={(id) => changeProject(id).catch(() => null)}
+              disabled={!projectEditable || !detail}
+              disabledHint="Older chats stay under No project"
+            />
+          </div>
           <button
             type="button"
             onClick={() => fetchDetail(conversationId).catch(() => null)}
-            className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] hover:bg-white/5"
+            className="flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] hover:bg-white/5"
             style={dim}
           >
             <RotateCcw size={12} /> Refresh
           </button>
         </div>
+        {notice && (
+          <p className="px-6 pb-2 text-[12px]" style={{ color: "#f59e0b" }}>
+            {notice}
+          </p>
+        )}
         <ChatThread
           key={`${conversationId}-${agent.id}-${detail?.messages.length ?? 0}`}
           conversationId={conversationId}
@@ -378,6 +498,10 @@ function ThreadView({
             await fetchConversations()
             await fetchDetail(conversationId)
           }}
+          projects={projects}
+          projectId={currentProjectId}
+          onProjectChange={(id) => changeProject(id).catch(() => null)}
+          projectEditable={projectEditable && Boolean(detail)}
         />
       </section>
 
@@ -427,6 +551,7 @@ function AssistantInner() {
   const { agents, roster } = useAgents()
   const integrations = useIntegrations()
   const catalog = useModelCatalog()
+  const projects = useProjects()
   return (
     <div className="p-2">
       <div
@@ -434,9 +559,16 @@ function AssistantInner() {
         style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}
       >
         {id ? (
-          <ThreadView agents={agents} roster={roster} integrations={integrations} catalog={catalog} conversationId={id} />
+          <ThreadView
+            agents={agents}
+            roster={roster}
+            integrations={integrations}
+            catalog={catalog}
+            conversationId={id}
+            projects={projects}
+          />
         ) : (
-          <HomeView agents={agents} integrations={integrations} catalog={catalog} prefill={prefill} />
+          <HomeView agents={agents} integrations={integrations} catalog={catalog} prefill={prefill} projects={projects} />
         )}
       </div>
     </div>

@@ -11,9 +11,37 @@ import {
   type ResolvedModel,
 } from "@/lib/inference"
 import { appendEvent, appendMessage, ensureConversation, finishRun, startRun } from "@/lib/conversations"
+import {
+  appendAssistantMessage,
+  assistantContext,
+  getAssistantConversation,
+  listAssistantMessages,
+  type AssistantContext,
+} from "@/lib/assistant-store"
 import { createShipyardCapture } from "@/lib/inference/shipyard-capture"
 import { CHIEF_RUNTIME_AGENT } from "@/lib/tenancy"
 import { chiefSystemPrompt } from "@/lib/onboarding-server"
+
+const HISTORY_TURNS = 20
+const HISTORY_CHARS = 12000
+
+/** Recent turns of an assistant chat, oldest first, within a fixed budget. Fails open to no history. */
+async function priorTurns(ctx: AssistantContext, conversationId: string): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
+  const messages = await listAssistantMessages(ctx, conversationId).catch(() => [])
+  const turns = messages
+    .filter((m) => (m.role === "user" || m.role === "assistant") && m.content.trim().length > 0)
+    .slice(-HISTORY_TURNS)
+    .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }))
+  const kept: typeof turns = []
+  let total = 0
+  for (let i = turns.length - 1; i >= 0; i--) {
+    total += turns[i].content.length
+    if (total > HISTORY_CHARS) break
+    kept.unshift(turns[i])
+  }
+  return kept
+}
+
 
 interface IncomingMessage {
   id?: string
@@ -84,6 +112,12 @@ export async function POST(request: Request) {
     taskId,
   })
 
+  // Assistant chats live in Supabase and carry a project. Older file chats keep the file path, with no project.
+  const ctx = await assistantContext()
+  const assistantChat = ctx ? await getAssistantConversation(ctx, conversationId) : null
+  const projectId = assistantChat?.projectId ?? null
+  const history = assistantChat && ctx ? await priorTurns(ctx, conversationId) : []
+
   const resolvedModel = override ?? resolveModel(agent, capture)
 
   const run = await startRun(conversationId, {
@@ -97,16 +131,25 @@ export async function POST(request: Request) {
     runId: run.id,
     agent,
     summary: `${agent} started a streamed run via ${resolvedModel ? resolvedModel.label : runtime.name}`,
-    data: { runtime: resolvedModel ? `inference:${resolvedModel.label}` : runtime.name, taskId },
+    data: { runtime: resolvedModel ? `inference:${resolvedModel.label}` : runtime.name, taskId, projectId },
   })
 
-  await appendMessage(conversationId, {
-    role: "user",
-    text: prompt,
-    agent,
-    timestamp: Date.now(),
-    runId: run.id,
-  })
+  if (assistantChat && ctx) {
+    await appendAssistantMessage(ctx, conversationId, {
+      role: "user",
+      content: prompt,
+      agent,
+      meta: { runId: run.id, projectId },
+    })
+  } else {
+    await appendMessage(conversationId, {
+      role: "user",
+      text: prompt,
+      agent,
+      timestamp: Date.now(),
+      runId: run.id,
+    })
+  }
 
   await appendEvent(conversationId, {
     type: "message.user",
@@ -125,8 +168,14 @@ export async function POST(request: Request) {
         let reply = ""
 
         // Chief of Staff only: saved onboarding profile and enabled rules (null when none saved).
-        const system = agent === CHIEF_RUNTIME_AGENT ? await chiefSystemPrompt() : null
-        const result = await inferenceStream({ message: prompt, agent, override: resolvedModel, system: system ?? undefined })
+        const system = agent === CHIEF_RUNTIME_AGENT ? await chiefSystemPrompt(projectId) : null
+        const result = await inferenceStream({
+          message: prompt,
+          agent,
+          override: resolvedModel,
+          system: system ?? undefined,
+          history: history.length > 0 ? history : undefined,
+        })
         let telemetry: ReturnType<typeof collectRunTelemetry> = null
         if (result) {
           // Real token streaming through the inference layer
@@ -153,13 +202,22 @@ export async function POST(request: Request) {
         writer.write({ type: "text-end", id: textId })
         writer.write({ type: "finish-step" })
 
-        await appendMessage(conversationId, {
-          role: "assistant",
-          text: reply,
-          agent,
-          timestamp: Date.now(),
-          runId: run.id,
-        })
+        if (assistantChat && ctx) {
+          await appendAssistantMessage(ctx, conversationId, {
+            role: "assistant",
+            content: reply,
+            agent,
+            meta: { runId: run.id, projectId },
+          })
+        } else {
+          await appendMessage(conversationId, {
+            role: "assistant",
+            text: reply,
+            agent,
+            timestamp: Date.now(),
+            runId: run.id,
+          })
+        }
         await appendEvent(conversationId, {
           type: "message.assistant",
           runId: run.id,

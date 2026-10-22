@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server"
-import { createConversation, listConversations } from "@/lib/conversations"
+import { createConversation } from "@/lib/conversations"
+import { assistantContext, createAssistantConversation, projectInWorkspace } from "@/lib/assistant-store"
+import { detailForUser, listForUser } from "@/lib/assistant-api"
+
+export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const query = url.searchParams.get("q") ?? undefined
-  const conversations = await listConversations(query)
+  const conversations = await listForUser(await assistantContext(), query)
   return NextResponse.json(conversations)
 }
 
@@ -14,7 +18,19 @@ export async function POST(request: Request) {
       title?: string
       agent?: string
       project?: string
+      projectId?: string | null
       taskId?: string
+    }
+    const ctx = await assistantContext()
+    if (ctx && !body.taskId) {
+      let projectId: string | null = null
+      if (body.projectId) {
+        const project = await projectInWorkspace(ctx, body.projectId)
+        if (!project) return NextResponse.json({ error: "Project not found" }, { status: 400 })
+        projectId = project.id
+      }
+      const created = await createAssistantConversation(ctx, { title: body.title, agent: body.agent, projectId })
+      return NextResponse.json(created, { status: 201 })
     }
     const conversation = await createConversation(body)
     return NextResponse.json(conversation, { status: 201 })

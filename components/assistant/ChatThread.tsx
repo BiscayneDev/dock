@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useChat, type UIMessage } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
 import { Copy, Check, RotateCcw, ChevronRight } from "lucide-react"
-import { getText, type AgentDef } from "./shared"
+import { getText, type AgentDef, type ProjectOption } from "./shared"
 import { TraceWaterfall } from "@/components/runs/TraceWaterfall"
 import type { ConversationEvent, ConversationRun } from "@/lib/conversations"
 import { Composer, type IntegrationStatus } from "./Composer"
@@ -134,6 +134,10 @@ export function ChatThread({
   onPendingSent,
   integrations,
   catalog,
+  projects,
+  projectId,
+  onProjectChange,
+  projectEditable,
 }: {
   conversationId: string
   agent: AgentDef
@@ -145,6 +149,10 @@ export function ChatThread({
   onPendingSent?: () => void
   integrations: IntegrationStatus[]
   catalog: ModelCatalog
+  projects?: ProjectOption[]
+  projectId?: string | null
+  onProjectChange?: (projectId: string | null) => void
+  projectEditable?: boolean
 }) {
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -282,6 +290,10 @@ export function ChatThread({
           models={catalog.providers}
           model={model}
           onModelChange={setModel}
+          projects={projects}
+          projectId={projectId}
+          onProjectChange={onProjectChange}
+          projectEditable={projectEditable}
         />
       </div>
     </div>

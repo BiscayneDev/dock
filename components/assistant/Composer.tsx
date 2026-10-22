@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react"
 import { ChevronDown, Plus, ArrowUp, Paperclip, X, Sparkles, Plug } from "lucide-react"
-import type { AgentDef } from "./shared"
+import type { AgentDef, ProjectOption } from "./shared"
 import { ModelPicker, type ModelRef, type ProviderModels } from "./ModelPicker"
+import { ProjectPicker } from "./ProjectPicker"
 
 export interface IntegrationStatus {
   id: string
@@ -160,6 +161,10 @@ export function Composer({
   models,
   model,
   onModelChange,
+  projects = [],
+  projectId = null,
+  onProjectChange,
+  projectEditable = true,
 }: {
   value: string
   onChange: (v: string) => void
@@ -177,8 +182,35 @@ export function Composer({
   models: ProviderModels[]
   model: ModelRef
   onModelChange: (ref: ModelRef) => void
+  projects?: ProjectOption[]
+  projectId?: string | null
+  /** Attaches this conversation to a project (null = "No project"). Omit to hide the picker. */
+  onProjectChange?: (projectId: string | null) => void
+  /** False for older chats, which cannot be moved between projects. */
+  projectEditable?: boolean
 }) {
   const fileInput = useRef<HTMLInputElement>(null)
+  // "@" tagging: an open mention is the text from "@" to the caret. Choosing a project removes it.
+  const [mention, setMention] = useState<{ query: string; start: number; end: number } | null>(null)
+  const canTag = Boolean(onProjectChange) && projectEditable
+  const matches = mention
+    ? projects.filter((p) => p.name.toLowerCase().includes(mention.query.toLowerCase())).slice(0, 8)
+    : []
+
+  function detectMention(text: string, caret: number) {
+    if (!canTag) return setMention(null)
+    const before = text.slice(0, caret)
+    const found = /(^|\s)@([^\s@]*)$/.exec(before)
+    setMention(found ? { query: found[2], start: caret - found[2].length - 1, end: caret } : null)
+  }
+
+  function pickProject(project: ProjectOption | null) {
+    if (!mention) return
+    onChange(value.slice(0, mention.start) + value.slice(mention.end))
+    setMention(null)
+    onProjectChange?.(project?.id ?? null)
+  }
+
   return (
     <form
       onSubmit={(e) => {
@@ -188,7 +220,34 @@ export function Composer({
       className="w-full rounded-[18px] p-2"
       style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}
     >
-      <div className="rounded-[14px] px-4 pb-3 pt-4" style={{ background: "var(--surface-0)", border: "1px solid var(--line)" }}>
+      <div className="relative rounded-[14px] px-4 pb-3 pt-4" style={{ background: "var(--surface-0)", border: "1px solid var(--line)" }}>
+        {mention && canTag && (
+          <div className={`${pop} bottom-full left-2 right-2 mb-2 p-1`} style={popStyle} data-testid="mention-list">
+            <p className="px-3 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wide" style={{ color: "var(--ink-3)" }}>
+              Tag a project
+            </p>
+            {matches.length > 0 ? (
+              matches.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    pickProject(p)
+                  }}
+                  className="flex w-full items-center gap-2 rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-white/5"
+                  style={{ color: "var(--ink)" }}
+                >
+                  @{p.name}
+                </button>
+              ))
+            ) : (
+              <p className="px-3 pb-2 text-[12px]" style={{ color: "var(--ink-3)" }}>
+                No project matches.
+              </p>
+            )}
+          </div>
+        )}
         {attachments.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-2">
             {attachments.map((a, i) => (
@@ -207,8 +266,23 @@ export function Composer({
         )}
         <textarea
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            onChange(e.target.value)
+            detectMention(e.target.value, e.target.selectionStart ?? e.target.value.length)
+          }}
           onKeyDown={(e) => {
+            if (mention && canTag) {
+              if (e.key === "Escape") {
+                e.preventDefault()
+                setMention(null)
+                return
+              }
+              if (e.key === "Enter" && !e.shiftKey && matches.length > 0) {
+                e.preventDefault()
+                pickProject(matches[0])
+                return
+              }
+            }
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault()
               onSubmit()
@@ -243,6 +317,15 @@ export function Composer({
             </button>
             <AgentPicker agents={agents} value={agent} onChange={onAgentChange} />
             <ModelPicker providers={models} value={model} onChange={onModelChange} />
+            {onProjectChange && (
+              <ProjectPicker
+                projects={projects}
+                value={projectId}
+                onChange={onProjectChange}
+                disabled={!projectEditable}
+                disabledHint="Older chats stay under No project"
+              />
+            )}
           </div>
           <button
             type="submit"

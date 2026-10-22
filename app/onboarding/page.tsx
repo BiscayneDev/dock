@@ -44,6 +44,7 @@ type Draft = {
 }
 type Answered = { choice: string | null; other: string | null; skipped: boolean }
 type ServerState = {
+  workspaceId?: string
   chief: { id: string; displayName: string } | null
   profile: null | {
     goal: string | null
@@ -58,7 +59,24 @@ type ServerState = {
   }
   rules: Array<{ presetKey: string | null; text: string; enabled: boolean }>
 }
-type Launched = { projectId: string; name: string }
+type Launched = { projectId: string; name: string; conversationId: string | null }
+
+// Venture drafts survive a refresh: kept in this browser only, per workspace. Cleared on Confirm.
+const DRAFT_VERSION = 1
+function draftKey(workspaceId: string): string {
+  return `dock:venture-draft:v${DRAFT_VERSION}:${workspaceId}`
+}
+function readDraft(workspaceId: string): { draft: Draft; step: number } | null {
+  try {
+    const raw = window.localStorage.getItem(draftKey(workspaceId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { draft?: Draft; step?: number }
+    if (!parsed.draft || typeof parsed.draft !== "object") return null
+    return { draft: parsed.draft, step: typeof parsed.step === "number" ? parsed.step : 0 }
+  } catch {
+    return null
+  }
+}
 
 // Recommended defaults shown before a value is saved. Other questions have no default.
 const DEFAULTS: Record<string, string> = { source: "blank", direction: "carry_on" }
@@ -142,6 +160,7 @@ function OnboardingFlow() {
   const [error, setError] = useState<string | null>(null)
   const [launched, setLaunched] = useState<Launched | null>(null)
   const [launchStage, setLaunchStage] = useState(0)
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null)
 
   const key: StepKey = order[step]
 
@@ -165,7 +184,15 @@ function OnboardingFlow() {
             return
           }
           setChiefName(s.chief.displayName)
-          setDraft(EMPTY_DRAFT)
+          // Restore the venture draft saved in this browser (if any) so a refresh keeps the answers.
+          const saved = s.workspaceId ? readDraft(s.workspaceId) : null
+          if (saved) {
+            setDraft(saved.draft)
+            setStep(Math.min(Math.max(saved.step, 0), order.length - 1))
+          } else {
+            setDraft(EMPTY_DRAFT)
+          }
+          setWorkspaceId(s.workspaceId ?? null)
           setLoaded(true)
           return
         }
@@ -182,14 +209,27 @@ function OnboardingFlow() {
     }
   }, [router, venture])
 
-  // After a venture is created: show the launch steps, then open the assistant.
+  // Venture draft: saved on every change until Confirm (then cleared in confirmVenture).
+  useEffect(() => {
+    if (!venture || !loaded || !workspaceId || launched) return
+    try {
+      window.localStorage.setItem(draftKey(workspaceId), JSON.stringify({ draft, step }))
+    } catch {
+      // Storage full or blocked: the draft just is not kept across a refresh.
+    }
+  }, [venture, loaded, workspaceId, launched, draft, step])
+
+  // After a venture is created: show the launch steps, then open its chat (the Chief's introduction).
   useEffect(() => {
     if (!launched) return
+    const next = launched.conversationId
+      ? `/assistant?id=${encodeURIComponent(launched.conversationId)}`
+      : `/assistant?prefill=${encodeURIComponent(`Working on ${launched.name}: `)}`
     const timers = [
       setTimeout(() => setLaunchStage(1), 500),
       setTimeout(() => setLaunchStage(2), 1000),
       setTimeout(() => setLaunchStage(3), 1500),
-      setTimeout(() => router.replace(`/assistant?prefill=${encodeURIComponent(`Working on ${launched.name}: `)}`), 2100),
+      setTimeout(() => router.replace(next), 2100),
     ]
     return () => timers.forEach(clearTimeout)
   }, [launched, router])
@@ -256,7 +296,13 @@ function OnboardingFlow() {
       ? { skipped: true }
       : { items: draft.rules.map((r) => ({ presetKey: r.presetKey, text: r.text, enabled: r.enabled })) }
     const data = (await post({ action: "venture", steps, rules })) as unknown as Launched
-    setLaunched({ projectId: data.projectId, name: data.name })
+    // Confirmed: the saved draft is no longer needed.
+    try {
+      if (workspaceId) window.localStorage.removeItem(draftKey(workspaceId))
+    } catch {
+      // Nothing to clear if storage is blocked.
+    }
+    setLaunched({ projectId: data.projectId, name: data.name, conversationId: data.conversationId ?? null })
   }
 
   async function saveStep() {

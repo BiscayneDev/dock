@@ -6,6 +6,11 @@ export interface ConversationSummary {
   agent: string
   updatedAt: string
   latestPreview: string
+  /** Null = "No project". */
+  projectId?: string | null
+  projectName?: string | null
+  /** False for older file-based chats: they stay under "No project" and cannot be moved. */
+  editable?: boolean
 }
 
 export interface ConversationDetail extends ConversationSummary {
@@ -17,6 +22,12 @@ export interface ConversationDetail extends ConversationSummary {
     timestamp: number
     runId?: string
   }>
+}
+
+/** A project the user can attach a conversation to (from /api/workspace). */
+export interface ProjectOption {
+  id: string
+  name: string
 }
 
 export interface AgentDef {

@@ -84,13 +84,19 @@ export async function inferenceStream({
   agent,
   system,
   override,
-}: InferenceChatParams & { override?: ResolvedModel | null }) {
+  history,
+}: InferenceChatParams & {
+  override?: ResolvedModel | null
+  /** Earlier turns of the same conversation, oldest first. The new message is appended after them. */
+  history?: Array<{ role: "user" | "assistant"; content: string }>
+}) {
   // A per-request override (chosen in the composer) wins over the agent default.
   const resolved = override ?? resolveModel(agent)
   if (!resolved) return null
+  const turns = history && history.length > 0 ? [...history, { role: "user" as const, content: message }] : null
   return streamText({
     model: resolved.model,
-    prompt: message,
+    ...(turns ? { messages: turns } : { prompt: message }),
     ...(system ? { system } : {}),
   })
 }

@@ -9,7 +9,17 @@ import {
   sessionClient,
   validateAgentName,
 } from "@/lib/tenancy"
-import { VENTURE_ANSWER_STEPS, answerUpdate, loadProfile, loadRules, parseRules, ventureName } from "@/lib/onboarding-server"
+import {
+  VENTURE_ANSWER_STEPS,
+  answerUpdate,
+  loadProfile,
+  loadRules,
+  loadVentureProfile,
+  parseRules,
+  ventureName,
+} from "@/lib/onboarding-server"
+import { createAssistantConversation, appendAssistantMessage, type AssistantContext } from "@/lib/assistant-store"
+import { ventureIntro } from "@/lib/venture-intro"
 
 export const dynamic = "force-dynamic"
 
@@ -18,7 +28,7 @@ async function context() {
   const user = await currentUser(supabase)
   if (!user) return { error: NextResponse.json({ error: "Not signed in" }, { status: 401 }) }
   const ws = await ensureWorkspace(supabase, user)
-  return { supabase, workspaceId: ws.id }
+  return { supabase, workspaceId: ws.id, userId: user.id }
 }
 
 export async function GET() {
@@ -122,7 +132,32 @@ export async function POST(request: Request) {
         .insert(rules.map((r) => ({ workspace_id: workspaceId, project_id: projectId, ...r })))
       if (rulesErr) return undo("Could not save your rules.")
     }
-    return NextResponse.json({ ok: true, projectId, name: project.name as string }, { status: 201 })
+    // The Chief opens the new project's chat with an introduction written from the saved answers.
+    // Fails soft: the venture exists either way; conversationId is null when the chat could not be created.
+    let conversationId: string | null = null
+    try {
+      const [venture, ventureRules] = await Promise.all([
+        loadVentureProfile(supabase, projectId),
+        loadRules(supabase, workspaceId, projectId),
+      ])
+      const intro = await ventureIntro({ name: project.name as string, profile: venture, rules: ventureRules })
+      const actx: AssistantContext = { supabase, userId: ctx.userId, workspaceId }
+      const conversation = await createAssistantConversation(actx, {
+        title: project.name as string,
+        agent: CHIEF_RUNTIME_AGENT,
+        projectId,
+      })
+      await appendAssistantMessage(actx, conversation.id, {
+        role: "assistant",
+        content: intro,
+        agent: CHIEF_RUNTIME_AGENT,
+        meta: { intro: true, projectId },
+      })
+      conversationId = conversation.id
+    } catch {
+      conversationId = null
+    }
+    return NextResponse.json({ ok: true, projectId, name: project.name as string, conversationId }, { status: 201 })
   }
 
   if (action === "check-name" || action === "chief") {
