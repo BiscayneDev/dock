@@ -5,6 +5,10 @@
 
 export type RunMode = "plan" | "build" | "explore";
 
+// DRIFT WARNING: lib/tool-permissions.ts also exports a modeForColumn. This file's
+// modeForColumn/resolveRunMode is canonical; tool-permissions' modeForRun is now unused in
+// production but kept because node tests cover it. Update both together if modes change.
+
 const RUN_MODES: readonly RunMode[] = ["plan", "build", "explore"];
 
 const COLUMN_MODES: Record<string, RunMode> = {

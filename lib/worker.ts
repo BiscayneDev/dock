@@ -36,7 +36,7 @@ import {
   type MoneyExecutor,
 } from "@/lib/task-runs"
 import { checkpointData, continuationPrompt } from "@/lib/run-resume"
-import { PLAN_MODE_INSTRUCTION } from "@/lib/tool-permissions"
+import { EXPLORE_MODE_INSTRUCTION, PLAN_MODE_INSTRUCTION } from "@/lib/tool-permissions"
 import { resolveRunMode } from "@/lib/agent-mode"
 
 // Cloud worker runner (P2). Each tick claims up to N runs and works them in order within a time budget.
@@ -216,12 +216,15 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
   const system = run.agentKey === (await chiefKey(admin, run.workspaceId)) ? await chiefPromptFor(admin, run) : null
 
   // Kanban state gates permissions: plan mode forbids file/command tools in the system prompt and
-  // marks the output as a plan (enrichment), never a finished deliverable.
+  // marks the output as a plan (enrichment), never a finished deliverable. Explore mode is
+  // read-only research. Build mode (the default deliverable path) gets no extra instruction.
   // payload.mode is the single source of truth at runtime (set at enqueue time); column mapping is
   // resolveRunMode's fallback for legacy runs without a mode.
   const mode = resolveRunMode(run.payload)
   const isPlan = mode === "plan"
-  const effectiveSystem = [system, isPlan ? PLAN_MODE_INSTRUCTION : null].filter(Boolean).join("\n\n") || null
+  const isExplore = mode === "explore"
+  const modeInstruction = isPlan ? PLAN_MODE_INSTRUCTION : isExplore ? EXPLORE_MODE_INSTRUCTION : null
+  const effectiveSystem = [system, modeInstruction].filter(Boolean).join("\n\n") || null
 
   await heartbeat(admin, run.id, workerId, DEFAULT_LEASE_SECONDS)
   try {
@@ -255,6 +258,13 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
         .update({ payload: { ...run.payload, mode: "plan", planOutput: true }, updated_at: new Date().toISOString() })
         .eq("id", run.id)
       // Never fails the run: the output is already stored.
+      void payloadError
+    } else if (isExplore) {
+      // Explore mode: mark the payload so the audit trail shows the run was read-only research.
+      const { error: payloadError } = await admin
+        .from("task_runs")
+        .update({ payload: { ...run.payload, mode: "explore" }, updated_at: new Date().toISOString() })
+        .eq("id", run.id)
       void payloadError
     }
     // Checkpoint BEFORE finishing: if the run is retried (lease loss, retry after failure),

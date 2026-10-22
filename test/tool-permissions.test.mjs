@@ -56,3 +56,11 @@ test("modeForRun ignores an invalid payload.mode", () => {
   assert.equal(modeForRun({ mode: "yolo", column: "Review" }), "build");
   assert.equal(modeForRun({ mode: 7 }), "plan");
 });
+
+import { EXPLORE_MODE_INSTRUCTION } from "../lib/tool-permissions.ts";
+
+test("EXPLORE_MODE_INSTRUCTION exists and is non-trivial", () => {
+  assert.equal(typeof EXPLORE_MODE_INSTRUCTION, "string");
+  assert.ok(EXPLORE_MODE_INSTRUCTION.length > 20, "non-trivial length");
+  assert.match(EXPLORE_MODE_INSTRUCTION, /READ-ONLY|research/i);
+});

@@ -79,3 +79,7 @@ export function modeForRun(payload: Record<string, unknown> | null | undefined):
 /** System-prompt suffix that gates plan mode: no file writes, no command execution. */
 export const PLAN_MODE_INSTRUCTION =
   "PLAN MODE: you may not modify files or execute commands; produce a plan only";
+
+/** System-prompt suffix that gates explore mode: read-only research, no mutations. */
+export const EXPLORE_MODE_INSTRUCTION =
+  "READ-ONLY RESEARCH MODE: you may not modify files or execute commands. Gather and report findings only.";

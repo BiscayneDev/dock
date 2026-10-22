@@ -14,7 +14,7 @@ import {
   proposedActionFromPayload,
 } from "@/lib/task-runs"
 import { allowedDeviceCompletion, deviceWorkerId, DEVICE_COMPLETE_STATUSES } from "@/lib/device-rules"
-import { PLAN_MODE_INSTRUCTION } from "@/lib/tool-permissions"
+import { EXPLORE_MODE_INSTRUCTION, PLAN_MODE_INSTRUCTION } from "@/lib/tool-permissions"
 import { resolveRunMode } from "@/lib/agent-mode"
 
 // Home-node run actions (P2). The device holds the lease; the server does the model call and the bookkeeping,
@@ -66,8 +66,10 @@ export async function inferForDevice(
   const system = run.agentKey === CHIEF_RUNTIME_AGENT ? await chiefPromptFor(admin, run) : null
   // payload.mode is the single source of truth at runtime (set at enqueue time); resolveRunMode
   // falls back to column mapping for legacy runs without a mode.
-  const planMode = resolveRunMode(run.payload) === "plan"
-  const effectiveSystem = [system, planMode ? PLAN_MODE_INSTRUCTION : null].filter(Boolean).join("\n\n") || null
+  const planMode = resolveRunMode(run.payload)
+  const modeInstruction =
+    planMode === "plan" ? PLAN_MODE_INSTRUCTION : planMode === "explore" ? EXPLORE_MODE_INSTRUCTION : null
+  const effectiveSystem = [system, modeInstruction].filter(Boolean).join("\n\n") || null
 
   const remainingMs = 150_000
   try {
