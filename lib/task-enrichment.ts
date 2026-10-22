@@ -30,6 +30,13 @@ function fallbackEnrichment(task: Pick<Task, "title" | "description" | "priority
   if (/\b(map|route|geocod|location|nearby|address)\b/.test(text)) {
     toolNeeds.push("geocode addresses or map a route")
   }
+  // GTM: prospecting and company enrichment route to the enrichment services.
+  if (/\b(prospect|outreach|leads|gtm|icp|account list|decision maker|target account|b2b|recruit|work email|contacts?)\b/.test(text)) {
+    toolNeeds.push("find decision makers at target accounts with their work emails")
+  }
+  if (/\b(company profile|firmographics|enrich compan|company data|company overview|company research)\b/.test(text)) {
+    toolNeeds.push("company profile and firmographics for a domain")
+  }
   return {
     enrichedTitle: title,
     enrichedDescription: [
@@ -63,7 +70,7 @@ export async function enrichTaskBrief(task: Pick<Task, "title" | "description" |
     `Priority: ${task.priority}`,
     `Assignee: ${task.assignee}`,
     `Tags: ${(task.tags ?? []).join(", ")}`,
-    "Also return a toolNeeds array: 0-5 short natural-language phrases naming the PAID external tools or data this task needs (e.g. \"web search for competitor funding data\", \"scrape the competitor landing pages\", \"geocode addresses\"). Empty array if the task needs none.",
+    "Also return a toolNeeds array: 0-5 short natural-language phrases naming the PAID external tools or data this task needs (e.g. \"web search for competitor funding data\", \"scrape the competitor landing pages\", \"geocode addresses\", \"find decision makers at target accounts with their work emails\" for GTM/prospecting tasks, \"company profile and firmographics for a domain\" for company enrichment). Empty array if the task needs none.",
   ].join("\n")
 
   try {
