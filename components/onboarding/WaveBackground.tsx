@@ -13,7 +13,9 @@ export const WAVE_POSTER = "/onboarding-wave-poster.jpg"
 
 type Motion = "unknown" | "full" | "reduced"
 
-export function WaveBackground() {
+// `contained` keeps the loop inside the nearest positioned parent (for example a settings panel)
+// instead of covering the viewport. The parent must be `relative` and have `overflow-hidden`.
+export function WaveBackground({ contained = false }: { contained?: boolean } = {}) {
   const [motion, setMotion] = useState<Motion>("unknown")
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
@@ -38,7 +40,11 @@ export function WaveBackground() {
   }, [motion])
 
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden" style={{ background: "var(--surface-0)" }}>
+    <div
+      aria-hidden
+      className={`pointer-events-none ${contained ? "absolute" : "fixed"} inset-0 z-0 overflow-hidden`}
+      style={{ background: "var(--surface-0)" }}
+    >
       {motion === "full" ? (
         <video
           ref={videoRef}

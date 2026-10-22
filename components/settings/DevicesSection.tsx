@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { WaveBackground } from "@/components/onboarding/WaveBackground"
 
 // Settings: paired devices (home node). Shows online/offline from the last heartbeat, starts pairing with a
 // one-time code, and revokes. Token hashes never reach the browser; the plaintext token is only on the device.
@@ -186,16 +187,23 @@ export default function DevicesSection() {
           </div>
 
           {pairing && (
-            <div className="space-y-2 rounded-md p-3" style={{ backgroundColor: "#0a0a0f", border: "1px solid #1a1a2e" }}>
-              <p className="text-xs text-zinc-400">
-                Pairing code (single use, expires in {Math.round(pairing.ttlSeconds / 60)} minutes):
-              </p>
-              <p className="font-mono text-lg tracking-widest text-white">{formatCode(pairing.code)}</p>
-              <p className="text-xs text-zinc-400">Run this on the machine that should run home tasks, from your Dock checkout:</p>
-              <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded bg-black/40 p-2 text-[11px] text-zinc-300">{command}</pre>
-              <p className="text-[11px] text-zinc-500">
-                Then start it with <span className="font-mono">node node/dock-node/bin/dock-node.mjs run</span>. The code cannot be shown again.
-              </p>
+            // Pairing launch panel: the wave loop sits behind a dark scrim; the code card is solid so the code stays readable.
+            <div className="relative isolate overflow-hidden rounded-md" style={{ border: "1px solid #1a1a2e" }}>
+              <WaveBackground contained />
+              <div
+                className="relative z-10 m-3 min-w-0 space-y-2 rounded-md p-3 sm:m-4 sm:p-4"
+                style={{ backgroundColor: "var(--surface-1)", border: "1px solid #1a1a2e" }}
+              >
+                <p className="text-xs text-zinc-300">
+                  Pairing code (single use, expires in {Math.round(pairing.ttlSeconds / 60)} minutes):
+                </p>
+                <p className="break-all font-mono text-lg tracking-widest text-white">{formatCode(pairing.code)}</p>
+                <p className="text-xs text-zinc-300">Run this on the machine that should run home tasks, from your Dock checkout:</p>
+                <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded bg-black/60 p-2 text-[11px] text-zinc-200">{command}</pre>
+                <p className="text-[11px] text-zinc-400">
+                  Then start it with <span className="font-mono">node node/dock-node/bin/dock-node.mjs run</span>. The code cannot be shown again.
+                </p>
+              </div>
             </div>
           )}
 
