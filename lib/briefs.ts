@@ -216,3 +216,45 @@ append exactly one fenced block tagged brief, containing JSON and nothing else:
 Rules: deliverables are concrete and checkable. Keep budget_cents as small as the job allows. Do not
 claim the work is done or started. The owner approves the brief before anything runs. If the request is
 a question, answer it and do not emit a brief.`
+
+// ── Project monthly spend cap ───────────────────────────────────────────────
+
+export const MAX_MONTHLY_CAP_CENTS = 1_000_000
+
+/** Start of the UTC calendar month containing `now`. The cap window resets here. */
+export function monthStartIso(now: Date): string {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString()
+}
+
+/**
+ * Validates a cap set by the owner. null clears the cap (no limit). Otherwise a whole number of cents, 0 to $10,000.
+ * Returns the cents or an error string.
+ */
+export function validateCapCents(raw: unknown): number | null | string {
+  if (raw === null) return null
+  if (typeof raw !== "number" || !Number.isInteger(raw)) return "capCents must be a whole number of cents or null"
+  if (raw < 0 || raw > MAX_MONTHLY_CAP_CENTS) return `capCents must be between 0 and ${MAX_MONTHLY_CAP_CENTS}`
+  return raw
+}
+
+export interface CapCheck {
+  ok: boolean
+  capCents: number | null
+  /** Spend already recorded this month (finished runs). */
+  spentCents: number
+  /** Budgets of approved and running briefs, including the one being checked. */
+  reservedCents: number
+  /** Cap minus spent and reserved. Null when there is no cap. Negative means over. */
+  remainingCents: number | null
+}
+
+/**
+ * Monthly cap check. Run after the brief is flipped to approved, so its own budget is inside `reservedCents`.
+ * No cap always passes. Otherwise spent + reserved must fit under the cap.
+ */
+export function checkMonthlyCap(input: { capCents: number | null; spentCents: number; reservedCents: number }): CapCheck {
+  const { capCents, spentCents, reservedCents } = input
+  if (capCents === null) return { ok: true, capCents, spentCents, reservedCents, remainingCents: null }
+  const remainingCents = capCents - spentCents - reservedCents
+  return { ok: remainingCents >= 0, capCents, spentCents, reservedCents, remainingCents }
+}
