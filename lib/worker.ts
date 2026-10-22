@@ -39,6 +39,7 @@ import { checkpointData, continuationPrompt } from "@/lib/run-resume"
 import { EXPLORE_MODE_INSTRUCTION, PLAN_MODE_INSTRUCTION } from "@/lib/tool-permissions"
 import { resolveRunMode } from "@/lib/agent-mode"
 import { profile, skillInjectionBlock } from "@/lib/agent-templates"
+import { PLAN_GRAPH_INSTRUCTION } from "@/lib/plan-graph"
 import { topSkills, type ParsedSkill } from "@/lib/skills-skillmd"
 import { readFile } from "fs/promises"
 import { join } from "path"
@@ -259,7 +260,9 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
     const skills = await loadInjectableSkills()
     skillBlock = skillInjectionBlock(skills, prompt, (s, q, n) => topSkills(s as ParsedSkill[], q, n))
   }
-  const systemParts = [system, modeInstruction]
+  // Plan mode also asks for a machine-readable plan graph the review card can parse.
+  const graphInstruction = isPlan ? PLAN_GRAPH_INSTRUCTION : null
+  const systemParts = [system, modeInstruction, graphInstruction]
   if (skillBlock) systemParts.push(`SKILLS RELEVANT TO THIS RUN (descriptions only):\n${skillBlock}`)
   const effectiveSystem = systemParts.filter(Boolean).join("\n\n") || null
 

@@ -16,6 +16,7 @@ import {
 import { allowedDeviceCompletion, deviceWorkerId, DEVICE_COMPLETE_STATUSES } from "@/lib/device-rules"
 import { EXPLORE_MODE_INSTRUCTION, PLAN_MODE_INSTRUCTION } from "@/lib/tool-permissions"
 import { resolveRunMode } from "@/lib/agent-mode"
+import { PLAN_GRAPH_INSTRUCTION } from "@/lib/plan-graph"
 
 // Home-node run actions (P2). The device holds the lease; the server does the model call and the bookkeeping,
 // so cloud and home runs share one budget ledger (task_runs.spent_cents) and one money gate.
@@ -69,7 +70,8 @@ export async function inferForDevice(
   const planMode = resolveRunMode(run.payload)
   const modeInstruction =
     planMode === "plan" ? PLAN_MODE_INSTRUCTION : planMode === "explore" ? EXPLORE_MODE_INSTRUCTION : null
-  const effectiveSystem = [system, modeInstruction].filter(Boolean).join("\n\n") || null
+  const graphInstruction = planMode === "plan" ? PLAN_GRAPH_INSTRUCTION : null
+  const effectiveSystem = [system, modeInstruction, graphInstruction].filter(Boolean).join("\n\n") || null
 
   const remainingMs = 150_000
   try {

@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import PlanReviewCard from "./PlanReviewCard"
 
 // Background runs (P2). Shows queued / running / awaiting-approval state from task_run_events.
 // Approve and reject only appear on awaiting_approval runs; the server re-checks the owner on every call.
@@ -184,6 +185,12 @@ export default function RunsPanel() {
                 <p className="line-clamp-4 whitespace-pre-wrap text-[13px]" style={{ color: "var(--ink-2)" }}>
                   {run.output}
                 </p>
+              )}
+              {run.status === "succeeded" && (
+                <PlanReviewCard
+                  run={run}
+                  taskId={typeof run.payload.taskId === "string" ? run.payload.taskId : undefined}
+                />
               )}
               {run.error && (run.status === "failed" || run.status === "cancelled") && (
                 <p className="text-[12px]" style={{ color: "#ef4444" }}>
