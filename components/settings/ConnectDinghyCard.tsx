@@ -15,6 +15,7 @@ interface PairingView {
   code: string
   expiresAt: string
   ttlSeconds: number
+  connectUrl: string
 }
 
 function formatCode(code: string): string {
@@ -27,6 +28,7 @@ export default function ConnectDinghyCard() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -42,6 +44,15 @@ export default function ConnectDinghyCard() {
   useEffect(() => {
     load()
   }, [load])
+
+  // While a connect link is outstanding, poll so approval on the phone flips this card on its own.
+  useEffect(() => {
+    if (!pairing || status?.connected) return
+    const timer = setInterval(() => {
+      void load()
+    }, 5000)
+    return () => clearInterval(timer)
+  }, [pairing, status?.connected, load])
 
   async function startPairing() {
     setBusy(true)
@@ -145,11 +156,42 @@ export default function ConnectDinghyCard() {
         )}
 
         {pairing && !status?.connected && (
-          <div className="space-y-2 rounded-md p-3" style={{ backgroundColor: "#0a0a0f", border: "1px solid #1a1a2e" }}>
-            <p className="text-xs text-zinc-400">Text this code to Dinghy in iMessage:</p>
-            <p className="font-mono text-lg tracking-widest text-zinc-100">pair {formatCode(pairing.code)}</p>
+          <div className="space-y-3 rounded-md p-3" style={{ backgroundColor: "#0a0a0f", border: "1px solid #1a1a2e" }}>
+            <p className="text-xs text-zinc-400">
+              Open this link on the phone that uses Dinghy. It asks you to allow the connection - always, once, or
+              not at all.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href={pairing.connectUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md px-3 py-1.5 text-xs font-medium text-white"
+                style={{ backgroundColor: "#7c3aed" }}
+              >
+                Open the Dinghy connect link
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(pairing.connectUrl).then(() => {
+                    setCopied(true)
+                    setTimeout(() => setCopied(false), 2000)
+                  })
+                }}
+                className="rounded-md px-2.5 py-1.5 text-xs text-zinc-300"
+                style={{ backgroundColor: "#1a1a2e" }}
+              >
+                {copied ? "Copied" : "Copy link"}
+              </button>
+            </div>
             <p className="text-[11px] text-zinc-500">
-              Single use. Expires in {Math.round(pairing.ttlSeconds / 60)} minutes. Refresh this page after pairing.
+              Single use. Expires in {Math.round(pairing.ttlSeconds / 60)} minutes. This card updates by itself once
+              you allow it.
+            </p>
+            <p className="text-[11px] text-zinc-500">
+              Prefer the old way? Text <span className="font-mono text-zinc-300">pair {formatCode(pairing.code)}</span>{" "}
+              to Dinghy in iMessage.
             </p>
           </div>
         )}
