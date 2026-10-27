@@ -16,11 +16,11 @@
  *   PAYBOX_BASE_URL     API origin override (default https://api.paybox.sh).
  *   PAYBOX_NETWORK      mainnet | devnet (default mainnet).
  *   PAYBOX_WALLET_ID    credentialId of the wallet to pay from; also selectable
- *                       from the treasury UI (stored in data/paybox.json).
+ *                       from the treasury UI (stored in protected local storage or KV).
  *   PAYBOX_MAX_PAYMENT_USDC  per-request spend cap, whole USDC (default 1).
  */
 
-import { mkdir, readFile, writeFile } from "fs/promises"
+import { privateStorePath, readPrivateStore, writePrivateStore } from "./private-store"
 import { existsSync } from "fs"
 import { homedir } from "os"
 import path from "path"
@@ -124,7 +124,7 @@ export function payboxNetwork(): "mainnet" | "devnet" {
   return process.env.PAYBOX_NETWORK === "devnet" ? "devnet" : "mainnet"
 }
 
-// ── Wallet selection + history (data/paybox.json, memory on Vercel) ──────────
+// ── Wallet selection + history (protected local storage, KV, or memory on Vercel) ──────────
 
 interface PayboxPaymentRecord {
   at: number
@@ -143,7 +143,8 @@ interface PayboxStore {
   signingKey?: string
 }
 
-const DATA_PATH = path.join(process.cwd(), "data", "paybox.json")
+// Old worktree state is deliberately not imported: reconnect locally once.
+// Existing KV, environment, and SDK-managed connections are unchanged.
 const MAX_HISTORY = 100
 
 let memoryStore: PayboxStore | null = null
@@ -157,47 +158,25 @@ function useMemoryStore(): boolean {
 
 async function readStore(): Promise<PayboxStore> {
   if (process.env.KV_REST_API_URL) {
-    try {
-      const { kv } = await import("@vercel/kv")
-      const store = await kv.get<PayboxStore>("paybox")
-      if (store) return store
-    } catch {
-      // fall through
-    }
+    const { kv } = await import("@vercel/kv")
+    // Fail closed on KV errors. Do not copy credentials to a fallback backend.
+    return (await kv.get<PayboxStore>("paybox")) ?? {}
   }
-  if (useMemoryStore()) {
-    if (!memoryStore) {
-      try {
-        memoryStore = JSON.parse(await readFile(DATA_PATH, "utf-8")) as PayboxStore
-      } catch {
-        memoryStore = {}
-      }
-    }
-    return memoryStore
-  }
-  try {
-    return JSON.parse(await readFile(DATA_PATH, "utf-8")) as PayboxStore
-  } catch {
-    return {}
-  }
+  if (useMemoryStore()) return memoryStore ?? {}
+  return (await readPrivateStore(await privateStorePath()) as PayboxStore | null) ?? {}
 }
 
 async function writeStore(store: PayboxStore): Promise<void> {
   if (process.env.KV_REST_API_URL) {
-    try {
-      const { kv } = await import("@vercel/kv")
-      await kv.set("paybox", store)
-      return
-    } catch {
-      // fall through
-    }
+    const { kv } = await import("@vercel/kv")
+    await kv.set("paybox", store)
+    return
   }
   if (useMemoryStore()) {
     memoryStore = store
     return
   }
-  await mkdir(path.dirname(DATA_PATH), { recursive: true })
-  await writeFile(DATA_PATH, JSON.stringify(store, null, 2), "utf-8")
+  await writePrivateStore(await privateStorePath(), store)
 }
 
 // ── In-app connection store helpers ─────────────────────────────────────────
