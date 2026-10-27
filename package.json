@@ -29,7 +29,7 @@
     "ai": "^6.0.116",
     "ai-sdk-ollama": "^3.8.1",
     "lucide-react": "^0.575.0",
-    "next": "16.1.6",
+    "next": "16.4.3",
     "puppeteer-core": "25.15.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -41,8 +41,12 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
+    "eslint-config-next": "16.4.3",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "sharp": "0.35.5",
+    "postcss": "8.5.28"
   }
 }
