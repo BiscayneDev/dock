@@ -1,5 +1,5 @@
 -- Mobile pairing: expiring single-use codes + revocable device credentials.
--- The exchange is transactional (row lock + insert in one function) so a code
+-- Code consumption is transactional (row lock + update in one function) so a code
 -- can never mint two device credentials, and failed guesses are bounded per
 -- workspace per window at the database, not in app memory.
 -- Access: service role only (RLS on, no policies -> anon/authed get nothing).
@@ -52,6 +52,8 @@ declare
   v_failures integer;
   v_row mobile_pairings%rowtype;
 begin
+  -- Serialize the failure window across distinct guessed codes as well.
+  perform pg_advisory_xact_lock(hashtextextended(p_workspace_id::text, 0));
   select count(*) into v_failures
     from mobile_pairing_failures
    where workspace_id = p_workspace_id
@@ -77,3 +79,7 @@ begin
   return 'ok';
 end;
 $$;
+
+-- SECURITY DEFINER functions otherwise grant EXECUTE to PUBLIC by default.
+revoke all on function exchange_mobile_pairing(uuid, text, integer, bigint) from public;
+grant execute on function exchange_mobile_pairing(uuid, text, integer, bigint) to service_role;

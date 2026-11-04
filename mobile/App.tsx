@@ -14,6 +14,10 @@ const store = {
     if (Platform.OS === "web") return window.localStorage.getItem(key)
     return SecureStore.getItemAsync(key)
   },
+  async remove(key: string): Promise<void> {
+    if (Platform.OS === "web") { window.localStorage.removeItem(key); return }
+    await SecureStore.deleteItemAsync(key)
+  },
   async set(key: string, value: string): Promise<void> {
     if (Platform.OS === "web") { window.localStorage.setItem(key, value); return }
     return SecureStore.setItemAsync(key, value)
@@ -46,6 +50,7 @@ type ApprovalCard = {
   canDecide: boolean
   footer: string
 }
+type ThreadMessage = { id: string; from: string; content: string; taskId?: string; timestamp: string }
 type Tab = "board" | "approvals" | "new"
 
 const COLUMNS = ["backlog", "planning", "in-progress", "in-review", "done"]
@@ -118,6 +123,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("board")
   const [tasks, setTasks] = useState<Task[]>([])
   const [selected, setSelected] = useState<Task | null>(null)
+  const [thread, setThread] = useState<ThreadMessage[]>([])
   const [review, setReview] = useState<WorktreeReview | null>(null)
   const [runs, setRuns] = useState<Run[]>([])
   const [cards, setCards] = useState<ApprovalCard[]>([])
@@ -152,15 +158,16 @@ export default function App() {
   const registerPush = useCallback(async (base: string, tok: string) => {
     if (Platform.OS === "web") return // push registration is native-only
     const perm = await Notifications.requestPermissionsAsync().catch(() => null)
-    if (!perm?.granted) return
-    const pushToken = await Notifications.getExpoPushTokenAsync().catch(() => null)
+    if (!perm?.granted) { setError("Notifications are not enabled. You can keep using the board."); return }
+    const pushToken = await Notifications.getExpoPushTokenAsync({ projectId: "5615ef1b-3373-4ace-9784-ebe9438e3586" }).catch(() => null)
     if (pushToken) {
       await store.set("dock:pushToken", pushToken.data)
-      await api(base, tok, "/api/mobile/push-token", {
+      const saved = await api(base, tok, "/api/mobile/push-token", {
         method: "POST",
         body: JSON.stringify({ token: pushToken.data, platform: "ios" }),
       })
-    }
+      setError(saved ? null : "Push registration was not confirmed by Dock.")
+    } else { setError("This build cannot register push. A signed native build and APNs setup may be required.") }
   }, [])
 
   const connect = useCallback(async () => {
@@ -203,15 +210,18 @@ export default function App() {
     await store.set("dock:url", base)
     await store.set("dock:token", paired.deviceToken)
     setConnected({ base, token: paired.deviceToken })
-    registerPush(base, paired.deviceToken)
+    // Notifications are opt-in from the connected screen, never an auth surprise.
   }, [dockUrl, token, registerPush])
 
   const refresh = useCallback(async () => {
     if (!connected) return
     const list = await api<Task[] | { tasks: Task[] }>(connected.base, connected.token, "/api/tasks")
-    setTasks(Array.isArray(list) ? list : list?.tasks ?? [])
+    if (!list) { setCards([]); setError("Dock could not refresh. Showing the last loaded board. Check your connection or pair again."); return }
+    setError(null)
+    setTasks(Array.isArray(list) ? list : list.tasks)
     const runData = await api<{ runs: Run[] }>(connected.base, connected.token, "/api/runs")
     const cardData = await api<{ cards: ApprovalCard[] }>(connected.base, connected.token, "/api/mobile/approvals")
+    if (!cardData) setError("Approvals could not refresh. Approval actions are unavailable until Dock responds.")
     setCards(cardData?.cards ?? [])
     setRuns(runData?.runs ?? [])
     const repoData = await api<{ repos: string[] }>(connected.base, connected.token, "/api/repos")
@@ -226,18 +236,32 @@ export default function App() {
 
   useEffect(() => {
     if (!selected || !connected) return
-    api<WorktreeReview>(connected.base, connected.token, `/api/tasks/${encodeURIComponent(selected.id)}/worktree`).then(setReview)
+    setThread([])
+    let active = true
+    const load = async () => {
+      const [reviewData, messageData] = await Promise.all([
+        api<WorktreeReview>(connected.base, connected.token, `/api/tasks/${encodeURIComponent(selected.id)}/worktree`),
+        api<ThreadMessage[]>(connected.base, connected.token, "/api/messages?canonical=1&limit=200"),
+      ])
+      if (!active) return
+      setReview(reviewData)
+      if (messageData) setThread(messageData.filter((m) => m.taskId === selected.id).reverse())
+    }
+    load()
+    const timer = setInterval(load, 30000)
+    return () => { active = false; clearInterval(timer) }
   }, [selected, connected])
 
   const createAndActivate = useCallback(async () => {
     if (!connected || !newTitle.trim()) return
     setBusy(true)
+    setError(null)
     const created = await api<Task>(connected.base, connected.token, "/api/tasks", {
       method: "POST",
-      body: JSON.stringify({ title: newTitle.trim(), column: "in-progress" }),
+      body: JSON.stringify({ title: newTitle.trim(), column: "backlog" }),
     })
     if (created?.id) {
-      await api(connected.base, connected.token, "/api/tasks/activate", {
+      const activation = await api(connected.base, connected.token, "/api/tasks/activate", {
         method: "POST",
         body: JSON.stringify({
           taskId: created.id,
@@ -247,9 +271,16 @@ export default function App() {
           ...(newRepo ? { repoPath: newRepo } : {}),
         }),
       })
+      if (!activation) {
+        setError("Task saved in backlog, but activation was not confirmed. Do not create it again. Open the board to inspect it.")
+        setBusy(false)
+        return
+      }
       setNewTitle("")
       setTab("board")
       await refresh()
+    } else {
+      setError("Task was not saved. Your text is still here; check the connection before trying again.")
     }
     setBusy(false)
   }, [connected, newTitle, newRepo, refresh])
@@ -257,13 +288,14 @@ export default function App() {
   const decide = useCallback(async (runId: string, decision: "approve" | "reject") => {
     if (!connected) return
     setConfirmed((prev) => ({ ...prev, [runId]: false }))
-    await api(connected.base, connected.token, `/api/runs/${encodeURIComponent(runId)}/${decision}`, { method: "POST" })
+    const result = await api(connected.base, connected.token, `/api/runs/${encodeURIComponent(runId)}/${decision}`, { method: "POST" })
+    if (!result) { setError("Decision was not confirmed. Refresh before trying again."); return }
     await refresh()
   }, [connected, refresh])
 
   const sendMessage = useCallback(async () => {
     if (!connected || !selected || !message.trim()) return
-    await api(connected.base, connected.token, "/api/messages", {
+    const result = await api(connected.base, connected.token, "/api/messages", {
       method: "POST",
       body: JSON.stringify({
         from: "owner",
@@ -274,7 +306,11 @@ export default function App() {
         taskTitle: selected.title,
       }),
     })
+    if (!result) { setError("Message was not confirmed. Your text is still here. Check the thread before resending."); return }
+    setError(null)
     setMessage("")
+    const messages = await api<ThreadMessage[]>(connected.base, connected.token, "/api/messages?canonical=1&limit=200")
+    if (messages) setThread(messages.filter((m) => m.taskId === selected.id).reverse())
   }, [connected, selected, message])
 
   if (!connected) {
@@ -307,6 +343,7 @@ export default function App() {
           <Text style={styles.back}>‹ Board</Text>
         </Pressable>
         <ScrollView>
+          {error ? <Text accessibilityRole="alert" style={styles.bad}>{error}</Text> : null}
           {demoBadge}
           <Text style={styles.h1}>{selected.title}</Text>
           <Text style={styles.sub}>{selected.column}{selected.assignee ? ` · ${selected.assignee}` : ""}</Text>
@@ -328,6 +365,13 @@ export default function App() {
           ) : (
             <Text style={styles.sub}>{r ? "No isolated run for this task." : "Loading…"}</Text>
           )}
+          <Text style={styles.cardTitle}>Messages and results</Text>
+          {thread.length === 0 ? <Text style={styles.sub}>No result messages loaded yet.</Text> : thread.map((m) => (
+            <View key={m.id} style={styles.card}>
+              <Text style={styles.sub}>{m.from}</Text>
+              <Text style={styles.taskTitle}>{m.content}</Text>
+            </View>
+          ))}
           <View style={styles.row}>
             <TextInput style={[styles.input, styles.messageInput]} placeholder="Message the agent…"
               placeholderTextColor="#52525b" value={message} onChangeText={setMessage} />
@@ -344,6 +388,15 @@ export default function App() {
     <SafeAreaView style={styles.screen}>
       <StatusBar style="light" />
       {demoBadge}
+      {error ? <Text accessibilityRole="alert" style={styles.bad}>{error}</Text> : null}
+      {Platform.OS !== "web" ? <Pressable onPress={() => registerPush(connected.base, connected.token)}><Text style={styles.back}>Enable task notifications</Text></Pressable> : null}
+      <View style={styles.row}>
+        <Pressable onPress={refresh}><Text style={styles.back}>Refresh</Text></Pressable>
+        <Pressable onPress={async () => {
+          await store.remove("dock:token"); await store.remove("dock:url");
+          setConnected(null); setTasks([]); setCards([]); setSelected(null); setToken(""); setError(null)
+        }}><Text style={styles.back}>Disconnect this app</Text></Pressable>
+      </View>
       {tab === "board" && (
         <FlatList
           data={COLUMNS.map((c) => ({ column: c, tasks: tasks.filter((t) => t.column === c) }))}
@@ -408,22 +461,22 @@ export default function App() {
           <Text style={styles.h1}>New task</Text>
           <TextInput style={styles.input} placeholder="What should Dock do?" placeholderTextColor="#52525b"
             value={newTitle} onChangeText={setNewTitle} />
-          <Text style={styles.sub}>Run in an isolated worktree of:</Text>
+          <Text style={styles.sub}>Request an isolated worktree of:</Text>
           {repos.map((repo) => (
             <Pressable key={repo} style={[styles.task, newRepo === repo && styles.repoSelected]} onPress={() => setNewRepo(newRepo === repo ? null : repo)}>
               <Text style={styles.mono}>{repo}</Text>
             </Pressable>
           ))}
-          {repos.length === 0 ? <Text style={styles.note}>No registered repos - register one in Dock first (POST /api/repos).</Text> : null}
+          {repos.length === 0 ? <Text style={styles.note}>No registered repos. Coding execution needs a configured isolated host; creating a task does not make that host available.</Text> : null}
           <Pressable
             style={[styles.button, (repos.length > 0 && !newRepo) && styles.buttonDisabled]}
             onPress={createAndActivate}
             disabled={busy || !newTitle.trim() || (repos.length > 0 && !newRepo)}
           >
-            {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create + activate (isolated)</Text>}
+            {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create + activate</Text>}
           </Pressable>
           {repos.length > 0 && !newRepo ? (
-            <Text style={styles.note}>Pick a repo: coding tasks always run isolated, never on the host checkout.</Text>
+            <Text style={styles.note}>Pick a repo. The server refuses activation if its runtime cannot enforce isolation.</Text>
           ) : null}
         </ScrollView>
       )}

@@ -10,6 +10,16 @@
       "supportsTablet": true,
       "bundleIdentifier": "xyz.biscayneventures.dock"
     },
-    "plugins": ["expo-secure-store", "expo-notifications"]
+    "plugins": [
+      "expo-secure-store",
+      "expo-notifications",
+      "expo-status-bar"
+    ],
+    "owner": "biscayne-ventures",
+    "extra": {
+      "eas": {
+        "projectId": "5615ef1b-3373-4ace-9784-ebe9438e3586"
+      }
+    }
   }
 }

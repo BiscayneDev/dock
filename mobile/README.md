@@ -1,49 +1,44 @@
-# Dock mobile (iOS)
+# Dock mobile
 
-Thin native client for Dock: the phone is where you see tasks, isolated-run
-reviews and notifications. Dock (the Next.js app) stays the board and the
-harness; this app is a client of its HTTP APIs, not a rebuild.
+Expo native client for Dock. Current app uses SDK57. It is a reviewable draft,
+not a verified phone release. See `../docs/mobile-release-slice.md` for exact
+production, distribution and execution dependencies.
 
-Stack: Expo (React Native). iOS builds via EAS Build; push notifications via
-the Expo Push Service, which handles APNs
-(https://docs.expo.dev/pushnotifications/overview/ - see docs.expo.dev/push-notifications/overview/).
+## Client behavior
 
-## What it does today
+- Pair with a single-use 6-digit code from owner-authenticated Dock settings.
+  Store the returned scoped credential in SecureStore on native. Never paste
+  a superuser token into the app. Web preview uses localStorage, not Keychain.
+- Read tasks, per-task worktree summaries, canonical message/results and approval
+  proposals. Missing proposal details prevent approval.
+- Create a task, request activation, and send task messages. These are separate
+  operations. Failed activation preserves the saved task in backlog and reports
+  the failure; it is not a completed run. Messages are retained until a server
+  response confirms the send. Network failure does not mean an empty board.
+- Explicitly opt into native push after connecting. No automatic phone prompt.
+  Push setup and delivery are not yet verified.
+- Disconnect clears the local connection. Revoke the credential separately in
+  Dock settings if the phone should lose server access.
 
-- Sign in once with your Dock URL and the scoped mobile token
-  (`DOCK_MOBILE_TOKEN` on the server - NOT the superuser agent token). Stored
-  in the iOS Keychain via expo-secure-store; nothing is hardcoded.
-- Board: tasks grouped by column (`GET /api/tasks`), 30s refresh.
-- New task: create + activate from the phone, optionally in an isolated
-  worktree of a registered repo (`POST /api/tasks` + `POST /api/tasks/activate`
-  with `repoPath`; repos listed via `GET /api/repos`).
-- Task detail: isolated-run review card - branch, commits, diff stat and the
-  attestation result (`GET /api/tasks/<id>/worktree`) - plus messaging the
-  assigned agent (`POST /api/messages`).
-- Approvals: runs parked in `awaiting_approval` with Approve/Reject
-  (`GET /api/runs`, `POST /api/runs/<id>/approve|reject`).
-- Push: registers its Expo push token with Dock (`POST /api/mobile/push-token`);
-  `POST /api/notify` fans out to registered devices through the Expo Push
-  Service (APNs), so finish / fail / info alerts reach the phone.
+## Free Expo setup
 
-Verified: `npm install`, `npx expo install --check`, `npx tsc --noEmit`, and
-`npx expo export --platform ios` (Metro/Hermes bundle) all pass. On-device or
-simulator run needs macOS/Xcode or EAS Build.
+Organization/project: https://expo.dev/accounts/biscayne-ventures/projects/dock-mobile
+Project metadata in app.json, preview/simulator profiles in eas.json. No builds
+or signing enrollment have been submitted. EAS build commands can incur use of
+credits or require paid Apple signing; do not run without scoped approval.
 
-## Not yet wired (next steps)
-
-- Approvals for money actions carry the full approval card detail (amount,
-  command) - the app currently shows type + prompt.
-- EAS Build + App Store distribution, notification tap → deep link into the
-  task (`scheme: dock`).
-
-## Run
+## Local checks
 
 ```
 cd mobile
-npm install
-npx expo install --fix   # aligns dependency versions to the installed SDK
-DOCK_URL and token: entered in-app, kept in the Keychain
-npx expo start           # dev client on a simulator or Expo Go
-npx eas build --platform ios   # real iOS build (needs an Expo account)
+npm ci
+npx tsc --noEmit
+npx expo install --check
+npx expo export --platform web
 ```
+
+Web fictional preview: `?demo=board|task|approvals|new`. This never establishes
+backend or native readiness. The App Store Expo Go runtime must match this
+project; current owning metadata advertises SDK57 and the draft now matches57. Dependency
+alignment, iOS JS bundle and web export pass; on-device runtime remains unverified.
+See the release proposal for transitive CLI audit findings.
