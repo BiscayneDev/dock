@@ -36,6 +36,7 @@ for _ in range(100):
  except Exception:pass
  time.sleep(.2)
 assert ready,'T3 server readiness failed'
+subprocess.run(['/opt/dock-t3-runtime/t3','project','add',work,'--base-dir',x['baseDir']],check=True,capture_output=True)
 assert not os.environ.get('AGENT37_API_KEY') and not os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
 print(json.dumps(dict(executionId=x['executionId'],baseSha=x['baseSha'],worktree=work,baseDir=x['baseDir'],model='agent37/default',policyRootOwned=True,policyReadOnlyToAgent=True)))
 PY`
