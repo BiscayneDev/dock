@@ -12,6 +12,7 @@ import type { AgentRuntime } from "./types"
 import { OpenClawRuntime } from "./openclaw"
 import { OllamaRuntime } from "./ollama"
 import { StubRuntime } from "./stub"
+import { IsolatedRuntime } from "./isolated"
 
 // Re-export types for consumers
 export type { AgentRuntime, RuntimeSession, ActivateParams, ChatParams } from "./types"
@@ -66,6 +67,7 @@ export function listRuntimeNames(): Array<{ id: string; name: string }> {
 registerRuntime("openclaw", () => new OpenClawRuntime())
 registerRuntime("ollama", () => new OllamaRuntime(), ["local", "lmstudio", "llamacpp"])
 registerRuntime("demo", () => new StubRuntime(), ["stub"])
+registerRuntime("isolated", () => new IsolatedRuntime(), ["isolated-local", "bwrap"])
 
 // ── Factory ─────────────────────────────────────────────────────────────────
 
