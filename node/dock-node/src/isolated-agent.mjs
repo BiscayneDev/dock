@@ -1,3 +1,4 @@
+import { sharedKnowledgeContext, specialistBrief } from './shared-knowledge.mjs'
 import { loadRegisteredRepos } from './isolation.mjs'
 import { runConfinedCoding } from './confined-coding.mjs'
 
@@ -9,5 +10,6 @@ export async function runIsolatedAgentTask({ repoKey, taskRef, baseRef, brief, i
   const matches = repos.filter((repo) => basename(repo) === repoKey)
   if (matches.length !== 1) throw new Error('repository alias is missing or ambiguous on this host')
   if (typeof infer !== 'function') throw new Error('Dock metered inference callback required')
-  return runConfinedCoding({ repo: matches[0], taskRef, baseRef, brief, infer, env })
+  const shared = env.DOCK_SHARED_KNOWLEDGE_DIR ? await sharedKnowledgeContext(env.DOCK_SHARED_KNOWLEDGE_DIR, brief) : null
+  return runConfinedCoding({ repo: matches[0], taskRef, baseRef, brief: specialistBrief('builder', brief, shared), infer, env })
 }
