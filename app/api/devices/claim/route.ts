@@ -18,6 +18,9 @@ export async function POST(request: Request) {
     await touchDevice(admin, auth.deviceId)
     const run = await claimHomeRun(admin, auth.deviceId)
     if (!run) return NextResponse.json({ run: null })
+    if (run.payload?.isolatedTask !== undefined && !parseIsolatedTask(run.payload.isolatedTask)) {
+      return NextResponse.json({ error: "invalid isolated task payload; refusing non-isolated fallback" }, { status: 409 })
+    }
     return NextResponse.json({
       run: {
         id: run.id,

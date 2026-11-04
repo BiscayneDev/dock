@@ -1,8 +1,8 @@
 // Experimental host runner. Every task has a private base-only git repository.
 // No shared object store, refs, config, hooks or host credentials are mounted.
 import { spawn, execFileSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { readFile, rm } from 'node:fs/promises'
+import { existsSync, constants } from 'node:fs'
+import { open, rm } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
 import { preparePrivateTaskGit } from './private-task-git.mjs'
@@ -67,7 +67,14 @@ export async function runConfinedCoding({ repo, taskRef, baseRef = 'HEAD', brief
     const exitCode = await new Promise((resolve, reject) => { child.once('error', reject); child.once('close', resolve) }).finally(() => clearTimeout(timer))
     // Agent status is untrusted output. Do NOT run host git with its metadata,
     // migrate objects, or advance any owner ref based on it.
-    const raw = await readFile(join(snapshotDir, '.dock-agent-status.json'), 'utf8').catch(() => '')
+    let raw = ''
+    let statusHandle
+    try {
+      statusHandle = await open(join(snapshotDir, '.dock-agent-status.json'), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+      const stat = await statusHandle.stat()
+      if (stat.isFile() && stat.size <= 16000) raw = await statusHandle.readFile('utf8')
+    } catch { /* untrusted status symlink or missing file */ }
+    finally { await statusHandle?.close() }
     let status
     try { status = JSON.parse(raw) } catch { status = {} }
     return { outcome: exitCode === 0 && status.ok === true ? 'review_required' : 'failed', summary: String(status.summary ?? 'agent exited without result').slice(0, 1000), exitCode, logs, baseSha: prepared.baseSha, artifactPath: snapshotDir }
