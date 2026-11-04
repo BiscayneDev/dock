@@ -151,3 +151,25 @@ https://github.com/agent37-platform/templates/blob/main/images/b2b/pi/Dockerfile
 https://github.com/agent37-platform/templates/blob/main/images/b2b/pi/entrypoint.sh
 https://api.github.com/repos/agent37-platform/templates/git/refs/tags/b2b-pi/2026.10.31a
 https://www.agent37.com/docs/agents-api/templates.md
+
+## Free private build completed2026-11-04
+
+The user supplied a temporary API key through a secure form. Cloud build
+`tb_9eae96aed16d6562afed` succeeded and exact template GET verified:
+
+- Pin: `dock-t3-owner-20261104@1`
+- Scope: `workspace`, revision1, default_port null
+- Image digest: `sha256:631b62fdbfea247d76fc5a88f6a2ae9c727e392517850dc78ba98106aa4930ca`
+- No instance created; inventory remained empty; build price$0 in official docs.
+- Context only Dockerfile, policy/settings JSON and ignore patterns, no secret or
+  user source. No build secrets, no public registry push, no collaborators.
+- First build failed Debian's sudo removal guard; corrected with its explicit
+  SUDO_FORCE_REMOVE=yes. Second build logs confirm sudo removal, Pi1.5.0 and
+  T3v0.1.7, then image export/private registration. The build does not prove a
+  launched non-root T3 runtime, phone link, isolation or end-to-end production.
+
+This supersedes earlier statements that the recipe had never been built or a
+private template was missing. Local Docker/BuildKit limitation remains accurate,
+but no longer blocks image construction. Next activation is bounded paid runtime
+verification of this exact pin, separate migration/deployment review, and phone
+result/approval proof. No ongoing compute has been enabled.
