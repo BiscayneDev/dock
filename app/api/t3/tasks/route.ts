@@ -5,7 +5,7 @@ export const dynamic="force-dynamic"
 export async function GET(){
  if(process.env.DOCK_T3_TASKS!=="on")return NextResponse.json({error:"T3 tasks disabled"},{status:501})
  const ctx=await assistantContext();if(!ctx)return NextResponse.json({error:"Owner sign-in required"},{status:401})
- const{data,error}=await ctx.supabase.from("t3_owner_tasks").select("id,project_id,phase,result_outcome,artifact,artifact_sha256,cleanup_deadline,created_at").eq("owner_id",ctx.userId).eq("workspace_id",ctx.workspaceId).order("created_at",{ascending:false}).limit(50)
+ const{data,error}=await ctx.supabase.from("t3_owner_tasks").select("id,project_id,brief,phase,result_outcome,artifact,artifact_sha256,cleanup_deadline,created_at").eq("owner_id",ctx.userId).eq("workspace_id",ctx.workspaceId).order("created_at",{ascending:false}).limit(50)
  return error?NextResponse.json({error:"Task read failed"},{status:500}):NextResponse.json({tasks:data})
 }
 export async function POST(request:Request){
