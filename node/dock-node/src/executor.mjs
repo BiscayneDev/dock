@@ -45,7 +45,7 @@ export async function executeRun(run, { api, localTools = null, diagnostics = fa
       })
       await api.complete(run.id, {
         status: result.outcome === "review_required" ? "succeeded" : "failed",
-        ...(result.outcome === "review_required" ? { output: result.summary } : { error: String(result.summary ?? "isolated task failed").slice(0, 500) }),
+        ...(result.outcome === "review_required" ? { output: `Review required (not merged or deployed): ${result.summary}` } : { error: String(result.summary ?? "isolated task failed").slice(0, 500) }),
       })
       return { outcome: result.outcome, artifactPath: result.artifactPath ?? null }
     } catch (err) {
