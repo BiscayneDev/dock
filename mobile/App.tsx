@@ -33,6 +33,19 @@ type WorktreeReview = {
   verification?: { ok: boolean; problems: string[] } | null
 }
 type Run = { id: string; status: string; agentKey?: string; prompt?: string; proposedAction?: { type?: string } }
+type ApprovalCard = {
+  runId: string
+  status: string
+  proposal: string
+  target: string
+  estimatedLabel: string
+  budgetLabel: string
+  projectName: string
+  model: string
+  requiresConfirm: boolean
+  canDecide: boolean
+  footer: string
+}
 type Tab = "board" | "approvals" | "new"
 
 const COLUMNS = ["backlog", "planning", "in-progress", "in-review", "done"]
@@ -57,13 +70,23 @@ const DEMO_REVIEW: WorktreeReview = {
   },
   verification: { ok: true, problems: [] },
 }
-const DEMO_RUNS: Run[] = [
-  { id: "run-demo1", status: "awaiting_approval", agentKey: "baron", prompt: "Fictional: pay $480.00 contractor invoice INV-2041", proposedAction: { type: "pay_invoice" } },
+const DEMO_RUNS: Run[] = []
+const DEMO_CARDS: ApprovalCard[] = [
+  {
+    runId: "run-demo1", status: "pending",
+    proposal: "Fictional: pay contractor invoice INV-2041",
+    target: "Fictional Vendor LLC",
+    estimatedLabel: "$480.00", budgetLabel: "$1.00",
+    projectName: "Paybox", model: "demo",
+    requiresConfirm: true, canDecide: true,
+    footer: "Approving lets the agent continue. Money moves only through the payment step.",
+  },
 ]
 
 async function demoApi<T>(path: string): Promise<T | null> {
   if (path === "/api/tasks") return DEMO_TASKS as T
   if (path === "/api/runs") return { runs: DEMO_RUNS } as T
+  if (path === "/api/mobile/approvals") return { cards: DEMO_CARDS } as T
   if (path === "/api/repos") return { repos: ["/demo/shipyard/paybox"] } as T
   if (path.includes("/worktree")) return DEMO_REVIEW as T
   return null
@@ -97,6 +120,8 @@ export default function App() {
   const [selected, setSelected] = useState<Task | null>(null)
   const [review, setReview] = useState<WorktreeReview | null>(null)
   const [runs, setRuns] = useState<Run[]>([])
+  const [cards, setCards] = useState<ApprovalCard[]>([])
+  const [confirmed, setConfirmed] = useState<Record<string, boolean>>({})
   const [repos, setRepos] = useState<string[]>([])
   const [newTitle, setNewTitle] = useState("")
   const [newRepo, setNewRepo] = useState<string | null>(null)
@@ -186,6 +211,8 @@ export default function App() {
     const list = await api<Task[] | { tasks: Task[] }>(connected.base, connected.token, "/api/tasks")
     setTasks(Array.isArray(list) ? list : list?.tasks ?? [])
     const runData = await api<{ runs: Run[] }>(connected.base, connected.token, "/api/runs")
+    const cardData = await api<{ cards: ApprovalCard[] }>(connected.base, connected.token, "/api/mobile/approvals")
+    setCards(cardData?.cards ?? [])
     setRuns(runData?.runs ?? [])
     const repoData = await api<{ repos: string[] }>(connected.base, connected.token, "/api/repos")
     setRepos(repoData?.repos ?? [])
@@ -229,6 +256,7 @@ export default function App() {
 
   const decide = useCallback(async (runId: string, decision: "approve" | "reject") => {
     if (!connected) return
+    setConfirmed((prev) => ({ ...prev, [runId]: false }))
     await api(connected.base, connected.token, `/api/runs/${encodeURIComponent(runId)}/${decision}`, { method: "POST" })
     await refresh()
   }, [connected, refresh])
@@ -310,7 +338,7 @@ export default function App() {
     )
   }
 
-  const awaiting = runs.filter((run) => run.status === "awaiting_approval")
+  const pendingCards = cards.filter((card) => card.status === "pending" && card.canDecide)
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -334,23 +362,45 @@ export default function App() {
       )}
       {tab === "approvals" && (
         <FlatList
-          data={awaiting}
-          keyExtractor={(run) => run.id}
+          data={pendingCards}
+          keyExtractor={(card) => card.runId}
           ListEmptyComponent={<Text style={styles.sub}>Nothing waiting on you.</Text>}
-          renderItem={({ item: run }) => (
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>{run.proposedAction?.type ?? "action"}</Text>
-              <Text style={styles.sub} numberOfLines={3}>{run.prompt ?? run.id}</Text>
-              <View style={styles.row}>
-                <Pressable style={[styles.button, styles.approve]} onPress={() => decide(run.id, "approve")}>
-                  <Text style={styles.buttonText}>Approve</Text>
-                </Pressable>
-                <Pressable style={[styles.button, styles.reject]} onPress={() => decide(run.id, "reject")}>
-                  <Text style={styles.buttonText}>Reject</Text>
-                </Pressable>
+          renderItem={({ item: card }) => {
+            // Never approve blind: without the material details the server
+            // gave no readable proposal/target, so there is nothing safe to
+            // approve and the button stays disabled.
+            const detailsKnown = card.proposal !== "unknown" && card.target !== "unknown"
+            const needsConfirm = card.requiresConfirm && !confirmed[card.runId]
+            return (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>{card.proposal}</Text>
+                <Text style={styles.sub}>To: {card.target}</Text>
+                <Text style={styles.sub}>Estimated: {card.estimatedLabel} · Budget: {card.budgetLabel}</Text>
+                <Text style={styles.sub}>{card.projectName} · {card.model}</Text>
+                <Text style={styles.sub}>{card.footer}</Text>
+                <View style={styles.row}>
+                  <Pressable
+                    style={[styles.button, styles.approve, !detailsKnown && styles.buttonDisabled]}
+                    disabled={!detailsKnown}
+                    onPress={() => {
+                      if (needsConfirm) {
+                        setConfirmed((prev) => ({ ...prev, [card.runId]: true }))
+                        return
+                      }
+                      decide(card.runId, "approve")
+                    }}
+                  >
+                    <Text style={styles.buttonText}>
+                      {!detailsKnown ? "Details unavailable" : needsConfirm ? `Confirm ${card.estimatedLabel}` : "Approve"}
+                    </Text>
+                  </Pressable>
+                  <Pressable style={[styles.button, styles.reject]} onPress={() => decide(card.runId, "reject")}>
+                    <Text style={styles.buttonText}>Reject</Text>
+                  </Pressable>
+                </View>
               </View>
-            </View>
-          )}
+            )
+          }}
         />
       )}
       {tab === "new" && (
@@ -381,7 +431,7 @@ export default function App() {
         {(["board", "approvals", "new"] as Tab[]).map((t) => (
           <Pressable key={t} onPress={() => setTab(t)} style={styles.tabItem}>
             <Text style={tab === t ? styles.tabActive : styles.tabInactive}>
-              {t === "approvals" && awaiting.length > 0 ? `Approvals (${awaiting.length})` : t[0].toUpperCase() + t.slice(1)}
+              {t === "approvals" && pendingCards.length > 0 ? `Approvals (${pendingCards.length})` : t[0].toUpperCase() + t.slice(1)}
             </Text>
           </Pressable>
         ))}

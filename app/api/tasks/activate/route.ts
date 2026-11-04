@@ -63,6 +63,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "taskId and title required" }, { status: 400 })
     }
 
+    // Every activation launches a runtime and may spend inference: it always
+    // requires owner session, agent token, or a mobile credential with the
+    // tasks:activate capability. Anonymous activation is never allowed, with
+    // or without an isolated worktree.
+    const authed =
+      (await assistantContext()) !== null ||
+      agentTokenAuthorized(request) ||
+      ((await mobileTokenAuthorized(request)) && mobileTokenHas("tasks:activate"))
+    if (!authed) {
+      return NextResponse.json({ error: "Sign in required" }, { status: 401 })
+    }
+
     // Isolated runs (P3): when the caller asks for a worktree, the task's agent works only in a
     // per-task git worktree + branch. Creating worktrees runs git on local paths, so unlike the
     // plain activation above it requires an owner session or the agent token - never anonymous.
@@ -71,13 +83,6 @@ export async function POST(request: Request) {
     // strictly validated before it reaches a git command line.
     let worktree: { repoPath: string; path: string; branch: string; baseRef: string } | null = null
     if (typeof repoPath === "string" && repoPath.trim()) {
-      const authed =
-        (await assistantContext()) !== null ||
-        agentTokenAuthorized(request) ||
-        ((await mobileTokenAuthorized(request)) && mobileTokenHas("tasks:activate"))
-      if (!authed) {
-        return NextResponse.json({ error: "Sign in required for isolated runs" }, { status: 401 })
-      }
       if (!isValidTaskRef(String(taskId))) {
         return NextResponse.json({ error: "taskId is not a valid task ref for isolation" }, { status: 400 })
       }

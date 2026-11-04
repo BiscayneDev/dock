@@ -19,6 +19,11 @@ const tables = {
       target: "cloud", model: null, model_reason: null, budget_cents: 100, task_id: null,
       project_id: null, conversation_id: null, proposed_action: { type: "pay_invoice" },
       result: null, error: null, created_at: now(), updated_at: now() },
+    { id: "55555555-5555-4555-8555-555555555555", workspace_id: "33333333-3333-4333-8333-333333333333", owner_id: "44444444-4444-4444-8444-444444444444", agent_key: "baron",
+      prompt: "Fictional: legacy run without recorded proposal details", status: "awaiting_approval",
+      target: "cloud", model: null, model_reason: null, budget_cents: 100, task_id: null,
+      project_id: null, conversation_id: null, proposed_action: null,
+      result: null, error: null, created_at: now(), updated_at: now() },
     { id: "22222222-2222-4222-8222-222222222222", workspace_id: "33333333-3333-4333-8333-333333333333", owner_id: "44444444-4444-4444-8444-444444444444", agent_key: "scout",
       prompt: "Fictional: summarize Chateau competitor notes", status: "succeeded",
       target: "cloud", model: null, model_reason: null, budget_cents: 100, task_id: null,
@@ -30,7 +35,11 @@ const tables = {
   mobile_devices: [],
   task_run_events: [
     { id: 1, run_id: "11111111-1111-4111-8111-111111111111", kind: "approval_requested",
-      data: { action: { type: "pay_invoice" }, amountCents: 48000 }, created_at: now() },
+      data: { actionId: "act-1", proposal: "Fictional: pay contractor invoice INV-2041",
+              target: "Fictional Vendor LLC", amountCents: 48000, estimatedCents: 48000,
+              model: "demo", budgetCents: 100 }, created_at: now() },
+    { id: 2, run_id: "55555555-5555-4555-8555-555555555555", kind: "approval_requested",
+      data: { actionId: "act-2" }, created_at: now() },
   ],
 }
 let nextEventId = 2

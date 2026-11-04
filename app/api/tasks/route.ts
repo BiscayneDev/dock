@@ -8,7 +8,8 @@ import { quoteBriefTools } from "@/lib/brief-quote"
 import { appendEvent, ensureTaskConversation } from "@/lib/conversations"
 import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
-const DATA_PATH = join(process.cwd(), "data", "tasks.json")
+// DOCK_DATA_DIR overrides the data dir for the local e2e harness (fictional fixtures).
+const DATA_PATH = join(process.env.DOCK_DATA_DIR ?? join(process.cwd(), "data"), "tasks.json")
 
 // ── Storage helpers ──────────────────────────────────────────────────────────
 

@@ -17,7 +17,8 @@ export interface AgentMessage {
   read: boolean
 }
 
-const DATA_PATH = join(process.cwd(), "data", "messages.json")
+// DOCK_DATA_DIR overrides the data dir for the local e2e harness (fictional fixtures).
+const DATA_PATH = join(process.env.DOCK_DATA_DIR ?? join(process.cwd(), "data"), "messages.json")
 const MAX_MESSAGES = 500
 
 async function readMessages(): Promise<AgentMessage[]> {

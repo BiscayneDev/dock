@@ -1,0 +1,20 @@
+[
+  {
+    "id": "task-fic-1",
+    "title": "Fictional: reconcile October ledger",
+    "description": "Fixture task for the local e2e harness.",
+    "column": "in-progress",
+    "priority": "medium",
+    "assignee": "baron",
+    "createdAt": "2026-11-01T00:00:00.000Z"
+  },
+  {
+    "id": "task-fic-2",
+    "title": "Fictional: draft launch brief",
+    "description": "Fixture task for the local e2e harness.",
+    "column": "planning",
+    "priority": "medium",
+    "assignee": "scout",
+    "createdAt": "2026-11-01T00:00:00.000Z"
+  }
+]

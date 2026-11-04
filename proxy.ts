@@ -37,7 +37,7 @@ const CONNECTOR_BEARER_PATTERNS = [
 // Exact paths only: pair/create and /api/mobile/device stay behind the owner session gate.
 // Routes opened here MUST enforce requireMobileOrOwner or resolveContext themselves.
 const MOBILE_BEARER_PATTERNS = [
-  /^\/api\/mobile\/(pair\/exchange|push-token|status)$/,
+  /^\/api\/mobile\/(pair\/exchange|push-token|status|approvals)$/,
   /^\/api\/(tasks|runs|repos|messages)$/,
   /^\/api\/tasks\/(activate|[^/]+\/worktree)$/,
   /^\/api\/runs\/[^/]+\/(approve|reject)$/,
