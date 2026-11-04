@@ -109,6 +109,12 @@ contract test renders stored run output and disables submission by default.
 call, native build, hosted update, migration or production write performed.
 
 Latest extracted-branch checks:225total223pass2skip0fail; standalone TypeScript
-passes. Next compilation succeeded; its combined build was killed137 during
-TypeScript under a2GB local memory limit, so full extracted production build is
-not yet verified. This is an open pre-merge check, not a success claim.
+passes. Full Next production build also passes with bounded memory:
+NODE_OPTIONS=--max-old-space-size=650 NEXT_TURBOPACK_MEMORY_LIMIT=700 npm run build.
+It completed compilation, integrated TypeScript and static route generation,
+build_exit=0. This fixes the previous137 resource failure without skipping checks.
+
+Authenticated CLI local update:configure installed expo-updates and wrote the
+owning returned updates.url plus appVersion runtime policy and isolated channels.
+No update or binary was uploaded/published. Native launch and iPhone hosted-update
+transport remain unverified. SDK58 audit has0high/0critical,5moderate findings.
