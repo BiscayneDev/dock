@@ -4,6 +4,9 @@ import { runtime } from "@/lib/runtime"
 import { appendEvent, ensureTaskConversation, updateConversation } from "@/lib/conversations"
 import { enrichTaskBrief } from "@/lib/task-enrichment"
 import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
+import { assistantContext } from "@/lib/assistant-store"
+import { agentTokenAuthorized } from "@/lib/agent-auth"
+import { createTaskWorktree, isValidTaskRef } from "@/lib/isolation/worktree"
 
 interface BudgetCheckResult {
   allowed: boolean
@@ -23,7 +26,7 @@ const AGENT_MAP: Record<string, string> = {
   unassigned: "unassigned",
 }
 
-function buildBrief(taskId: string, title: string, description: string | undefined, assignee: string, priority: string) {
+function buildBrief(taskId: string, title: string, description: string | undefined, assignee: string, priority: string, worktree: { path: string; branch: string; baseRef: string } | null) {
   return [
     `🎯 [TASK ACTIVATED]`,
     ``,
@@ -36,6 +39,11 @@ function buildBrief(taskId: string, title: string, description: string | undefin
     `As Chief of Staff:`,
     `1. Enrich this into a proper brief`,
     `2. Delegate to the right agent (pass them the Task ID: ${taskId})`,
+    ...(worktree
+      ? [
+          `3. ISOLATION (hard requirement): all file work for this task happens ONLY inside the git worktree at ${worktree.path} on branch ${worktree.branch} (created from ${worktree.baseRef}). Do not read or edit any sibling directory, do not switch branches, do not push, do not merge - a human reviews the diff and merges.`,
+        ]
+      : []),
     `3. Agent must call these when done:`,
     `   curl -s -X PATCH ${MC_URL}/api/tasks/${taskId} -H "Content-Type: application/json" -d '{"column":"done","description":"✅ summary"}'`,
     `   curl -s -X POST ${MC_URL}/api/notify -H "Content-Type: application/json" -H "x-dock-agent-token: $DOCK_AGENT_TOKEN" -d '{"agent":"[name]","message":"✅ Done: ${title}","type":"finish"}'`,
@@ -47,9 +55,35 @@ function buildBrief(taskId: string, title: string, description: string | undefin
 
 export async function POST(request: Request) {
   try {
-    const { taskId, title, description, assignee, priority } = await request.json()
+    const { taskId, title, description, assignee, priority, repoPath, baseRef } = await request.json()
     if (!taskId || !title) {
       return NextResponse.json({ error: "taskId and title required" }, { status: 400 })
+    }
+
+    // Isolated runs (P3): when the caller asks for a worktree, the task's agent works only in a
+    // per-task git worktree + branch. Creating worktrees runs git on local paths, so unlike the
+    // plain activation above it requires an owner session or the agent token - never anonymous.
+    let worktree: { repoPath: string; path: string; branch: string; baseRef: string } | null = null
+    if (typeof repoPath === "string" && repoPath.trim()) {
+      const authed = (await assistantContext()) !== null || agentTokenAuthorized(request)
+      if (!authed) {
+        return NextResponse.json({ error: "Sign in required for isolated runs" }, { status: 401 })
+      }
+      if (!isValidTaskRef(String(taskId))) {
+        return NextResponse.json({ error: "taskId is not a valid task ref for isolation" }, { status: 400 })
+      }
+      try {
+        worktree = await createTaskWorktree({
+          repoPath: repoPath.trim(),
+          taskRef: String(taskId),
+          baseRef: typeof baseRef === "string" && baseRef.trim() ? baseRef.trim() : undefined,
+        })
+      } catch (err) {
+        return NextResponse.json(
+          { error: `Could not create task worktree: ${err instanceof Error ? err.message : "unknown"}` },
+          { status: 400 },
+        )
+      }
     }
 
     const enrichment = await enrichTaskBrief({
@@ -98,7 +132,23 @@ export async function POST(request: Request) {
       }),
     }).catch(() => null)
 
-    const message = buildBrief(taskId, enrichment.enrichedTitle, enrichment.enrichedDescription, assignee || "unassigned", priority)
+    if (worktree) {
+      await appendEvent(conversation.id, {
+        type: "worktree.created",
+        agent: assignee || CHIEF_RUNTIME_KEY,
+        summary: `Isolated worktree ${worktree.branch} for ${title}`,
+        data: {
+          taskId,
+          taskRef: String(taskId),
+          repoPath: worktree.repoPath,
+          path: worktree.path,
+          branch: worktree.branch,
+          baseRef: worktree.baseRef,
+        },
+      })
+    }
+
+    const message = buildBrief(taskId, enrichment.enrichedTitle, enrichment.enrichedDescription, assignee || "unassigned", priority, worktree)
     let budgetWarning: { warning: string; percentUsed: number } | null = null
 
     if (assignee && assignee !== "unassigned") {
@@ -156,7 +206,7 @@ export async function POST(request: Request) {
       // non-fatal
     }
 
-    return NextResponse.json({ ok: true, conversationId: conversation.id, ...budgetWarning })
+    return NextResponse.json({ ok: true, conversationId: conversation.id, worktree, ...budgetWarning })
   } catch {
     return NextResponse.json({ error: "Failed to activate task" }, { status: 500 })
   }
