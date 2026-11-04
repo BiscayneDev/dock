@@ -1,0 +1,1 @@
+{"enableProviderUpdateChecks":false,"defaultRuntimeMode":"approval-required","providerInstances":{"pi":{"driver":"pi","enabled":true,"config":{"binaryPath":"/usr/local/bin/pi","launchArgs":"--offline --no-skills --no-context-files --no-mcp --provider agent37 --model default"}}}}
