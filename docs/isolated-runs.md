@@ -45,13 +45,27 @@ This is detection, not confinement.
 
 `ActivateParams.worktree` carries the worktree as a structured field, so a runtime
 that controls the agent process working directory must confine it there. Dock's
-current OpenClaw runtime delivers to an external gateway: that agent process runs
-outside Dock's control, and confining its filesystem access is an infrastructure
-property of the gateway host (per-task container or OS user), not something the
-Next.js app can enforce. That boundary is the honest enforcement line today:
-Dock enforces registered repos, validated refs, contained paths, scrubbed
-environments and attestation; process confinement of an externally-run agent
-needs the container layer below.
+current OpenClaw runtime delivers to a gateway on the owner's own machine
+(`OPENCLAW_GATEWAY_URL`, default http://127.0.0.1:18789): that agent process runs
+outside Dock's Next.js process, so confinement is an infrastructure property of
+that host.
+
+The launch mechanism for it is `node/dock-node/src/isolation.mjs`: it detects an
+available container runtime (docker / podman / Apple `container`) and builds a
+confined argv - fresh container, ONLY the task worktree mounted at /work
+(`isTaskWorktreePath` refuses anything not under `.dock-worktrees/<repo>/<taskId>`),
+no network by default, read-only root, all capabilities dropped, no-new-privileges,
+non-root, scrubbed env via explicit `-e` flags. `confinedCommand` returns null when
+no runtime exists, and the contract is that callers must NOT fall back to running
+on the host when isolation is required. dock-node (which already spawns local
+processes for diagnostics) is the integration point on the owner's machine;
+wiring the OpenClaw gateway's own agent launch through the same argv builder is
+the remaining host-side step and needs shell access to that machine.
+
+Enforcement line today: Dock enforces registered repos, validated refs, contained
+paths, scrubbed environments, attestation, and ships the container mechanism;
+applying it to the gateway's agent process is host configuration on the owner's
+machine, not a code gap.
 
 ## Discipline vs enforcement
 
