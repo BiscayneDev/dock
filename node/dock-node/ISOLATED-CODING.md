@@ -34,3 +34,11 @@ sandbox, tool calls and completion callback against a fixture server, not the
 production Next route or real inference. It incurs no real inference spend.
 
 The experiment remains off. Tests do not authorize enabling it or merging it.
+
+Protocol parsing and a separate atomic call-ceiling reservation migration now
+exist as preparation. Scratch Postgres tests show eight concurrent reservation
+attempts against 30 cents at 10 cents each permit only three, reject duplicate
+request IDs, and reject wrong-device/expired leases. The migration has NOT been
+applied to production. Neither reservation nor a token limit by itself proves a
+provider's maximum cost. No upstream cost-ceiling contract was found in the
+installed gateway's OpenAI-compatible API, so no real coding call is enabled.

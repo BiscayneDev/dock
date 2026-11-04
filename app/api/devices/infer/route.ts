@@ -1,3 +1,4 @@
+import { parseCodingMessages } from "@/lib/coding-protocol"
 import { NextResponse } from "next/server"
 import { adminClient } from "@/lib/tenancy"
 import { isUuid } from "@/lib/assistant-store"
@@ -26,7 +27,10 @@ export async function POST(request: Request) {
   // Coding tool-call relay needs budget reservations and protocol validation.
   // Never treat it as the older one-shot text inference call or silently bypass
   // the shared ledger. Keep production disabled until that path is implemented.
-  if (body.coding !== undefined) return NextResponse.json({ error: "isolated coding inference metering is not available yet" }, { status: 501 })
+  if (body.coding !== undefined) {
+    if (!parseCodingMessages(body.coding)) return NextResponse.json({ error: "invalid coding protocol" }, { status: 400 })
+    return NextResponse.json({ error: "isolated coding inference requires verified upstream cost ceilings; disabled" }, { status: 501 })
+  }
   const admin = adminClient()
   try {
     const result = await inferForDevice(admin, auth.deviceId, body.run_id)
