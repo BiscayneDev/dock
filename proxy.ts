@@ -33,10 +33,21 @@ const CONNECTOR_BEARER_PATTERNS = [
   /^\/api\/connector\/approvals\/[^/]+\/decision$/,
 ]
 
+// Mobile app routes authenticate per-route with the paired-device token (lib/mobile-auth.ts).
+// Exact paths only: pair/create and /api/mobile/device stay behind the owner session gate.
+// Routes opened here MUST enforce requireMobileOrOwner or resolveContext themselves.
+const MOBILE_BEARER_PATTERNS = [
+  /^\/api\/mobile\/(pair\/exchange|push-token|status|approvals)$/,
+  /^\/api\/(tasks|runs|repos|messages)$/,
+  /^\/api\/tasks\/(activate|[^/]+\/worktree)$/,
+  /^\/api\/runs\/[^/]+\/(approve|reject)$/,
+]
+
 function isPublic(pathname: string): boolean {
   if (PUBLIC_EXACT_PATHS.includes(pathname)) return true
   if (DEVICE_BEARER_PATTERNS.some((re) => re.test(pathname))) return true
   if (CONNECTOR_BEARER_PATTERNS.some((re) => re.test(pathname))) return true
+  if (MOBILE_BEARER_PATTERNS.some((re) => re.test(pathname))) return true
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
 }
 

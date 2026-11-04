@@ -1,3 +1,4 @@
+import { parseIsolatedTask } from "@/lib/isolated-task"
 import { NextResponse } from "next/server"
 import { adminClient } from "@/lib/tenancy"
 import { authenticateDevice, claimHomeRun, touchDevice } from "@/lib/devices"
@@ -17,6 +18,9 @@ export async function POST(request: Request) {
     await touchDevice(admin, auth.deviceId)
     const run = await claimHomeRun(admin, auth.deviceId)
     if (!run) return NextResponse.json({ run: null })
+    if (run.payload?.isolatedTask !== undefined && !parseIsolatedTask(run.payload.isolatedTask)) {
+      return NextResponse.json({ error: "invalid isolated task payload; refusing non-isolated fallback" }, { status: 409 })
+    }
     return NextResponse.json({
       run: {
         id: run.id,
@@ -27,6 +31,7 @@ export async function POST(request: Request) {
         attempt: run.attempts,
         leaseUntil: run.leaseUntil,
         proposedAction: proposedActionFromPayload(run.payload),
+        isolatedTask: parseIsolatedTask(run.payload?.isolatedTask),
         wantDiagnostics: run.payload?.wantDiagnostics === true,
       },
     })

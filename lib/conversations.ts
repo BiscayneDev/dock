@@ -14,6 +14,7 @@ export type EventType =
   | "run.failed"
   | "intervention.sent"
   | "task.linked"
+  | "worktree.created"
   | "activity.started"
   | "activity.completed"
   | "activity.reviewed"
@@ -222,7 +223,7 @@ function upsertConversation(store: ConversationStore, conversation: Conversation
   return { conversations: next.slice(0, MAX_CONVERSATIONS) }
 }
 
-function taskConversationId(taskId: string): string {
+export function taskConversationId(taskId: string): string {
   return `task-${taskId}`
 }
 

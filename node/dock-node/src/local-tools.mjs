@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from "node:child_process"
+import { confinedCommand, resolveTaskWorktree, loadRegisteredRepos } from "./isolation.mjs"
 
 // Optional local tools adapter. Off unless the daemon is started with --local-tools. Detects a cua-driver CLI on PATH.
 // It reports what it found; it does not drive the desktop. Computer use is a later task (P4).
@@ -65,10 +66,37 @@ export function shouldRunDiagnostics({ enabled = false, wantDiagnostics = false 
 
 // Runs `npx tsc --noEmit --pretty false` in projectDir (60s timeout) and
 // returns a compact diagnostics report string.
-export async function runDiagnosticsTool({ projectDir = process.cwd() } = {}) {
+//
+// Isolation: when DOCK_NODE_ISOLATION=require and projectDir is a task worktree,
+// the command runs CONFINED in a fresh container that sees only that worktree
+// (see isolation.mjs). When isolation is required but cannot be enforced (no
+// container runtime, or the path is not a registered task worktree), the command
+// is REFUSED - never run unconfined on the host.
+export async function runDiagnosticsTool({ projectDir = process.cwd(), taskRef = null } = {}) {
+  let command = "npx"
+  let args = ["tsc", "--noEmit", "--pretty", "false"]
+  let cwd = projectDir
+  if (process.env.DOCK_NODE_ISOLATION === "require" && taskRef) {
+    const { resolved } = await resolveTaskWorktree(projectDir, await loadRegisteredRepos(), taskRef)
+    const confined = confinedCommand({
+      worktreePath: resolved,
+      command: ["npx", "tsc", "--noEmit", "--pretty", "false"],
+      whichFn: (name) => {
+        try {
+          return Boolean(execFileSync("which", [name], { stdio: ["ignore", "pipe", "ignore"] }))
+        } catch {
+          return false
+        }
+      },
+    })
+    if (!confined) throw new Error("isolation required but no container runtime available; refusing to run unconfined")
+    command = confined.runtime
+    args = confined.argv
+    cwd = "/"
+  }
   const stdout = await new Promise((resolve, reject) => {
-    const child = spawn("npx", ["tsc", "--noEmit", "--pretty", "false"], {
-      cwd: projectDir,
+    const child = spawn(command, args, {
+      cwd,
       stdio: ["ignore", "pipe", "pipe"],
     })
     let out = ""

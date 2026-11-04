@@ -45,6 +45,7 @@ import { PLAN_GRAPH_INSTRUCTION } from "@/lib/plan-graph"
 import { topSkills, type ParsedSkill } from "@/lib/skills-skillmd"
 import { readFile } from "fs/promises"
 import { join } from "path"
+import { sendExpoPush } from "./expo-push"
 
 /**
  * Skill descriptions available for prompt injection, loaded from the SKILL.md import
@@ -104,6 +105,15 @@ async function finish(
   detail: { output?: string | null; error?: string | null },
 ): Promise<string> {
   await complete(admin, run.id, workerId, { status, ...detail })
+  if (status === "failed") {
+    // Owner-alert category: fail. Best-effort, never affects the run outcome.
+    // Generic lockscreen text: no error excerpts or business data in the push;
+    // detail stays behind app auth.
+    sendExpoPush("Dock", "A run failed. Open Dock for details.", {
+      type: "fail",
+      runId: run.id,
+    }).catch(() => 0)
+  }
   // Brief-linked runs write their outcome back to the brief, the ledger and the central thread. Never fails the run.
   const briefId = typeof run.payload.briefId === "string" ? run.payload.briefId : null
   if (briefId) {
@@ -182,6 +192,11 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
         : { screenshotUrl: null, previewFailed: preview.reason }),
     })
     await parkForApproval(admin, run.id, workerId)
+    // Owner-alert category: needs-approval. Best-effort, never affects the gate.
+    sendExpoPush("Dock", "A run needs your approval. Open Dock to decide.", {
+      type: "approval",
+      runId: run.id,
+    }).catch(() => 0)
     return "awaiting_approval"
   }
   if (gate.kind === "rejected") return finish(admin, run, workerId, "cancelled", { error: "rejected by owner" })

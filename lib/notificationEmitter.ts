@@ -4,7 +4,7 @@ export interface NotificationPayload {
   id: string
   agent: string
   message: string
-  type: "start" | "finish" | "info"
+  type: "start" | "finish" | "fail" | "approval" | "info"
   timestamp: number
 }
 

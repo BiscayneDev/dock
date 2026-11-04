@@ -17,6 +17,7 @@ import {
 } from "@/lib/tasks"
 import AgentInbox from "@/components/tasks/AgentInbox"
 import RunsPanel from "@/components/tasks/RunsPanel"
+import WorktreeReviewCard from "@/components/tasks/WorktreeReviewCard"
 import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
 type TasksView = "board" | "inbox"
@@ -327,6 +328,8 @@ function TaskCard({
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-sm font-bold text-white">Edit Task</h3>
+
+            <WorktreeReviewCard taskId={task.id} />
 
             <div className="space-y-1">
               <label className="text-xs text-zinc-500">Title</label>

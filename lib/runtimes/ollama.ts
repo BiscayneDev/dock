@@ -14,6 +14,8 @@ interface OllamaModel {
 export class OllamaRuntime implements AgentRuntime {
   readonly name = "Ollama"
   readonly id = "ollama"
+  // Prompt-level worktree hints are not confinement: this runtime cannot enforce isolation.
+  readonly enforcesWorktreeIsolation = false
 
   /** Lazy Ollama AI SDK provider, bound to OLLAMA_BASE_URL. */
   private provider() {
