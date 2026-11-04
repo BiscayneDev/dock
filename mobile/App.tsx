@@ -23,7 +23,40 @@ type Tab = "board" | "approvals" | "new"
 
 const COLUMNS = ["backlog", "planning", "in-progress", "in-review", "done"]
 
+// Demo mode (web preview only, ?demo=board|approvals|task|new): fictional data,
+// clearly badged, never touches a network. Used to preview the views.
+const DEMO_TASKS: Task[] = [
+  { id: "task-demo1", title: "Reconcile October Paybox ledger", column: "in-progress", assignee: "baron", priority: "high", description: "Fictional demo task" },
+  { id: "task-demo2", title: "Draft Chateau launch brief", column: "planning", assignee: "scout", priority: "medium" },
+  { id: "task-demo3", title: "Weekly standup summary", column: "done", assignee: "chief" },
+]
+const DEMO_REVIEW: WorktreeReview = {
+  worktree: { path: "/demo/.dock-worktrees/paybox/task-demo1", branch: "dock/task-task-demo1", baseRef: "main" },
+  diff: {
+    aheadBy: 2,
+    stat: [
+      " ledger/reconcile.ts | 84 ++++++++",
+      " ledger/report.ts    |  12 +--",
+      " 2 files changed, 90 insertions(+), 6 deletions(-)",
+    ].join("\n"),
+    commits: ["a1b2c3d reconcile payouts", "e4f5g6h add report rollup"].join("\n"),
+  },
+  verification: { ok: true, problems: [] },
+}
+const DEMO_RUNS: Run[] = [
+  { id: "run-demo1", status: "awaiting_approval", agentKey: "baron", prompt: "Fictional: pay $480.00 contractor invoice INV-2041", proposedAction: { type: "pay_invoice" } },
+]
+
+async function demoApi<T>(path: string): Promise<T | null> {
+  if (path === "/api/tasks") return DEMO_TASKS as T
+  if (path === "/api/runs") return { runs: DEMO_RUNS } as T
+  if (path === "/api/repos") return { repos: ["/demo/shipyard/paybox"] } as T
+  if (path.includes("/worktree")) return DEMO_REVIEW as T
+  return null
+}
+
 async function api<T>(base: string, token: string, path: string, init?: RequestInit): Promise<T | null> {
+  if (base === "demo") return demoApi<T>(path)
   try {
     const res = await fetch(`${base}${path}`, {
       ...init,
@@ -59,6 +92,17 @@ export default function App() {
 
   useEffect(() => {
     ;(async () => {
+      // Web preview: ?demo=board|approvals|task|new renders the views on fictional data.
+      if (typeof window !== "undefined") {
+        const demo = new URLSearchParams(window.location.search).get("demo")
+        if (demo) {
+          setConnected({ base: "demo", token: "demo" })
+          if (demo === "approvals") setTab("approvals")
+          if (demo === "new") setTab("new")
+          if (demo === "task") setSelected(DEMO_TASKS[0])
+          return
+        }
+      }
       const base = await SecureStore.getItemAsync("dock:url")
       const saved = await SecureStore.getItemAsync("dock:token")
       if (base && saved) setConnected({ base, token: saved })
@@ -81,7 +125,8 @@ export default function App() {
 
   const connect = useCallback(async () => {
     const base = dockUrl.trim().replace(/\/$/, "")
-    if (!base || !token.trim()) return
+    const code = token.trim()
+    if (!base || !code) return
     // Tokens cross the network on every call: refuse cleartext, except local dev.
     try {
       const u = new URL(base)
@@ -95,13 +140,28 @@ export default function App() {
       return
     }
     setBusy(true)
-    const ok = await api<Task[]>(base, token.trim(), "/api/tasks")
+    setError(null)
+    // Pairing: exchange the short-lived code from the Dock web UI for a
+    // device-scoped credential. No persistent token is ever typed in.
+    const paired = await api<{ deviceToken: string }>(base, "-", "/api/mobile/pair/exchange", {
+      method: "POST",
+      body: JSON.stringify({ code, platform: "ios" }),
+    })
+    if (!paired?.deviceToken) {
+      setBusy(false)
+      setError("Pairing failed - codes are single-use and expire after 5 minutes.")
+      return
+    }
+    const ok = await api<Task[]>(base, paired.deviceToken, "/api/tasks")
     setBusy(false)
-    if (!ok) return
+    if (!ok) {
+      setError("Paired, but could not load tasks from that Dock URL.")
+      return
+    }
     await SecureStore.setItemAsync("dock:url", base)
-    await SecureStore.setItemAsync("dock:token", token.trim())
-    setConnected({ base, token: token.trim() })
-    registerPush(base, token.trim())
+    await SecureStore.setItemAsync("dock:token", paired.deviceToken)
+    setConnected({ base, token: paired.deviceToken })
+    registerPush(base, paired.deviceToken)
   }, [dockUrl, token, registerPush])
 
   const refresh = useCallback(async () => {
@@ -180,8 +240,8 @@ export default function App() {
         <Text style={styles.sub}>Connect to your Dock.</Text>
         <TextInput style={styles.input} placeholder="Dock URL (https://your-dock...)" placeholderTextColor="#52525b"
           autoCapitalize="none" autoCorrect={false} value={dockUrl} onChangeText={setDockUrl} />
-        <TextInput style={styles.input} placeholder="Mobile token (DOCK_MOBILE_TOKEN)" placeholderTextColor="#52525b"
-          autoCapitalize="none" secureTextEntry value={token} onChangeText={setToken} />
+        <TextInput style={styles.input} placeholder="6-digit pairing code (from Dock web)" placeholderTextColor="#52525b"
+          autoCapitalize="none" keyboardType="number-pad" value={token} onChangeText={setToken} />
         {error ? <Text style={styles.bad}>{error}</Text> : null}
         <Pressable style={styles.button} onPress={connect} disabled={busy}>
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Connect</Text>}
@@ -189,6 +249,9 @@ export default function App() {
       </SafeAreaView>
     )
   }
+
+  const demo = connected.base === "demo"
+  const demoBadge = demo ? <Text style={styles.demoBadge}>DEMO - fictional data</Text> : null
 
   if (selected) {
     const r = review
@@ -199,6 +262,7 @@ export default function App() {
           <Text style={styles.back}>‹ Board</Text>
         </Pressable>
         <ScrollView>
+          {demoBadge}
           <Text style={styles.h1}>{selected.title}</Text>
           <Text style={styles.sub}>{selected.column}{selected.assignee ? ` · ${selected.assignee}` : ""}</Text>
           {r?.worktree?.branch ? (
@@ -234,6 +298,7 @@ export default function App() {
   return (
     <SafeAreaView style={styles.screen}>
       <StatusBar style="light" />
+      {demoBadge}
       {tab === "board" && (
         <FlatList
           data={COLUMNS.map((c) => ({ column: c, tasks: tasks.filter((t) => t.column === c) }))}
@@ -334,6 +399,7 @@ const styles = StyleSheet.create({
   approve: { backgroundColor: "#16a34a", flex: 1, marginRight: 6 },
   reject: { backgroundColor: "#b91c1c", flex: 1, marginLeft: 6 },
   buttonDisabled: { opacity: 0.4 },
+  demoBadge: { color: "#f59e0b", fontSize: 11, fontWeight: "700", marginBottom: 8 },
   tabs: { flexDirection: "row", borderTopColor: "#1a1a2e", borderTopWidth: 1, paddingTop: 10 },
   tabItem: { flex: 1, alignItems: "center" },
   tabActive: { color: "#fff", fontWeight: "700" },

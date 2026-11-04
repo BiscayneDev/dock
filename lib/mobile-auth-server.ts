@@ -16,7 +16,7 @@ export async function requireMobileOrOwner(
   capability: MobileCapability,
 ): Promise<NextResponse | null> {
   if (await assistantContext()) return null
-  if (mobileTokenAuthorized(request) && mobileTokenHas(capability)) return null
+  if ((await mobileTokenAuthorized(request)) && mobileTokenHas(capability)) return null
   return NextResponse.json({ error: "Sign in required" }, { status: 401 })
 }
 
@@ -26,7 +26,7 @@ export async function requireMobileOrOwner(
  * single-workspace deployments only. Returns null when not a token request.
  */
 export async function resolveMobileOwnerContext(request: Request) {
-  if (!mobileTokenAuthorized(request)) return null
+  if (!(await mobileTokenAuthorized(request))) return null
   const tokenWs = await agentTokenWorkspace()
   if (tokenWs === "forbidden") return { forbidden: true } as const
   const admin = adminClient()

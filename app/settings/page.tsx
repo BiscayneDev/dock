@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import DevicesSection from "@/components/settings/DevicesSection"
+import MobilePairingSection from "@/components/settings/MobilePairingSection"
 import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 import ConnectDinghyCard from "@/components/settings/ConnectDinghyCard"
 import ShipyardConnectCard from "@/components/settings/ShipyardConnectCard"
@@ -545,6 +546,7 @@ export default function SettingsPage() {
       </div>
 
       <AgentBudgetsSection />
+      <MobilePairingSection />
       <DevicesSection />
       <ConnectDinghyCard />
       <ShipyardConnectCard />

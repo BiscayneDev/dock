@@ -73,7 +73,7 @@ export async function POST(request: Request) {
       const authed =
         (await assistantContext()) !== null ||
         agentTokenAuthorized(request) ||
-        (mobileTokenAuthorized(request) && mobileTokenHas("tasks:activate"))
+        ((await mobileTokenAuthorized(request)) && mobileTokenHas("tasks:activate"))
       if (!authed) {
         return NextResponse.json({ error: "Sign in required for isolated runs" }, { status: 401 })
       }

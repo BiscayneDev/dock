@@ -13,7 +13,7 @@ interface Context {
 /** Owner decision on a money action parked in awaiting_approval. RLS limits this to the owner's runs. */
 export async function POST(request: Request, context: Context) {
   let ctx = await assistantContext()
-  if (!ctx && mobileTokenAuthorized(request) && mobileTokenHas("runs:decide")) {
+  if (!ctx && (await mobileTokenAuthorized(request)) && mobileTokenHas("runs:decide")) {
     const mobileCtx = await resolveMobileOwnerContext(request)
     if (mobileCtx && !("forbidden" in mobileCtx)) ctx = mobileCtx
   }

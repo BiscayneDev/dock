@@ -76,7 +76,7 @@ test("broker forwards only POST /infer and injects the token itself", async (t) 
   const upstreamUrl = `http://127.0.0.1:${upstream.address().port}/api/devices/infer`
 
   const sock = brokerSocketPath(dir)
-  const broker = await startBroker({ socketPath: sock, upstreamInferUrl: upstreamUrl, deviceToken: "device-secret" })
+  const broker = await startBroker({ socketPath: sock, upstreamInferUrl: upstreamUrl, deviceToken: "device-secret", runId: "r1" })
   t.after(() => broker.close())
 
   const call = (method, path, body) => new Promise((resolveCall, rejectCall) => {
@@ -98,7 +98,12 @@ test("broker forwards only POST /infer and injects the token itself", async (t) 
 
   assert.equal((await call("GET", "/infer")).status, 404)
   assert.equal((await call("POST", "/anything-else", "{}")).status, 404)
-  assert.equal(seen.length, 1, "non-/infer never reaches upstream")
+  // a body naming any other run is refused: no cross-run spending
+  assert.equal((await call("POST", "/infer", JSON.stringify({ runId: "r2" }))).status, 403)
+  assert.equal((await call("POST", "/infer", "not json")).status, 400)
+  // oversized bodies: connection cut before reaching upstream
+  await assert.rejects(() => call("POST", "/infer", JSON.stringify({ runId: "r1", pad: "x".repeat(70000) })), /hang up|ECONNRESET/)
+  assert.equal(seen.length, 1, "non-/infer and foreign runs never reach upstream")
   // the container side never sees the token: it just POSTs to the socket
   assert.ok(!okRes.body.includes("device-secret"))
 })

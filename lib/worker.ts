@@ -107,7 +107,9 @@ async function finish(
   await complete(admin, run.id, workerId, { status, ...detail })
   if (status === "failed") {
     // Owner-alert category: fail. Best-effort, never affects the run outcome.
-    sendExpoPush(`Dock · ${run.agentKey}`, `Run failed: ${(detail.error ?? "unknown").slice(0, 200)}`, {
+    // Generic lockscreen text: no error excerpts or business data in the push;
+    // detail stays behind app auth.
+    sendExpoPush("Dock", "A run failed. Open Dock for details.", {
       type: "fail",
       runId: run.id,
     }).catch(() => 0)
@@ -191,7 +193,7 @@ export async function processRun(admin: SupabaseClient, run: TaskRun, opts: Tick
     })
     await parkForApproval(admin, run.id, workerId)
     // Owner-alert category: needs-approval. Best-effort, never affects the gate.
-    sendExpoPush(`Dock · ${run.agentKey}`, "A run is waiting for your approval", {
+    sendExpoPush("Dock", "A run needs your approval. Open Dock to decide.", {
       type: "approval",
       runId: run.id,
     }).catch(() => 0)

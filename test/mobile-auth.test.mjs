@@ -14,12 +14,12 @@ function req(headers = {}) {
   return new Request("https://dock.local/api/x", { headers })
 }
 
-test("mobile token: valid bearer passes, wrong/missing/unset fails", () => {
-  assert.equal(mobileTokenAuthorized(req({ authorization: "Bearer test-mobile-token-123" })), true)
-  assert.equal(mobileTokenAuthorized(req({ "x-dock-mobile-token": "test-mobile-token-123" })), true)
-  assert.equal(mobileTokenAuthorized(req({ authorization: "Bearer wrong" })), false)
-  assert.equal(mobileTokenAuthorized(req({ authorization: "Bearer test-mobile-token-1234" })), false)
-  assert.equal(mobileTokenAuthorized(req()), false)
+test("mobile token: valid bearer passes, wrong/missing/unset fails", async () => {
+  assert.equal(await mobileTokenAuthorized(req({ authorization: "Bearer test-mobile-token-123" })), true)
+  assert.equal(await mobileTokenAuthorized(req({ "x-dock-mobile-token": "test-mobile-token-123" })), true)
+  assert.equal(await mobileTokenAuthorized(req({ authorization: "Bearer wrong" })), false)
+  assert.equal(await mobileTokenAuthorized(req({ authorization: "Bearer test-mobile-token-1234" })), false)
+  assert.equal(await mobileTokenAuthorized(req()), false)
 })
 
 test("capability surface is explicit and closed", () => {

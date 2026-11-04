@@ -33,15 +33,24 @@ function digest(value: string): Buffer {
   return createHash("sha256").update(value, "utf8").digest()
 }
 
-/** True when the request carries a valid DOCK_MOBILE_TOKEN bearer/x-dock-mobile-token header. */
-export function mobileTokenAuthorized(request: Request): boolean {
-  const expected = (process.env.DOCK_MOBILE_TOKEN ?? "").trim()
-  if (!expected) return false
+export function presentedMobileToken(request: Request): string {
   const authorization = request.headers.get("authorization") ?? ""
   const bearer = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : ""
-  const provided = bearer || (request.headers.get("x-dock-mobile-token") ?? "").trim()
+  return bearer || (request.headers.get("x-dock-mobile-token") ?? "").trim()
+}
+
+/**
+ * True when the request carries a valid mobile credential: the owner-configured
+ * DOCK_MOBILE_TOKEN (escape hatch / single-phone deployments) or a paired,
+ * revocable device credential from the pairing flow (./mobile-pairing).
+ */
+export async function mobileTokenAuthorized(request: Request): Promise<boolean> {
+  const provided = presentedMobileToken(request)
   if (!provided) return false
-  return timingSafeEqual(digest(provided), digest(expected))
+  const expected = (process.env.DOCK_MOBILE_TOKEN ?? "").trim()
+  if (expected && timingSafeEqual(digest(provided), digest(expected))) return true
+  const { deviceTokenAuthorized } = await import("./mobile-pairing.ts")
+  return deviceTokenAuthorized(provided)
 }
 
 export function mobileTokenHas(capability: MobileCapability): boolean {
