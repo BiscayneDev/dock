@@ -6,7 +6,8 @@ import { enrichTaskBrief } from "@/lib/task-enrichment"
 import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 import { assistantContext } from "@/lib/assistant-store"
 import { agentTokenAuthorized } from "@/lib/agent-auth"
-import { createTaskWorktree, isValidTaskRef } from "@/lib/isolation/worktree"
+import { createTaskWorktree, isValidTaskRef, assertValidBaseRef } from "@/lib/isolation/worktree"
+import { assertRepoRegistered } from "@/lib/isolation/registered-repos"
 
 interface BudgetCheckResult {
   allowed: boolean
@@ -63,6 +64,9 @@ export async function POST(request: Request) {
     // Isolated runs (P3): when the caller asks for a worktree, the task's agent works only in a
     // per-task git worktree + branch. Creating worktrees runs git on local paths, so unlike the
     // plain activation above it requires an owner session or the agent token - never anonymous.
+    // Auth alone does not authorize an arbitrary host path: the repo must be one the owner
+    // registered (POST /api/repos, owner session only; tokens cannot register), and baseRef is
+    // strictly validated before it reaches a git command line.
     let worktree: { repoPath: string; path: string; branch: string; baseRef: string } | null = null
     if (typeof repoPath === "string" && repoPath.trim()) {
       const authed = (await assistantContext()) !== null || agentTokenAuthorized(request)
@@ -72,9 +76,19 @@ export async function POST(request: Request) {
       if (!isValidTaskRef(String(taskId))) {
         return NextResponse.json({ error: "taskId is not a valid task ref for isolation" }, { status: 400 })
       }
+      let registeredRepo: string
+      try {
+        registeredRepo = await assertRepoRegistered(repoPath.trim())
+        if (typeof baseRef === "string" && baseRef.trim()) assertValidBaseRef(baseRef.trim())
+      } catch (err) {
+        return NextResponse.json(
+          { error: err instanceof Error ? err.message : "repo not allowed" },
+          { status: 403 },
+        )
+      }
       try {
         worktree = await createTaskWorktree({
-          repoPath: repoPath.trim(),
+          repoPath: registeredRepo,
           taskRef: String(taskId),
           baseRef: typeof baseRef === "string" && baseRef.trim() ? baseRef.trim() : undefined,
         })
@@ -186,6 +200,7 @@ export async function POST(request: Request) {
       priority,
       callbackUrl: MC_URL,
       message,
+      ...(worktree ? { worktree: { path: worktree.path, branch: worktree.branch, baseRef: worktree.baseRef } } : {}),
     } as Parameters<typeof runtime.activate>[0] & { message: string }).catch(() => null)
 
     try {

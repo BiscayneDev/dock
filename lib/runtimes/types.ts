@@ -18,6 +18,14 @@ export interface ActivateParams {
   assignee?: string
   priority?: string
   callbackUrl: string
+  /**
+   * Per-task isolated git worktree. A runtime that controls the agent process
+   * working directory MUST confine it to worktree.path on worktree.branch.
+   * Runtimes that deliver to an external gateway (e.g. OpenClaw) cannot
+   * confine that process from Dock; confinement there is an infrastructure
+   * property of the gateway host, not of this field.
+   */
+  worktree?: { path: string; branch: string; baseRef: string }
 }
 
 export interface ChatParams {

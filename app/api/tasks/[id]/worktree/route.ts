@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { assistantContext } from "@/lib/assistant-store"
 import { getConversation, taskConversationId } from "@/lib/conversations"
-import { diffForTaskBranch } from "@/lib/isolation/worktree"
+import { diffForTaskBranch, verifyTaskWorktree } from "@/lib/isolation/worktree"
 
 export const dynamic = "force-dynamic"
 
@@ -42,8 +42,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   if (!repoPath || !taskRef) return NextResponse.json({ worktree, diff: null })
   try {
-    const diff = await diffForTaskBranch({ repoPath, taskRef, baseRef })
-    return NextResponse.json({ worktree, diff })
+    const [diff, verification] = await Promise.all([
+      diffForTaskBranch({ repoPath, taskRef, baseRef }),
+      verifyTaskWorktree({ repoPath, taskRef }),
+    ])
+    return NextResponse.json({ worktree, diff, verification })
   } catch (err) {
     // The worktree may be gone (merged and cleaned up): report the record, not an error.
     return NextResponse.json({

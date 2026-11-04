@@ -18,6 +18,7 @@
  * Pure helpers are I/O-free so node tests can load this file directly.
  */
 
+import { realpath } from "node:fs/promises"
 import { execFile } from "child_process"
 import { promisify } from "util"
 import { dirname, basename, join, resolve, sep } from "path"
@@ -31,6 +32,19 @@ const TASK_REF = /^[a-z0-9][a-z0-9-]{0,62}$/
 
 export function isValidTaskRef(taskRef: string): boolean {
   return TASK_REF.test(taskRef)
+}
+
+/** Base refs come from HTTP input and become git CLI arguments: validate strictly. */
+const BASE_REF = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,198}$/
+const BASE_REF_BAD = /(\.\.|@\{|[\s~^:?*\[\\\\])/
+
+export function isValidBaseRef(ref: string): boolean {
+  return BASE_REF.test(ref) && !BASE_REF_BAD.test(ref) && !ref.endsWith("/") && !ref.endsWith(".lock")
+}
+
+export function assertValidBaseRef(ref: string): string {
+  if (!isValidBaseRef(ref)) throw new Error(`invalid base ref: ${ref}`)
+  return ref
 }
 
 export function taskBranchName(taskRef: string): string {
@@ -106,8 +120,10 @@ export async function createTaskWorktree(input: {
   taskRef: string
   baseRef?: string
 }): Promise<TaskWorktree> {
-  const repoPath = resolve(input.repoPath)
-  const baseRef = input.baseRef ?? "HEAD"
+  const repoPath = await realpath(resolve(input.repoPath)).catch(() => {
+    throw new Error(`repo path does not exist: ${input.repoPath}`)
+  })
+  const baseRef = assertValidBaseRef(input.baseRef ?? "HEAD")
   const branch = taskBranchName(input.taskRef)
   const path = worktreePathFor(repoPath, input.taskRef)
   if (!isPathInside(worktreeRootFor(repoPath), path)) throw new Error("worktree path escapes root")
@@ -126,7 +142,12 @@ export async function createTaskWorktree(input: {
       throw err
     })
   }
-  return { repoPath, path, branch, baseRef }
+  // Post-create containment: the resolved worktree must stay under the resolved root
+  // even if a path component was swapped for a symlink between checks.
+  const resolvedRoot = await realpath(worktreeRootFor(repoPath))
+  const resolvedPath = await realpath(path)
+  if (!isPathInside(resolvedRoot, resolvedPath)) throw new Error("worktree path escapes root")
+  return { repoPath, path: resolvedPath, branch, baseRef }
 }
 
 /** Remove the worktree; optionally delete the task branch (only ever dock/task-*). */
@@ -135,7 +156,7 @@ export async function removeTaskWorktree(input: {
   taskRef: string
   deleteBranch?: boolean
 }): Promise<void> {
-  const repoPath = resolve(input.repoPath)
+  const repoPath = await realpath(resolve(input.repoPath))
   const branch = taskBranchName(input.taskRef)
   const path = worktreePathFor(repoPath, input.taskRef)
   if (!isPathInside(worktreeRootFor(repoPath), path)) throw new Error("worktree path escapes root")
@@ -162,9 +183,9 @@ export async function diffForTaskBranch(input: {
   taskRef: string
   baseRef?: string
 }): Promise<TaskDiff> {
-  const repoPath = resolve(input.repoPath)
+  const repoPath = await realpath(resolve(input.repoPath))
   const branch = taskBranchName(input.taskRef)
-  const baseRef = input.baseRef ?? "HEAD"
+  const baseRef = assertValidBaseRef(input.baseRef ?? "HEAD")
   await assertGitRepo(repoPath)
   const [stat, nameStatus, commits] = await Promise.all([
     git(repoPath, ["diff", "--stat", `${baseRef}...${branch}`]),
@@ -173,4 +194,39 @@ export async function diffForTaskBranch(input: {
   ])
   const aheadBy = commits ? commits.split("\n").length : 0
   return { branch, baseRef, aheadBy, stat, nameStatus, commits }
+}
+
+export interface WorktreeVerification {
+  ok: boolean
+  problems: string[]
+  headBranch: string | null
+  path: string
+}
+
+/**
+ * Attestation for review: the worktree is where it should be, registered with
+ * git, and checked out on the task branch. Detection, not confinement - it
+ * catches an agent that switched branches or a path that was tampered with.
+ */
+export async function verifyTaskWorktree(input: {
+  repoPath: string
+  taskRef: string
+}): Promise<WorktreeVerification> {
+  const repoPath = await realpath(resolve(input.repoPath))
+  const branch = taskBranchName(input.taskRef)
+  const path = worktreePathFor(repoPath, input.taskRef)
+  const problems: string[] = []
+  let headBranch: string | null = null
+  const resolvedPath = await realpath(path).catch(() => null)
+  if (!resolvedPath) {
+    problems.push("worktree directory is missing")
+  } else {
+    const resolvedRoot = await realpath(worktreeRootFor(repoPath)).catch(() => null)
+    if (!resolvedRoot || !isPathInside(resolvedRoot, resolvedPath)) problems.push("worktree path escapes its root")
+    headBranch = await git(resolvedPath, ["rev-parse", "--abbrev-ref", "HEAD"]).catch(() => null)
+    if (headBranch !== branch) problems.push(`worktree is on branch ${headBranch ?? "unknown"}, expected ${branch}`)
+    const listed = await git(repoPath, ["worktree", "list", "--porcelain"]).catch(() => "")
+    if (!listed.includes(`worktree ${resolvedPath}\n`)) problems.push("worktree is not registered with git")
+  }
+  return { ok: problems.length === 0, problems, headBranch, path }
 }
