@@ -5,12 +5,40 @@ SQL, deploy, enroll in Apple, submit a build, or run paid inference.
 
 ## Exact outcome of the first slice
 
-A native Dock client can pair to the owner workspace, read the board, display
-source result messages for a selected task, send a message, and show readable
-approval cards. This is not yet the promised real task-to-agent-to-result path:
-`lib/runtimes/index.ts` selects StubRuntime on Vercel, and `/api/messages` stores
-messages without dispatching an agent. New isolated execution remains OFF.
-Do not describe a board connection as an operational agent harness.
+The client now leads with the existing durable Supabase `/api/runs` queue and
+stored run output, not legacy board activation. Read results, status, failure and
+pending approvals on the phone. Proposed submission is text-only `target: cloud`,
+with explicit `runs:create` capability plus default-OFF `DOCK_MOBILE_RUNS` server
+flag. This flag is not permission to spend. It must remain OFF until execution
+and spending review authorizes a real test. Mobile submissions cannot include
+isolated coding payloads or proposed money actions. No live run has been queued.
+
+This route bypasses the legacy runtime factory that selects StubRuntime on
+Vercel. The cron worker uses generateText directly and stores output/events in
+existing Supabase task_runs tables. It is text generation only, not browser or
+sandbox coding. Existing legacy task/messages UI remains secondary and is not
+presented as reliable execution. No new database store for legacy files is added.
+
+### Read-only production evidence, November 4
+
+- Dock project complete masked environment-name list has Supabase configuration,
+  CRON_SECRET and Shipyard configuration, no KV_REST_API_URL/KV token. No values
+  revealed. Vercel storage page has no linked database (Supabase is separate).
+- Business-email Dock session: `/api/runs` returned200, zero runs, homeOnline false.
+  App lands on initial setup screen. No setup, dispatch or worker request submitted.
+- `/api/models` returned Shipyard configured, other providers false. This is
+  configuration evidence, not a successful model-call proof.
+- Vercel cron settings show enabled `/api/worker/tick`, every minute. Filtered
+  runtime logs showed no matching entries. No Run button or endpoint invoked.
+- Worker cost gate compares a fixed estimate to remaining budget, then records
+  actual cost or the estimate if unknown. It is NOT a hard provider-dollar cap.
+  A $0.10 budget field must not be described as a guaranteed maximum charge.
+
+Owning URLs:
+- https://vercel.com/halsey-biscaynevents-projects/dock/settings/environment-variables
+- https://vercel.com/halsey-biscaynevents-projects/dock/stores
+- https://vercel.com/halsey-biscaynevents-projects/dock/settings/cron-jobs
+- https://dock-harness.vercel.app/
 
 ## Distribution discovered
 
@@ -72,9 +100,11 @@ code rollback is needed. SQL was tested in throwaway Postgres only.
 1. `lib/mobile-{auth,auth-server,pairing,pairing-server}.ts`, all
    `app/api/mobile/*`, and the migration above.
 2. `components/settings/MobilePairingSection.tsx` and its settings-page import.
-3. Auth additions to task/message/repo/run list/decision/worktree routes, plus
-   `lib/approval-card.ts`. These change previously unauthenticated surfaces:
-   inspect owner and agent callback compatibility before deployment.
+3. Mobile auth for `/api/runs` GET/POST and run decision routes, plus
+   `lib/approval-card.ts`. POST uses explicit runs:create + default-OFF flag and
+   refuses mobile sandbox/money payloads. Run listing carries stored output.
+   Legacy task/message/repo/worktree auth changes can be excluded from a minimal
+   runs-only extraction; they are not required for the durable result path.
 4. `mobile/*`, including project metadata, build profiles, result-message view,
    explicit push opt-in, failed-write retention, manual refresh/disconnect.
 5. Push server pieces only with separately verified APNs/device registration.
@@ -86,12 +116,12 @@ merge instead of approving the whole foundation PR to get pairing.
 ## Preflight before requesting merge/deploy approval
 
 - Produce extracted mobile-only diff and run tests/build against current main.
-- Confirm production persistence: `/api/tasks` uses KV or local files, while
-  `/api/messages` writes local files. Vercel local writes are not a durable result
-  store. A real result path needs persistent storage and an execution host.
-- Inspect production configuration through its owning account without exposing
-  secrets. Verify exactly one owner workspace, KV/storage health, and current
-  runtime/host. No test activation that can spend is authorized.
+- Durable result path uses existing Supabase task_runs output/events. Do not
+  make legacy `/api/tasks` or `/api/messages` local writes a production dependency.
+  Ordinary text worker and sandbox coding are separate capabilities.
+- Production configuration discovery is done above. Native pairing must still
+  verify exactly one owner workspace through its fail-closed exchange. Cron
+  success and model-call result remain unproven. No paid test authorized.
 - Use a real authenticated preview plus throwaway database to verify pairing,
   revoked device, task retention and readable result persistence.
 - Verify native pixels and interactions on a simulator/device, then distribute.

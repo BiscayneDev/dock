@@ -24,7 +24,7 @@ try{
   else if(u.pathname==='/api/mobile/status')body={ok:true}
   else if(u.pathname==='/api/tasks') {if(failRefresh)status=503;body=[{id:'fixture-1',title:'FICTIONAL result task',column:'done',assignee:'scout'}]}
   else if(u.pathname==='/api/messages') {if(r.method()==='POST')status=503;body=[{id:'msg-1',taskId:'fixture-1',from:'scout',content:'FICTIONAL useful result: checked three source files.',timestamp:'2026-11-04T16:00:00Z'}]}
-  else if(u.pathname==='/api/runs')body={runs:[]}
+  else if(u.pathname==='/api/runs')body={runs:[{id:'run-fixture-1',status:'succeeded',payload:{prompt:'FICTIONAL run prompt'},output:'FICTIONAL persisted run result'}]}
   else if(u.pathname==='/api/repos')body={repos:[]}
   else if(u.pathname==='/api/mobile/approvals')body={cards:[]}
   await r.respond({status,headers:cors,body:JSON.stringify(body)})
@@ -32,6 +32,13 @@ try{
  const click=async text=>{await p.evaluate(t=>{const e=[...document.querySelectorAll('div,button')].find(e=>e.children.length===0&&e.textContent===t);if(!e)throw Error('missing '+t);e.click()},text)}
  await p.goto('http://127.0.0.1:8899/',{waitUntil:'networkidle0'})
  let inputs=await p.$$('input');await inputs[0].type('https://dock.test');await inputs[1].type('123456');await click('Connect')
+ await p.waitForFunction(()=>document.body.innerText.includes('FICTIONAL run prompt'))
+ await click('FICTIONAL run prompt')
+ await p.waitForFunction(()=>document.body.innerText.includes('FICTIONAL persisted run result'))
+ await p.screenshot({path:'/downloads/dock-mobile-durable-run-1104.png'})
+ await click('‹ Runs');await click('New')
+ assert.ok((await p.$eval('body',e=>e.innerText)).includes('Mobile run submission is not enabled'))
+ await click('Board')
  await p.waitForFunction(()=>document.body.innerText.includes('FICTIONAL result task'))
  await click('FICTIONAL result task')
  await p.waitForFunction(()=>document.body.innerText.includes('FICTIONAL useful result'))

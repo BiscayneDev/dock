@@ -23,7 +23,7 @@ test("mobile token: valid bearer passes, wrong/missing/unset fails", async () =>
 })
 
 test("capability surface is explicit and closed", () => {
-  for (const cap of ["tasks:read", "tasks:activate", "repos:read", "worktree:read", "runs:read", "runs:decide", "push:register"]) {
+  for (const cap of ["tasks:read", "tasks:activate", "repos:read", "worktree:read", "runs:read", "runs:create", "runs:decide", "push:register"]) {
     assert.equal(mobileTokenHas(cap), true, cap)
   }
   // no notify/activity/agent-done/worker-style capabilities

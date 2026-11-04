@@ -36,7 +36,7 @@ type WorktreeReview = {
   diff: { aheadBy: number; stat: string; commits: string } | null
   verification?: { ok: boolean; problems: string[] } | null
 }
-type Run = { id: string; status: string; agentKey?: string; prompt?: string; proposedAction?: { type?: string } }
+type Run = { id: string; status: string; agentKey?: string; payload?: { prompt?: string }; output?: string | null; error?: string | null; spentCents?: number; budgetCents?: number; proposedAction?: { type?: string } }
 type ApprovalCard = {
   runId: string
   status: string
@@ -51,7 +51,7 @@ type ApprovalCard = {
   footer: string
 }
 type ThreadMessage = { id: string; from: string; content: string; taskId?: string; timestamp: string }
-type Tab = "board" | "approvals" | "new"
+type Tab = "runs" | "board" | "approvals" | "new"
 
 const COLUMNS = ["backlog", "planning", "in-progress", "in-review", "done"]
 
@@ -120,11 +120,13 @@ export default function App() {
   const [dockUrl, setDockUrl] = useState("")
   const [token, setToken] = useState("")
   const [connected, setConnected] = useState<{ base: string; token: string } | null>(null)
-  const [tab, setTab] = useState<Tab>("board")
+  const [tab, setTab] = useState<Tab>("runs")
   const [tasks, setTasks] = useState<Task[]>([])
   const [selected, setSelected] = useState<Task | null>(null)
   const [thread, setThread] = useState<ThreadMessage[]>([])
   const [review, setReview] = useState<WorktreeReview | null>(null)
+  const [selectedRun, setSelectedRun] = useState<string | null>(null)
+  const [runSubmissionEnabled, setRunSubmissionEnabled] = useState(false)
   const [runs, setRuns] = useState<Run[]>([])
   const [cards, setCards] = useState<ApprovalCard[]>([])
   const [confirmed, setConfirmed] = useState<Record<string, boolean>>({})
@@ -138,10 +140,11 @@ export default function App() {
   useEffect(() => {
     ;(async () => {
       // Web preview: ?demo=board|approvals|task|new renders the views on fictional data.
-      if (typeof window !== "undefined") {
+      if (Platform.OS === "web" && typeof window !== "undefined") {
         const demo = new URLSearchParams(window.location.search).get("demo")
         if (demo) {
           setConnected({ base: "demo", token: "demo" })
+          setTab("board")
           if (demo === "approvals") setTab("approvals")
           if (demo === "new") setTab("new")
           if (demo === "task") setSelected(DEMO_TASKS[0])
@@ -215,18 +218,22 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     if (!connected) return
+    const [runData, cardData, status] = await Promise.all([
+      api<{ runs: Run[] }>(connected.base, connected.token, "/api/runs"),
+      api<{ cards: ApprovalCard[] }>(connected.base, connected.token, "/api/mobile/approvals"),
+      api<{ runSubmissionEnabled?: boolean }>(connected.base, connected.token, "/api/mobile/status"),
+    ])
+    if (runData) { setRuns(runData.runs); setError(null) }
+    else setError("Dock could not refresh runs. Showing the last loaded results. Decisions are unavailable.")
+    setRunSubmissionEnabled(status?.runSubmissionEnabled === true)
+    setCards(runData && cardData ? cardData.cards : [])
+    if (tab !== "board" && !selected) return
     const list = await api<Task[] | { tasks: Task[] }>(connected.base, connected.token, "/api/tasks")
     if (!list) { setCards([]); setError("Dock could not refresh. Showing the last loaded board. Check your connection or pair again."); return }
-    setError(null)
     setTasks(Array.isArray(list) ? list : list.tasks)
-    const runData = await api<{ runs: Run[] }>(connected.base, connected.token, "/api/runs")
-    const cardData = await api<{ cards: ApprovalCard[] }>(connected.base, connected.token, "/api/mobile/approvals")
-    if (!cardData) setError("Approvals could not refresh. Approval actions are unavailable until Dock responds.")
-    setCards(cardData?.cards ?? [])
-    setRuns(runData?.runs ?? [])
     const repoData = await api<{ repos: string[] }>(connected.base, connected.token, "/api/repos")
     setRepos(repoData?.repos ?? [])
-  }, [connected])
+  }, [connected, tab, selected])
 
   useEffect(() => {
     refresh()
@@ -252,38 +259,19 @@ export default function App() {
     return () => { active = false; clearInterval(timer) }
   }, [selected, connected])
 
-  const createAndActivate = useCallback(async () => {
-    if (!connected || !newTitle.trim()) return
-    setBusy(true)
-    setError(null)
-    const created = await api<Task>(connected.base, connected.token, "/api/tasks", {
-      method: "POST",
-      body: JSON.stringify({ title: newTitle.trim(), column: "backlog" }),
+  const queueRun = useCallback(async () => {
+    if (!connected || !newTitle.trim() || !runSubmissionEnabled) return
+    setBusy(true); setError(null)
+    const result = await api<{ id: string }>(connected.base, connected.token, "/api/runs", {
+      method: "POST", body: JSON.stringify({ prompt: newTitle.trim(), target: "cloud", budget_cents: 10 }),
     })
-    if (created?.id) {
-      const activation = await api(connected.base, connected.token, "/api/tasks/activate", {
-        method: "POST",
-        body: JSON.stringify({
-          taskId: created.id,
-          title: created.title,
-          assignee: "builder",
-          priority: "medium",
-          ...(newRepo ? { repoPath: newRepo } : {}),
-        }),
-      })
-      if (!activation) {
-        setError("Task saved in backlog, but activation was not confirmed. Do not create it again. Open the board to inspect it.")
-        setBusy(false)
-        return
-      }
-      setNewTitle("")
-      setTab("board")
-      await refresh()
-    } else {
-      setError("Task was not saved. Your text is still here; check the connection before trying again.")
-    }
     setBusy(false)
-  }, [connected, newTitle, newRepo, refresh])
+    if (!result?.id) {
+      setError("Run submission was not confirmed. Your text is kept. Refresh Runs before resubmitting to avoid a duplicate.")
+      return
+    }
+    setNewTitle(""); setSelectedRun(result.id); setTab("runs"); await refresh()
+  }, [connected, newTitle, runSubmissionEnabled, refresh])
 
   const decide = useCallback(async (runId: string, decision: "approve" | "reject") => {
     if (!connected) return
@@ -333,6 +321,24 @@ export default function App() {
 
   const demo = connected.base === "demo"
   const demoBadge = demo ? <Text style={styles.demoBadge}>DEMO - fictional data</Text> : null
+
+  if (selectedRun) {
+    const run = runs.find((r) => r.id === selectedRun)
+    return <SafeAreaView style={styles.screen}>
+      <StatusBar style="light" />
+      <Pressable onPress={() => setSelectedRun(null)}><Text style={styles.back}>‹ Runs</Text></Pressable>
+      {error ? <Text accessibilityRole="alert" style={styles.bad}>{error}</Text> : null}
+      <ScrollView>
+        <Text style={styles.h1}>{run?.payload?.prompt || "Run"}</Text>
+        <Text style={styles.sub}>{run?.status || "Waiting for Dock to return this run"}</Text>
+        <Text style={styles.note}>Text generation only. This is not a sandbox coding run or a verified external action.</Text>
+        {run?.output ? <Text selectable style={styles.taskTitle}>{run.output}</Text> : null}
+        {run?.error ? <Text style={styles.bad}>{run.error}</Text> : null}
+        {!run?.output && !run?.error ? <Text style={styles.sub}>No result yet. Dock stores the result when the worker finishes.</Text> : null}
+        <Pressable onPress={refresh}><Text style={styles.back}>Refresh run</Text></Pressable>
+      </ScrollView>
+    </SafeAreaView>
+  }
 
   if (selected) {
     const r = review
@@ -397,6 +403,15 @@ export default function App() {
           setConnected(null); setTasks([]); setCards([]); setSelected(null); setToken(""); setError(null)
         }}><Text style={styles.back}>Disconnect this app</Text></Pressable>
       </View>
+      {tab === "runs" && <FlatList
+        data={runs} keyExtractor={(run) => run.id}
+        ListHeaderComponent={<Text style={styles.h1}>Runs</Text>}
+        ListEmptyComponent={<Text style={styles.sub}>No runs loaded. New runs stay off until Dock execution and spending are approved.</Text>}
+        renderItem={({ item: run }) => <Pressable style={styles.task} onPress={() => setSelectedRun(run.id)}>
+          <Text style={styles.taskTitle}>{run.payload?.prompt || run.id}</Text>
+          <Text style={styles.sub}>{run.status}{run.output ? " · result ready" : ""}</Text>
+        </Pressable>}
+      />}
       {tab === "board" && (
         <FlatList
           data={COLUMNS.map((c) => ({ column: c, tasks: tasks.filter((t) => t.column === c) }))}
@@ -461,27 +476,17 @@ export default function App() {
           <Text style={styles.h1}>New task</Text>
           <TextInput style={styles.input} placeholder="What should Dock do?" placeholderTextColor="#52525b"
             value={newTitle} onChangeText={setNewTitle} />
-          <Text style={styles.sub}>Request an isolated worktree of:</Text>
-          {repos.map((repo) => (
-            <Pressable key={repo} style={[styles.task, newRepo === repo && styles.repoSelected]} onPress={() => setNewRepo(newRepo === repo ? null : repo)}>
-              <Text style={styles.mono}>{repo}</Text>
-            </Pressable>
-          ))}
-          {repos.length === 0 ? <Text style={styles.note}>No registered repos. Coding execution needs a configured isolated host; creating a task does not make that host available.</Text> : null}
-          <Pressable
-            style={[styles.button, (repos.length > 0 && !newRepo) && styles.buttonDisabled]}
-            onPress={createAndActivate}
-            disabled={busy || !newTitle.trim() || (repos.length > 0 && !newRepo)}
-          >
-            {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create + activate</Text>}
+          <Text style={styles.note}>Text-only cloud run. No code execution, browser, or external actions. The server must enable mobile runs after execution and spending review.</Text>
+          <Text style={styles.note}>Budget field: $0.10. Current worker checks an estimate, not an enforced provider charge ceiling. Submission stays disabled by default.</Text>
+          {!runSubmissionEnabled ? <Text style={styles.bad}>Mobile run submission is not enabled on this Dock.</Text> : null}
+          <Pressable style={[styles.button, !runSubmissionEnabled && styles.buttonDisabled]}
+            onPress={queueRun} disabled={busy || !newTitle.trim() || !runSubmissionEnabled}>
+            {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Submit text run</Text>}
           </Pressable>
-          {repos.length > 0 && !newRepo ? (
-            <Text style={styles.note}>Pick a repo. The server refuses activation if its runtime cannot enforce isolation.</Text>
-          ) : null}
         </ScrollView>
       )}
       <View style={styles.tabs}>
-        {(["board", "approvals", "new"] as Tab[]).map((t) => (
+        {(["runs", "board", "approvals", "new"] as Tab[]).map((t) => (
           <Pressable key={t} onPress={() => setTab(t)} style={styles.tabItem}>
             <Text style={tab === t ? styles.tabActive : styles.tabInactive}>
               {t === "approvals" && pendingCards.length > 0 ? `Approvals (${pendingCards.length})` : t[0].toUpperCase() + t.slice(1)}

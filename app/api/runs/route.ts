@@ -81,6 +81,11 @@ export async function GET(request: Request) {
 
 /** Queue a background run. Target 'cloud' only in P2. Session or agent token. */
 export async function POST(request: Request) {
+  // Mobile read access must never silently become permission to start paid work.
+  const isMobile = await mobileTokenAuthorized(request)
+  if (isMobile && (!mobileTokenHas("runs:create") || process.env.DOCK_MOBILE_RUNS !== "on")) {
+    return NextResponse.json({ error: "Mobile run submission is not enabled. No run was queued." }, { status: 501 })
+  }
   const ctx = await resolveContext(request)
   if (!ctx) return NextResponse.json({ error: "Sign in required" }, { status: 401 })
   if ("forbidden" in ctx) {
@@ -105,6 +110,9 @@ export async function POST(request: Request) {
   const target = (body.target ?? "cloud") as RunTarget
   if (!(RUN_TARGETS as readonly string[]).includes(target)) {
     return NextResponse.json({ error: "Unknown target" }, { status: 400 })
+  }
+  if (isMobile && (target !== "cloud" || body.isolatedTask !== undefined || body.proposedAction !== undefined)) {
+    return NextResponse.json({ error: "Mobile submission supports text-only cloud runs, not sandbox coding or money actions." }, { status: 400 })
   }
   if (target === "sandbox") {
     return NextResponse.json({ error: "target 'sandbox' is not available yet" }, { status: 400 })

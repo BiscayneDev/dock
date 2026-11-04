@@ -23,6 +23,7 @@ export const MOBILE_CAPABILITIES = [
   "messages:read",
   "messages:write",
   "runs:read",
+  "runs:create",
   "runs:decide",
   "push:register",
 ] as const

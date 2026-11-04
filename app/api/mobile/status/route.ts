@@ -11,5 +11,5 @@ export const dynamic = "force-dynamic"
 export async function GET(request: Request) {
   const denied = await requireMobileOrOwner(request, "tasks:read")
   if (denied) return denied
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, runSubmissionEnabled: process.env.DOCK_MOBILE_RUNS === "on" })
 }
