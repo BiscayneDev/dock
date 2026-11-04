@@ -5,7 +5,7 @@ import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {createHash} from 'node:crypto'
-import {T3OwnerWorker} from '../../node/dock-node/src/t3/worker.mjs'
+import {t3Service} from '../../node/dock-node/src/t3/service.mjs'
 import {verifySupervisedPolicy} from '../../node/dock-node/src/t3/policy.mjs'
 const [toolsDir,output]=process.argv.slice(2)
 if(!toolsDir||!output)throw new Error('usage: node t3-context-fixture.mjs <installed-t3-pi-bin-dir> <result.json>')
@@ -38,11 +38,12 @@ try{
  const literal=x=>"'"+String(x).replaceAll("'","''")+"'"
  const rpc=q=>JSON.parse(sql('set role service_role;select '+q))
  sql(`update t3_owner_tasks set base_sha='${sha}',brief='Read fictional policy DOCK_SOURCE_CANARY_482 ${sha}' where id='${id}'`)
- const store={get:async()=>JSON.parse(sql(`select row_to_json(t)from t3_owner_tasks t where id='${id}'`)),claim:async(i,w)=>rpc(`claim_t3_owner_task('${i}',${literal(w)})`),advance:async(t,next,patch={})=>rpc(`advance_t3_owner_task('${id}',${t.version},${literal(t.worker)},${literal(next)},${literal(JSON.stringify(patch))})`),heartbeat:async()=>true}
+ const store={get:async()=>JSON.parse(sql(`select row_to_json(t)from t3_owner_tasks t where id='${id}'`)),claim:async(i,w)=>rpc(`claim_t3_owner_task('${i}',${literal(w)})`),advance:async(t,next,patch={})=>rpc(`advance_t3_owner_task('${id}',${t.version},${literal(t.worker)},${literal(next)},${literal(JSON.stringify(patch))})`),heartbeat:async()=>true,due:async()=>[],queued:async()=>[{id}]}
  let present=false
  const provisioner={find:async({name})=>present?[{id:'localfixture',name}]:[],create:async()=>{present=true;return{id:'localfixture'}},prepare:async()=>({executionId:'localfixture',baseSha:sha,worktree:work,baseDir,model:'dockfixture/fixture'}),cli:transport,delete:async()=>{present=false},settled:async()=>!present}
- const worker=new T3OwnerWorker({store,provisioner,authority:async()=>true,enabled:true,onError:e=>console.error(e)})
- observed=await worker.run(id,'t3:local-proof')
+ const row=await store.get(id)
+ const service=t3Service({store,provisioner,sources:{[row.repo_key]:{ownerId:row.owner_id,workspaceId:row.workspace_id,projectId:row.project_id,baseSha:sha}},grants:{[id]:{taskId:id,ownerId:row.owner_id,projectId:row.project_id,baseSha:sha,userApprovalRef:'FICTIONAL_LOCAL_NO_COST_PROOF',expiresAt:row.cleanup_deadline,cleanupDeadline:row.cleanup_deadline,maxModelCreditMicros:0,maxComputeCostMicros:1,lifecycleApproved:true,watchdogReady:true}},enabled:true,onError:e=>console.error(e)})
+ await service.tick('t3:local-proof');observed=await store.get(id)
  if(observed.phase!=='deleted'||!observed.artifact)throw new Error('persistent worker round trip failed')
  }else{
  const launch=await transport({args:['thread','start',work,'Read the fictional policy DOCK_SOURCE_CANARY_482 '+sha,'--provider','pi','--model','dockfixture/fixture','--wait','--json','--base-dir',baseDir],stdin:''})

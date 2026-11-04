@@ -1,6 +1,6 @@
 // Backend-only Agent37 transport. Never sends workspace key in exec bodies/env.
 // No retries for writes. Caller owns persisted intent and separate cleanup sweep.
-export function agent37Provisioner({apiKey,enabled=false,fetchImpl=fetch,bootstrap,sourceSnapshot,modelCreditMicros=0,template}){
+export function agent37Provisioner({apiKey,enabled=false,fetchImpl=fetch,bootstrap,sourceSnapshot,modelCreditMicros=0,budgetForTask,template}){
  const id=x=>{if(!/^[a-z0-9]{1,64}$/.test(x??''))throw new Error('invalid instance');return x}
  async function request(path,{method='GET',body,exec=false}={}){
   if(!enabled||!apiKey)throw new Error('Agent37 transport disabled')
@@ -13,8 +13,9 @@ export function agent37Provisioner({apiKey,enabled=false,fetchImpl=fetch,bootstr
  return{
   async create({task,name}){
    if(typeof template!=='string'||!/^dock-t3-[a-z0-9-]+@[1-9][0-9]*$/.test(template))throw new Error('Pinned reviewed administrator-policy template required')
-   if(!Number.isSafeInteger(modelCreditMicros)||modelCreditMicros<0)throw new Error('invalid model budget')
-   const result=await request('/instances',{method:'POST',body:{template,name,metadata:{dock_task_id:task.id,dock_owner_id:task.owner_id},resources:{cpu:2,memory:4,disk:4},type:'default',region:'us',budget:{monthly_cap_micros:0,credit_micros:modelCreditMicros},public_ports:[],auto_sleep:true,idle_timeout_seconds:300}})
+   const credit=budgetForTask?await budgetForTask(task):modelCreditMicros
+   if(!Number.isSafeInteger(credit)||credit<0)throw new Error('invalid model budget')
+   const result=await request('/instances',{method:'POST',body:{template,name,metadata:{dock_task_id:task.id,dock_owner_id:task.owner_id},resources:{cpu:2,memory:4,disk:4},type:'default',region:'us',budget:{monthly_cap_micros:0,credit_micros:credit},public_ports:[],auto_sleep:true,idle_timeout_seconds:300}})
    return{id:id(result?.id)}
   },
   async prepare({task}){

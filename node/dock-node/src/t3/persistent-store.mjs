@@ -10,6 +10,7 @@ export function persistentT3Store(db){
  const{data,error}=await db.from('t3_owner_tasks').select('id').neq('phase','deleted').or(`cleanup_deadline.lte.${now},lease_until.lte.${now}`).limit(100)
  if(error)throw new Error('T3 cleanup query failed');return data
  },
+ async queued(){const{data,error}=await db.from('t3_owner_tasks').select('id').eq('phase','queued').order('created_at',{ascending:true}).limit(10);if(error)throw new Error('T3 queue unavailable');return data},
  async get(id){const{data,error}=await db.from('t3_owner_tasks').select('*').eq('id',id).single();if(error)throw new Error('T3 task unavailable');return data}
  }
 }
