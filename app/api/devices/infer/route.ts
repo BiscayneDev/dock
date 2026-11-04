@@ -23,6 +23,10 @@ export async function POST(request: Request) {
   if (typeof body.run_id !== "string" || !isUuid(body.run_id)) {
     return NextResponse.json({ error: "run_id is required" }, { status: 400 })
   }
+  // Coding tool-call relay needs budget reservations and protocol validation.
+  // Never treat it as the older one-shot text inference call or silently bypass
+  // the shared ledger. Keep production disabled until that path is implemented.
+  if (body.coding !== undefined) return NextResponse.json({ error: "isolated coding inference metering is not available yet" }, { status: 501 })
   const admin = adminClient()
   try {
     const result = await inferForDevice(admin, auth.deviceId, body.run_id)

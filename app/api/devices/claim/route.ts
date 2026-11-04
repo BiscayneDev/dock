@@ -1,3 +1,4 @@
+import { parseIsolatedTask } from "@/lib/isolated-task"
 import { NextResponse } from "next/server"
 import { adminClient } from "@/lib/tenancy"
 import { authenticateDevice, claimHomeRun, touchDevice } from "@/lib/devices"
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
         attempt: run.attempts,
         leaseUntil: run.leaseUntil,
         proposedAction: proposedActionFromPayload(run.payload),
+        isolatedTask: parseIsolatedTask(run.payload?.isolatedTask),
         wantDiagnostics: run.payload?.wantDiagnostics === true,
       },
     })

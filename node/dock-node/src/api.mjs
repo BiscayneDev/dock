@@ -32,6 +32,7 @@ export function createApi({ server, token, fetchImpl = fetch, timeoutMs = 180_00
     claim: async () => (await call("POST", "/api/devices/claim")).run ?? null,
     event: (runId, kind, data = {}) => call("POST", `/api/runs/${encodeURIComponent(runId)}/events`, { kind, data }),
     complete: (runId, body) => call("POST", `/api/runs/${encodeURIComponent(runId)}/complete`, body),
+    inferCoding: (runId, body) => call("POST", "/api/devices/infer", { run_id: runId, coding: body }),
     infer: (runId) => call("POST", "/api/devices/infer", { run_id: runId }),
   }
 }

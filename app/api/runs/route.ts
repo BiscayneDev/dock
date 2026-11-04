@@ -1,3 +1,4 @@
+import { parseIsolatedTask } from "@/lib/isolated-task"
 import { NextResponse } from "next/server"
 import { assistantContext, isUuid, projectInWorkspace } from "@/lib/assistant-store"
 import { enqueueRun, listEventsForRuns, listRuns } from "@/lib/queue"
@@ -109,6 +110,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "target 'sandbox' is not available yet" }, { status: 400 })
   }
 
+  const isolatedTask = body.isolatedTask === undefined ? null : parseIsolatedTask(body.isolatedTask)
+  if (body.isolatedTask !== undefined) {
+    if (process.env.DOCK_ISOLATED_RUNTIME !== "on") return NextResponse.json({ error: "experimental isolated runtime disabled" }, { status: 501 })
+    if (!isolatedTask || target !== "home") return NextResponse.json({ error: "invalid isolated home task" }, { status: 400 })
+  }
+
   const budget = body.budget_cents === undefined ? DEFAULT_BUDGET_CENTS : body.budget_cents
   if (typeof budget !== "number" || !Number.isInteger(budget) || budget < 1 || budget > maxBudgetCents()) {
     return NextResponse.json({ error: `budget_cents must be 1..${maxBudgetCents()}` }, { status: 400 })
@@ -188,6 +195,7 @@ export async function POST(request: Request) {
       prompt,
       model,
       budgetCents: budget,
+      isolatedTask,
       conversationId,
       modelReason,
       explore: await resolveAgentExplore(agentKey),

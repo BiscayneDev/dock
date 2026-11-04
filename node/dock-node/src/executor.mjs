@@ -36,16 +36,18 @@ export async function executeRun(run, { api, localTools = null, diagnostics = fa
     try {
       if (process.env.DOCK_ISOLATED_RUNTIME !== "on") throw new Error("experimental isolated runtime disabled; refusing launch")
       const result = await isolatedRunner({
+        repoKey: run.isolatedTask.repoKey,
+        baseRef: run.isolatedTask.baseRef,
         taskRef: run.isolatedTask.taskRef,
-        worktreePath: run.isolatedTask.worktreePath,
+        infer: (body) => api.inferCoding(run.id, body),
         brief: run.isolatedTask.brief,
         log,
       })
       await api.complete(run.id, {
-        status: result.ok ? "succeeded" : "failed",
-        ...(result.ok ? { output: result.summary } : { error: String(result.summary ?? "isolated task failed").slice(0, 500) }),
+        status: result.outcome === "review_required" ? "succeeded" : "failed",
+        ...(result.outcome === "review_required" ? { output: result.summary } : { error: String(result.summary ?? "isolated task failed").slice(0, 500) }),
       })
-      return { outcome: result.ok ? "succeeded" : "failed", commitSha: result.commitSha ?? null }
+      return { outcome: result.outcome, artifactPath: result.artifactPath ?? null }
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) throw err
       const message = err instanceof Error ? err.message : "isolated task failed"

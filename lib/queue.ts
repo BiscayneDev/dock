@@ -1,3 +1,4 @@
+import { parseIsolatedTask, type IsolatedTask } from "./isolated-task"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import {
   EVENT,
@@ -88,6 +89,7 @@ function eventFromRow(r: Record<string, unknown>): RunEvent {
 }
 
 export interface EnqueueInput {
+  isolatedTask?: IsolatedTask | null
   workspaceId: string
   ownerId: string
   projectId: string | null
@@ -114,6 +116,11 @@ export interface EnqueueInput {
 export async function enqueueRun(supabase: SupabaseClient, input: EnqueueInput): Promise<TaskRun> {
   if (!(RUN_TARGETS as readonly string[]).includes(input.target)) throw new Error("invalid target")
   const payload: Record<string, unknown> = { prompt: input.prompt }
+  if (input.isolatedTask) {
+    const task = parseIsolatedTask(input.isolatedTask)
+    if (!task || input.target !== "home") throw new Error("invalid isolated home task")
+    payload.isolatedTask = task
+  }
   if (input.proposedAction) payload.proposedAction = input.proposedAction
   if (input.briefId) payload.briefId = input.briefId
   if (input.conversationId) payload.conversationId = input.conversationId
