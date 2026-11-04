@@ -57,10 +57,18 @@ confined argv - fresh container, ONLY the task worktree mounted at /work
 no network by default, read-only root, all capabilities dropped, no-new-privileges,
 non-root, scrubbed env via explicit `-e` flags. `confinedCommand` returns null when
 no runtime exists, and the contract is that callers must NOT fall back to running
-on the host when isolation is required. dock-node (which already spawns local
-processes for diagnostics) is the integration point on the owner's machine;
-wiring the OpenClaw gateway's own agent launch through the same argv builder is
-the remaining host-side step and needs shell access to that machine.
+on the host when isolation is required. dock-node consumes it today: with `DOCK_NODE_ISOLATION=require` and a taskRef,
+`runDiagnosticsTool` runs confined via `confinedCommand`, and REFUSES to run
+when no container runtime exists - never an unconfined host fallback. Wiring the
+OpenClaw gateway's own agent launch through the same argv builder is the
+remaining host-side step and needs shell access to that machine.
+
+Model access from inside a confined container goes through the bounded broker
+(`node/dock-node/src/broker.mjs`): the container runs with `--network none`, and
+the broker listens on a unix socket placed inside the task worktree (the one
+mount the container has), forwarding exactly one route - `POST /infer` - to
+Dock's infer endpoint while injecting the device token itself. The token never
+enters the container and the container can reach nothing else.
 
 Enforcement line today: Dock enforces registered repos, validated refs, contained
 paths, scrubbed environments, attestation, and ships the container mechanism;

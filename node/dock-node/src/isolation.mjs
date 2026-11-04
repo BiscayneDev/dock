@@ -1,4 +1,6 @@
-import { isAbsolute, resolve, sep } from "node:path"
+import { lstat, readFile, realpath } from "node:fs/promises"
+import { homedir } from "node:os"
+import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path"
 
 // Per-task container confinement for local execution.
 //
@@ -25,6 +27,45 @@ export function detectContainerRuntime(whichFn) {
   return null
 }
 
+const IMAGE_REF = /^[a-z0-9][a-z0-9._/:@-]{0,200}$/i
+
+export function isValidImageRef(image) {
+  return IMAGE_REF.test(image) && !image.includes("..")
+}
+
+/** Owner-registered repos (same file the Dock app writes). */
+export async function loadRegisteredRepos(file = join(homedir(), ".config", "dock", "private", "registered-repos.json")) {
+  try {
+    const data = JSON.parse(await readFile(file, "utf8"))
+    return Array.isArray(data) ? data.filter((x) => typeof x === "string") : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Canonical association: resolve symlinks, then require the resolved path to be
+ * exactly <registered repo's parent>/.dock-worktrees/<repo basename>/task-<id>
+ * for a repo the owner registered. A symlinked or renamed path that does not
+ * resolve into that shape is refused, and path components are re-checked AFTER
+ * resolution so a symlink swap cannot smuggle a host directory into the mount.
+ */
+export async function resolveTaskWorktree(worktreePath, registeredRepos, taskRef) {
+  if (typeof taskRef !== "string" || !/^task-[a-z0-9][a-z0-9-]{0,62}$/.test(taskRef)) {
+    throw new Error(`invalid task ref: ${taskRef}`)
+  }
+  const stat = await lstat(worktreePath).catch(() => null)
+  if (!stat) throw new Error(`worktree path does not exist: ${worktreePath}`)
+  const resolved = await realpath(worktreePath)
+  for (const repo of registeredRepos) {
+    const repoReal = await realpath(repo).catch(() => null)
+    if (!repoReal) continue
+    const expected = join(dirname(repoReal), ".dock-worktrees", basename(repoReal), taskRef)
+    if (resolved === expected) return { resolved, repo: repoReal, taskRef }
+  }
+  throw new Error(`path is not a task worktree of a registered repo: ${resolved}`)
+}
+
 /** Task containers may only ever mount a Dock task worktree. */
 export function isTaskWorktreePath(worktreePath) {
   if (!isAbsolute(worktreePath)) return false
@@ -46,6 +87,9 @@ export function containerRunArgs({ runtime, worktreePath, command, image = DEFAU
   if (!Array.isArray(command) || command.length === 0 || command.some((c) => typeof c !== "string" || !c)) {
     throw new Error("command must be a non-empty string array")
   }
+  if (!isValidImageRef(image)) throw new Error(`invalid image ref: ${image}`)
+  // The mount is the ONLY volume: no docker socket, no host paths, ever. The
+  // caller passes a path already canonicalized by resolveTaskWorktree.
   const mount = `${resolve(worktreePath)}:/work`
   const base = ["run", "--rm", "--workdir", "/work", "-v", mount, "--network", network ? "bridge" : "none"]
   if (runtime !== "container") base.push("--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges")

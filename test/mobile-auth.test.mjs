@@ -8,7 +8,7 @@ import { join } from "node:path"
 
 process.env.DOCK_MOBILE_TOKEN = "test-mobile-token-123"
 const { mobileTokenAuthorized, mobileTokenHas, MOBILE_CAPABILITIES } = await import("../lib/mobile-auth.ts")
-const { isValidExpoPushToken, registerPushToken, listPushTokens, sendExpoPush } = await import("../lib/expo-push.ts")
+const { isValidExpoPushToken, registerPushToken, unregisterPushToken, listPushTokens, sendExpoPush } = await import("../lib/expo-push.ts")
 
 function req(headers = {}) {
   return new Request("https://dock.local/api/x", { headers })
@@ -41,19 +41,23 @@ test("expo push token validation and registration", async (t) => {
   assert.equal(isValidExpoPushToken("not-a-token"), false)
   assert.equal(isValidExpoPushToken(""), false)
 
-  await registerPushToken("ExponentPushToken[device-one]", "ios", file)
-  await registerPushToken("ExponentPushToken[device-one]", "ios", file) // idempotent
-  await registerPushToken("ExponentPushToken[device-two]", "ios", file)
+  await registerPushToken("ExponentPushToken[device-one]", "ios", "phone-1", file)
+  await registerPushToken("ExponentPushToken[device-one]", "ios", "phone-1", file) // idempotent
+  await registerPushToken("ExponentPushToken[device-two]", "ios", undefined, file)
   assert.equal((await listPushTokens(file)).length, 2)
-  await assert.rejects(() => registerPushToken("bogus", "ios", file), /not an Expo push token/)
+  await assert.rejects(() => registerPushToken("bogus", "ios", undefined, file), /not an Expo push token/)
+  // revocation by device token
+  assert.equal(await unregisterPushToken("ExponentPushToken[device-two]", file), true)
+  assert.equal(await unregisterPushToken("ExponentPushToken[device-two]", file), false)
+  assert.deepEqual((await listPushTokens(file)).map((r) => r.token), ["ExponentPushToken[device-one]"])
 })
 
 test("sendExpoPush prunes dead devices and reports delivered count", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "dock-push-"))
   t.after(() => rm(dir, { recursive: true, force: true }))
   const file = join(dir, "push-tokens.json")
-  await registerPushToken("ExponentPushToken[alive]", "ios", file)
-  await registerPushToken("ExponentPushToken[dead]", "ios", file)
+  await registerPushToken("ExponentPushToken[alive]", "ios", undefined, file)
+  await registerPushToken("ExponentPushToken[dead]", "ios", undefined, file)
 
   const fakeFetch = async () => new Response(JSON.stringify({
     data: [{ status: "ok" }, { status: "error", details: { error: "DeviceNotRegistered" } }],
@@ -68,7 +72,7 @@ test("sendExpoPush never throws when the service is unreachable", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "dock-push-"))
   t.after(() => rm(dir, { recursive: true, force: true }))
   const file = join(dir, "push-tokens.json")
-  await registerPushToken("ExponentPushToken[alive]", "ios", file)
+  await registerPushToken("ExponentPushToken[alive]", "ios", undefined, file)
   const delivered = await sendExpoPush("t", "b", {}, file, async () => { throw new Error("network down") })
   assert.equal(delivered, 0)
 })

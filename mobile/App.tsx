@@ -55,6 +55,7 @@ export default function App() {
   const [newRepo, setNewRepo] = useState<string | null>(null)
   const [message, setMessage] = useState("")
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     ;(async () => {
@@ -81,6 +82,18 @@ export default function App() {
   const connect = useCallback(async () => {
     const base = dockUrl.trim().replace(/\/$/, "")
     if (!base || !token.trim()) return
+    // Tokens cross the network on every call: refuse cleartext, except local dev.
+    try {
+      const u = new URL(base)
+      const local = u.hostname === "localhost" || u.hostname === "127.0.0.1"
+      if (u.protocol !== "https:" && !local) {
+        setError("Refusing a non-HTTPS Dock URL - the mobile token would be exposed.")
+        return
+      }
+    } catch {
+      setError("That does not look like a URL.")
+      return
+    }
     setBusy(true)
     const ok = await api<Task[]>(base, token.trim(), "/api/tasks")
     setBusy(false)
@@ -169,6 +182,7 @@ export default function App() {
           autoCapitalize="none" autoCorrect={false} value={dockUrl} onChangeText={setDockUrl} />
         <TextInput style={styles.input} placeholder="Mobile token (DOCK_MOBILE_TOKEN)" placeholderTextColor="#52525b"
           autoCapitalize="none" secureTextEntry value={token} onChangeText={setToken} />
+        {error ? <Text style={styles.bad}>{error}</Text> : null}
         <Pressable style={styles.button} onPress={connect} disabled={busy}>
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Connect</Text>}
         </Pressable>
@@ -269,9 +283,16 @@ export default function App() {
             </Pressable>
           ))}
           {repos.length === 0 ? <Text style={styles.note}>No registered repos - register one in Dock first (POST /api/repos).</Text> : null}
-          <Pressable style={styles.button} onPress={createAndActivate} disabled={busy || !newTitle.trim()}>
-            {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{newRepo ? "Create + activate (isolated)" : "Create + activate"}</Text>}
+          <Pressable
+            style={[styles.button, (repos.length > 0 && !newRepo) && styles.buttonDisabled]}
+            onPress={createAndActivate}
+            disabled={busy || !newTitle.trim() || (repos.length > 0 && !newRepo)}
+          >
+            {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create + activate (isolated)</Text>}
           </Pressable>
+          {repos.length > 0 && !newRepo ? (
+            <Text style={styles.note}>Pick a repo: coding tasks always run isolated, never on the host checkout.</Text>
+          ) : null}
         </ScrollView>
       )}
       <View style={styles.tabs}>
@@ -312,6 +333,7 @@ const styles = StyleSheet.create({
   note: { color: "#52525b", fontSize: 11 },
   approve: { backgroundColor: "#16a34a", flex: 1, marginRight: 6 },
   reject: { backgroundColor: "#b91c1c", flex: 1, marginLeft: 6 },
+  buttonDisabled: { opacity: 0.4 },
   tabs: { flexDirection: "row", borderTopColor: "#1a1a2e", borderTopWidth: 1, paddingTop: 10 },
   tabItem: { flex: 1, alignItems: "center" },
   tabActive: { color: "#fff", fontWeight: "700" },

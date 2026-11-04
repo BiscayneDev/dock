@@ -13,25 +13,13 @@
  * private-store guarantees: outside the application tree, 0700 directory,
  * 0600 file, no symlinks, owned by the current uid.
  */
-import { homedir } from "node:os"
 import path from "node:path"
-import { chmod, lstat, mkdir, realpath } from "node:fs/promises"
+import { lstat, realpath } from "node:fs/promises"
 import { readPrivateStore, writePrivateStore } from "../private-store.ts"
-
-async function privateDir(home: string = homedir()): Promise<string> {
-  const dir = path.resolve(home, ".config", "dock", "private")
-  await mkdir(dir, { recursive: true, mode: 0o700 })
-  const resolved = await realpath(dir)
-  const stat = await lstat(dir)
-  if (stat.isSymbolicLink() || (process.getuid && stat.uid !== process.getuid())) {
-    throw new Error("Unsafe Dock private storage directory")
-  }
-  await chmod(dir, 0o700)
-  return resolved
-}
+import { dockPrivateDir } from "../private-dir.ts"
 
 async function defaultFile(): Promise<string> {
-  return path.join(await privateDir(), "registered-repos.json")
+  return path.join(await dockPrivateDir(), "registered-repos.json")
 }
 
 export async function listRegisteredRepos(file?: string): Promise<string[]> {
