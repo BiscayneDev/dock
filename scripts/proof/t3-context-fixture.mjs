@@ -9,6 +9,7 @@ import {TaskRegistry} from '../../node/dock-node/src/t3/registry.mjs'
 import {buildTaskContext} from '../../node/dock-node/src/t3/context.mjs'
 import {issueContextCapability} from '../../node/dock-node/src/t3/capability.mjs'
 import {readScopedContext} from '../../node/dock-node/src/t3/context-service.mjs'
+import {verifySupervisedPolicy} from '../../node/dock-node/src/t3/policy.mjs'
 import {T3Bridge} from '../../node/dock-node/src/t3/bridge.mjs'
 import {localCliTransport} from '../../node/dock-node/src/t3/local-cli.mjs'
 const [toolsDir,output]=process.argv.slice(2)
@@ -33,9 +34,11 @@ try{
  const registry=new TaskRegistry(join(root,'registry')),scope={ownerId:'fixture-owner',workspaceId:'fixture-ws',projectId:'fixture-project',taskRef:'task-proof',executionId:'fictional-private-execution'};await registry.reserve({...scope,baseSha:sha,deadlineMs:Date.now()+120000})
  const {token,record:capability}=issueContextCapability(scope)
  const context=await readScopedContext({registry,capability,token,scope,query:'fixture policy',sourceConfig:{directory:knowledge,repositories:{fixture:repo},allowedSources:['fixture/policy.md']}})
- const bridge=new T3Bridge({registry,transport,enabled:true});await bridge.launch(scope,{brief:'Read shared policy. Return fixture response only.',context,hostBinding:{executionId:scope.executionId,kind:'private-instance',worktree:work,baseDir,supervised:true,baseSha:sha},provider:'pi',model:'dockfixture/fixture'})
+ let unmanagedRefused=false;try{await verifySupervisedPolicy(transport,{executionId:scope.executionId,baseDir})}catch{unmanagedRefused=true}if(!unmanagedRefused)throw new Error('unmanaged server must be refused')
+ // Fictional policy evidence only for source-consumption test; NOT production acceptance.
+ const bridge=new T3Bridge({registry,transport,enabled:true,policyVerifier:async(t,s)=>({...s,maxRuntimeMode:'approval-required',loaded:true,fingerprint:'a'.repeat(12)})});await bridge.launch(scope,{brief:'Read shared policy. Return fixture response only.',context,hostBinding:{executionId:scope.executionId,kind:'private-instance',worktree:work,baseDir,supervised:true,baseSha:sha},provider:'pi',model:'dockfixture/fixture'})
  let observed;for(let i=0;i<60;i++){observed=await bridge.observe(scope);if(observed.state!=='running')break;await new Promise(r=>setTimeout(r,200))}
- result={fictional:true,paid:false,osIsolationTested:false,requests,committedSourceReachedModel:consumed,hostSecretInPrompt:secretLeak,contextSha256:context.sha256,result:observed,record:await registry.get(scope)}
+ result={fictional:true,paid:false,osIsolationTested:false,productionPolicyAccepted:false,realUnmanagedServerRefused:unmanagedRefused,fictionalPolicyVerifier:true,requests,committedSourceReachedModel:consumed,hostSecretInPrompt:secretLeak,contextSha256:context.sha256,result:observed,record:await registry.get(scope)}
  if(!consumed||secretLeak||requests!==1||observed.state!=='review_required')throw new Error('fixture assertion failed')
  await writeFile(output,JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2))
 }finally{const exited=new Promise(r=>server.once('exit',r));const pairs=execFileSync('ps',['-eo','pid=,ppid='],{encoding:'utf8'}).trim().split('\n').map(x=>x.trim().split(/\s+/).map(Number));const owned=new Set([server.pid]);for(let changed=true;changed;){changed=false;for(const [pid,parent]of pairs)if(owned.has(parent)&&!owned.has(pid)){owned.add(pid);changed=true}}for(const pid of [...owned].reverse())try{process.kill(pid,'SIGTERM')}catch{}await exited;await new Promise(r=>model.close(r));await rm(root,{recursive:true,force:true});delete process.env.HOST_SECRET}

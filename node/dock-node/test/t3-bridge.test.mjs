@@ -11,6 +11,7 @@ import {T3Bridge} from '../src/t3/bridge.mjs'
 import {issueContextCapability,permitContext} from '../src/t3/capability.mjs'
 const hash=x=>createHash('sha256').update(x).digest('hex')
 const scope={ownerId:'owner-a',workspaceId:'ws-a',projectId:'project-a',taskRef:'task-one',executionId:'private-one'}
+const fixturePolicy=async(t,s)=>({...s,maxRuntimeMode:'approval-required',loaded:true,fingerprint:'a'.repeat(12)})
 const binding={executionId:'private-one',kind:'private-instance',worktree:'/home/node/dock/task-one/work',baseDir:'/home/node/dock-t3/task-one',supervised:true,baseSha:'a'.repeat(40)}
 async function fixture(t){const dir=await mkdtemp(join(tmpdir(),'t3-bridge-'));t.after(()=>rm(dir,{recursive:true,force:true}));const registry=new TaskRegistry(join(dir,'private'));await registry.reserve({...scope,baseSha:'a'.repeat(40),deadlineMs:Date.now()+60000});return{dir,registry}}
 test('owner mapping survives restart, fails crossover, prevents execution reuse',async t=>{
@@ -23,9 +24,9 @@ test('durable launch intent prevents duplicate across processes and ambiguous fa
  const {dir,registry}=await fixture(t);let calls=0;const transport=async()=>{calls++;throw new Error('timeout with private details')}
  const input={brief:'fixture',context:{bundle:{sources:[]},sha256:hash(JSON.stringify({sources:[]}))},hostBinding:binding,provider:'pi',model:'fixture/model'}
  await assert.rejects(new T3Bridge({registry,transport}).launch(scope,input),/disabled/);assert.equal(calls,0)
- const bridge=new T3Bridge({registry,transport,enabled:true});await assert.rejects(bridge.launch(scope,input),/uncertain/)
+ const bridge=new T3Bridge({registry,transport,enabled:true,policyVerifier:fixturePolicy});await assert.rejects(bridge.launch(scope,input),/uncertain/)
  assert.equal((await registry.get(scope)).state,'uncertain')
- await assert.rejects(new T3Bridge({registry:new TaskRegistry(join(dir,'private')),transport,enabled:true}).launch(scope,input),/unavailable/);assert.equal(calls,1)
+ await assert.rejects(new T3Bridge({registry:new TaskRegistry(join(dir,'private')),transport,enabled:true,policyVerifier:fixturePolicy}).launch(scope,input),/unavailable/);assert.equal(calls,1)
 })
 test('concurrent CAS allows one launch only, lock never stolen',async t=>{
  const {registry,dir}=await fixture(t)
@@ -57,7 +58,7 @@ test('context consumes committed source bytes with hash and explicit allowlist, 
 })
 test('launch stdin really contains source excerpt; exact run result requires review, no auto promotion',async t=>{
  const {registry}=await fixture(t);let submitted
- const bridge=new T3Bridge({registry,enabled:true,transport:async request=>{if(request.args[1]==='start'){submitted=request;return{code:0,stdout:JSON.stringify({threadId:'thread-one',runId:'run-one',baseDir:binding.baseDir})}}return{code:0,stdout:JSON.stringify({thread:{threadId:'thread-one',latestRunId:'run-one',status:'completed',pendingRequestCount:0,runtimeMode:'approval-required'},messages:[{role:'assistant',runId:'run-one',text:'Fixture result'}]})}}})
+ const bridge=new T3Bridge({registry,enabled:true,policyVerifier:fixturePolicy,transport:async request=>{if(request.args[1]==='start'){submitted=request;return{code:0,stdout:JSON.stringify({threadId:'thread-one',runId:'run-one',baseDir:binding.baseDir})}}return{code:0,stdout:JSON.stringify({thread:{threadId:'thread-one',latestRunId:'run-one',status:'completed',pendingRequestCount:0,runtimeMode:'approval-required'},messages:[{role:'assistant',runId:'run-one',text:'Fixture result'}]})}}})
  const context={bundle:{sources:[{source:'repo/policy.md',text:'BRIDGE_SOURCE_CANARY'}]}};context.sha256=hash(JSON.stringify(context.bundle))
  await bridge.launch(scope,{brief:'Read policy',context,hostBinding:binding,provider:'pi',model:'fixture/model'})
  assert.match(submitted.stdin,/BRIDGE_SOURCE_CANARY/);assert.equal(submitted.args.includes('--wait'),false);assert.equal(submitted.args[3],'-')
@@ -66,7 +67,7 @@ test('launch stdin really contains source excerpt; exact run result requires rev
 })
 test('new phone turn cannot replace mapped run, deadline cleanup remains discoverable',async t=>{
  const {registry}=await fixture(t);await registry.transition(scope,1,'launching');await registry.transition(scope,2,'launched',{threadId:'thread-one',runId:'run-one',baseDir:binding.baseDir})
- const bridge=new T3Bridge({registry,enabled:true,transport:async()=>({code:0,stdout:JSON.stringify({thread:{threadId:'thread-one',latestRunId:'phone-run',status:'completed'},messages:[]})})})
+ const bridge=new T3Bridge({registry,enabled:true,policyVerifier:fixturePolicy,transport:async()=>({code:0,stdout:JSON.stringify({thread:{threadId:'thread-one',latestRunId:'phone-run',status:'completed'},messages:[]})})})
  await assert.rejects(bridge.observe(scope,{baseDir:binding.baseDir}),/correlation/)
  assert.equal((await registry.due(Date.now()+120000)).length,1)
  await registry.transition(scope,3,'cleanup_due');await registry.transition(scope,4,'deleted');assert.equal((await registry.due(Date.now()+120000)).length,0)
@@ -89,4 +90,18 @@ test('cleanup failure retains responsibility, due launching is recoverable',asyn
 test('local transport refuses another execution before spawn',async()=>{
  const {localCliTransport}=await import('../src/t3/local-cli.mjs')
  await assert.rejects(localCliTransport({binary:'/must-not-execute',home:'/tmp',enabled:true,executionId:'task-a'})({executionId:'task-b',args:[],stdin:''}),/transport mismatch/)
+})
+test('launch refuses unmanaged, full-access, unknown or stale policy BEFORE starting',async t=>{
+ const {registry}=await fixture(t);let starts=0
+ for(const stdout of ['No managed policy on this machine. Every setting belongs to the user.', 'Managed by Dock (/etc/t3code/policy.json, fingerprint aaaaaaaaaaaa).\nLimits:\n{"maxRuntimeMode":"full-access"}\nThe running server loaded this policy.', 'Managed by Dock (/etc/t3code/policy.json, fingerprint aaaaaaaaaaaa).\nLimits:\n{"maxRuntimeMode":"approval-required"}\nRestart T3 Code to apply the installed policy.']){
+ const transport=async r=>{if(r.args[0]==='thread'){starts++;throw new Error('must not launch')}return{code:0,stdout}}
+ const bridge=new T3Bridge({registry,transport,enabled:true})
+ await assert.rejects(bridge.launch(scope,{brief:'fixture',context:{bundle:{sources:[]},sha256:hash(JSON.stringify({sources:[]}))},hostBinding:binding,provider:'pi',model:'fixture/model'}),/policy/)
+ assert.equal((await registry.get(scope)).state,'reserved')
+ }assert.equal(starts,0)
+})
+test('matching installed and running supervised ceiling passes preflight',async()=>{
+ const {verifySupervisedPolicy}=await import('../src/t3/policy.mjs')
+ const evidence=await verifySupervisedPolicy(async()=>({code:0,stdout:'Managed by Dock (/etc/t3code/policy.json, fingerprint aaaaaaaaaaaa).\nLimits:\n{"maxRuntimeMode":"approval-required"}\nThe running server (pid 12) loaded this policy.'}),{executionId:'private-one',baseDir:binding.baseDir})
+ assert.equal(evidence.loaded,true);assert.equal(evidence.maxRuntimeMode,'approval-required')
 })

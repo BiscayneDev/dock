@@ -18,7 +18,10 @@ module. The constructor defaults to disabled.
    then provides bounded line excerpts. Dirty worktrees, sibling task output,
    earlier private histories and credentials are not searched. Labels are leads,
    not authority to broaden the source allowlist. Source data is untrusted.
-4. Launch writes durable intent before the T3 CLI. It supplies the brief and
+4. Before launch, the bound execution runs `t3 policy show`. The bridge refuses
+   no/unknown policy, a broader ceiling, or an installed policy not acknowledged
+   by the running server. It requires an active `approval-required` ceiling.
+   Launch writes durable intent before the T3 CLI. It supplies the brief and
    actual source excerpts on stdin to `thread start <private-worktree> -`.
    No `--wait`: thread and run IDs are saved before observing completion.
    An uncertain launch is never silently repeated. Crash-left locks fail closed
@@ -32,6 +35,10 @@ module. The constructor defaults to disabled.
    No vendor delete adapter or automatic watchdog is active in this draft.
 
 ## What the boundary does and does not prove
+
+The filesystem registry is local-host durability only. It is NOT a Vercel or
+multi-worker production store. It must be replaced by transactional persistent
+storage before production routing.
 
 The registry, launch CAS, exact-result correlation, capability checks and source
 hash validation are implemented mechanisms with tests. File locks are for a
@@ -48,9 +55,12 @@ worktree must be created and verified by the provisioner before launch.
 `local-cli.mjs` deliberately says it is not a host sandbox. It starts no cloud
 resource and passes only PATH, HOME and telemetry-off, not the host's full env.
 Use it only inside the provisioned namespace, or with fictional local fixtures.
-T3 CLI host authentication itself has a full-access ceiling; the project default
-must be set to Supervised before launch. The observed runtime mode is checked,
-but that after-the-fact check cannot replace a verified startup configuration.
+T3 CLI host authentication itself has a full-access ceiling, so the pre-launch
+managed-policy check is mandatory. A Supervised settings default alone is refused.
+The installed ceiling must be acknowledged by the running server. The provisioner
+must pin provider launch configuration and control server restarts; a text check
+is not attestation against a compromised/replaced T3 binary or runtime. The
+observation mode check remains a separate defense.
 T3 supervised approvals are not a substitute for OS/container separation.
 
 A host watchdog still needs a supported scheduler, authority/budget enforcement,
@@ -74,6 +84,9 @@ model endpoint. It makes a committed source, verified graph manifest and scoped
 capability, then proves the committed-source canary and commit SHA reached the
 model request. It records one request, a matching review-required result and
 private archive correlation. It removes all temporary fixture data afterward.
+The real unmanaged fixture server is refused by the default policy check before
+launch. The source-consumption leg then injects explicitly fictional policy
+evidence only; it is not a production managed-policy acceptance test.
 This is not paid inference, a phone UI check, OS isolation proof or production
 integration. The separate approved Agent37 pilot proved the paid transport path
 and tunnel, not this complete bridge on a durable host.
@@ -88,6 +101,8 @@ T3 source snapshot `9e85538535c8553901351112ab02dd1dd62db5ee` and stable
 - https://github.com/pingdotgg/t3code/blob/main/packages/contracts/src/orchestratorMcp.ts
 - https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md
 - https://github.com/pingdotgg/t3code/blob/main/docs/internals/environment-auth.md
+- https://github.com/pingdotgg/t3code/blob/main/docs/user/managed-policy.md
+- https://github.com/pingdotgg/t3code/blob/main/apps/server/src/cli/policy.ts
 
 The CLI supports stdin, explicit provider/model, JSON launch IDs and JSON show.
 It issues a short-lived local MCP session and revokes it after each command.
@@ -108,3 +123,53 @@ still required for the owner's no-sibling-crossover requirement.
 - Broader curated Shipyard knowledge coverage and reviewed fact promotion.
   This bridge uses existing graph manifests; it does not claim a full scan.
 - Existing merge and production-migration review stays in place.
+
+## Focused next production seam, grounded in current Dock
+
+The next change should be a disabled Supabase-backed execution-binding repository
+and narrow owner-session endpoint, not a blanket reuse of `/api/runs` auth.
+
+Current source:
+- `lib/assistant-store.ts:assistantContext` verifies session user with
+  `currentUser`, then loads that user's workspace. `projectInWorkspace` can
+  verify project membership before binding any task.
+- `app/api/runs/route.ts:resolveContext` also accepts mobile and machine tokens.
+  The machine-token path is a single-workspace superuser fallback, not a
+  task-scoped private-execution credential. Do not pass `DOCK_AGENT_TOKEN` to
+  an execution or use it as permission to create a binding.
+- `lib/queue.ts` stores runs/events in Supabase, owner calls use session/RLS,
+  worker calls use the service role. Run claims already have a lease owner
+  and deadline. Device claim auth is implemented in `lib/devices.ts` and
+  `app/api/devices/claim/route.ts`; it should not become workspace API access.
+- `supabase/migrations/20261104_coding_call_reservations.sql` demonstrates the
+  project's row-locking RPC pattern: lock task run, validate live lease,
+  uniqueness and budget before a write, revoke PUBLIC execution and grant
+  only the backend service role. Its reservation still does not prove an
+  upstream hard cost ceiling.
+
+Proposed reviewable slice, not applied here:
+1. A persistent `execution_bindings` table keyed by owner/workspace/project/run,
+   unique private execution ID, immutable base SHA, phase/version, exact T3
+   thread/run, policy evidence, cleanup deadline and private artifact reference.
+   Owner-read RLS only. Backend CAS functions lock the binding and validate its
+   task-run lease; do not accept owner IDs from request JSON.
+2. A disabled owner-session-only preparation endpoint uses `assistantContext`,
+   verifies run ownership and project membership, and writes intent. It does not
+   create an instance or launch a paid turn. A separate trusted provisioner later
+   resolves binding and authority, checks policy, and records execution identity.
+3. Persist hashed short-lived context capabilities with revocation and exact
+   binding version. Authenticated context reads join the run/binding and fail
+   after expiry, lease loss, deletion or scope mismatch. Keep source allowlists
+   server-owned. A context capability never permits creating runs or spending.
+4. Store exported artifacts in private storage with owner-read policy, content
+   hash and size limits before marking review-ready. No service-role secret in
+   the phone, source bundle or private execution.
+5. A separately operated cleanup worker owns due bindings, deletion-state and
+   ledger reconciliation even after process restarts. Vercel request handlers
+   and local filesystem deadlines are not lifecycle supervision.
+
+Acceptance before activation: two-owner/multi-workspace RLS tests, duplicate
+launch/deletion timeout races, lease theft/revocation tests, lost-response
+reconciliation, managed-policy preflight against an actual administrator-owned
+policy, and retained export after execution deletion. No migration or endpoint
+from this proposed slice is deployed or activated by this PR.

@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto'
+import {verifySupervisedPolicy} from './policy.mjs'
 import { taskPrompt } from './context.mjs'
 export class T3Bridge {
  // Transport executes inside ONE already provisioned private execution. It is not
  // an Agent37 workspace API credential. No provisioning/paid transport registered.
- constructor({registry,transport,enabled=false}) {this.registry=registry;this.transport=transport;this.enabled=enabled}
+ constructor({registry,transport,enabled=false,policyVerifier=verifySupervisedPolicy}) {this.registry=registry;this.transport=transport;this.enabled=enabled;this.policyVerifier=policyVerifier}
  async launch(scope,{brief,context,hostBinding,provider,model}) {
   if(!this.enabled)throw new Error('T3 bridge disabled')
   const row=await this.registry.get(scope)
@@ -14,6 +15,8 @@ export class T3Bridge {
   for(const p of [hostBinding.worktree,hostBinding.baseDir])if(p.includes('..')||!/^\/[a-zA-Z0-9/_-]+$/.test(p))throw new Error('unsafe private path')
   if(typeof provider!=='string'||!provider||typeof model!=='string'||!model)throw new Error('explicit provider and model required')
   if(!context?.bundle||context.sha256!==createHash('sha256').update(JSON.stringify(context.bundle)).digest('hex'))throw new Error('context bundle hash mismatch')
+  const policy=await this.policyVerifier(this.transport,{executionId:row.executionId,baseDir:hostBinding.baseDir})
+  if(policy?.executionId!==row.executionId||policy?.baseDir!==hostBinding.baseDir||policy.maxRuntimeMode!=='approval-required'||policy.loaded!==true||! /^[a-f0-9]{12}$/.test(policy.fingerprint??''))throw new Error('running supervised policy not verified')
   const prompt=taskPrompt(brief,context)
   let current=await this.registry.transition(scope,row.version,'launching')
   try {
