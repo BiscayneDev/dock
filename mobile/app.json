@@ -8,7 +8,10 @@
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "xyz.biscayneventures.dock"
+      "bundleIdentifier": "xyz.biscayneventures.dock",
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "plugins": [
       "expo-secure-store"
@@ -18,6 +21,10 @@
       "eas": {
         "projectId": "5615ef1b-3373-4ace-9784-ebe9438e3586"
       }
-    }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/5615ef1b-3373-4ace-9784-ebe9438e3586"
+    },
+    "android": {}
   }
 }
