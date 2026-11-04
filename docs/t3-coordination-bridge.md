@@ -2,8 +2,8 @@
 
 T3 remains the phone and conversation front door. Dock supplies task identity,
 curated shared source knowledge and review artifacts. This is not another mobile
-shell. No production route, paid provider or provisioning transport imports this
-module. The constructor defaults to disabled.
+shell. No paid provider, active production router or provisioning transport imports
+this module. A separate owner-only preparation endpoint is default-OFF. The constructor defaults to disabled.
 
 ## Implemented path
 
@@ -115,7 +115,7 @@ still required for the owner's no-sibling-crossover requirement.
 - A reviewed private provisioner and deletion/billing watchdog, with durable
   authority evidence, lifecycle and budget choice. No continuing spend assumed.
 - A production authenticated task router that constructs bindings server-side,
-  scoped context delivery endpoint and revocation persistence. No route active.
+  scoped context delivery endpoint and revocation persistence. No route active; the later section describes the disabled preparation-only endpoint.
 - Stronger actual sibling attack tests, credential/network egress checks and
   private archive retention/recovery review.
 - Real iPhone task/result, approval and notification checks. The user saying
@@ -171,5 +171,44 @@ Proposed reviewable slice, not applied here:
 Acceptance before activation: two-owner/multi-workspace RLS tests, duplicate
 launch/deletion timeout races, lease theft/revocation tests, lost-response
 reconciliation, managed-policy preflight against an actual administrator-owned
-policy, and retained export after execution deletion. No migration or endpoint
-from this proposed slice is deployed or activated by this PR.
+policy, and retained export after execution deletion. The later section implements only the disabled preparation/claim portion. No
+migration or endpoint is deployed or activated by this PR.
+
+## Disabled persistent preparation slice added after the initial bridge
+
+`POST /api/t3/preparations` is now present but returns501 unless
+`DOCK_T3_PREPARATION=on`. It accepts only runId, resolved baseSha and cleanupDeadline
+within thirty minutes. It uses owner-session `assistantContext` only, never
+mobile-token or `DOCK_AGENT_TOKEN` fallback. The session-backed RPC independently
+binds auth.uid to the run's workspace and project. No instance or task is launched.
+The supplied SHA remains a preparation claim; the trusted provisioner must verify
+it against the registered committed base before execution.
+
+The draft migration `20261104_t3_execution_preparations.sql` creates durable
+preparation identity, immutable task-payload snapshot, owner-read-only RLS and
+backend-only atomic claim. Concurrent preparation replay returns the same row;
+changed SHA/deadline refuses. Claim locks task then binding in consistent order,
+checks owner/workspace/project/payload/status/deadline and refuses an existing
+home-device lease. Unique execution IDs prevent reuse across sibling tasks.
+Task lease and binding claim commit atomically. This claim records an already
+approved private execution; it neither provisions nor proves paid authority.
+
+Scratch PostgreSQL proof uses fictional two-owner data and real roles/RLS,
+transactions, row locks and eight-way races. It checks one preparation row,
+one claim winner, cross-owner/project refusal, owner-write/backend-claim privilege
+boundaries, instance reuse rollback, lease theft refusal, changed payload,
+expired deadline and prepare/claim lock order. This is not an actual Supabase
+production test. No migration has been applied to a connected account.
+
+This is deliberately not the entire persistent bridge: thread/run/artifact/CAS
+transitions, persisted context capability revocation, lease recovery, separate
+cleanup watchdog and live policy/provisioner verification remain open. Existing
+home workers may claim a queued prepared task first; the T3 claim then refuses
+rather than stealing it. A future reviewed router must select the intended
+executor before enabling either path. The current bridge remains disabled.
+
+Reproduce the additional check with `python3 scripts/e2e/prove-t3-preparations.py`.
+The script creates a disposable local PostgreSQL server; it does not read app
+credentials or connect to Supabase. The larger PR remains stacked on experimental
+PR13 and cannot ship independently. Setting a feature flag alone does not complete
+these activation prerequisites.
