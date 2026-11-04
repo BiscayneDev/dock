@@ -10,21 +10,32 @@ the Expo Push Service, which handles APNs
 
 ## What it does today
 
-- Sign in once with your Dock URL and agent token (stored in iOS Keychain via
-  expo-secure-store; nothing is hardcoded).
-- Task board: tasks grouped by column, pulled from `GET <dock>/api/tasks`.
-- Task detail: title, status, and the isolated-run review card -
-  branch, commits, diff stat and the attestation result from
-  `GET <dock>/api/tasks/<id>/worktree` (accepts the agent token).
-- Registers an Expo push token on launch (expo-notifications).
+- Sign in once with your Dock URL and the scoped mobile token
+  (`DOCK_MOBILE_TOKEN` on the server - NOT the superuser agent token). Stored
+  in the iOS Keychain via expo-secure-store; nothing is hardcoded.
+- Board: tasks grouped by column (`GET /api/tasks`), 30s refresh.
+- New task: create + activate from the phone, optionally in an isolated
+  worktree of a registered repo (`POST /api/tasks` + `POST /api/tasks/activate`
+  with `repoPath`; repos listed via `GET /api/repos`).
+- Task detail: isolated-run review card - branch, commits, diff stat and the
+  attestation result (`GET /api/tasks/<id>/worktree`) - plus messaging the
+  assigned agent (`POST /api/messages`).
+- Approvals: runs parked in `awaiting_approval` with Approve/Reject
+  (`GET /api/runs`, `POST /api/runs/<id>/approve|reject`).
+- Push: registers its Expo push token with Dock (`POST /api/mobile/push-token`);
+  `POST /api/notify` fans out to registered devices through the Expo Push
+  Service (APNs), so finish / fail / info alerts reach the phone.
+
+Verified: `npm install`, `npx expo install --check`, `npx tsc --noEmit`, and
+`npx expo export --platform ios` (Metro/Hermes bundle) all pass. On-device or
+simulator run needs macOS/Xcode or EAS Build.
 
 ## Not yet wired (next steps)
 
-- Push delivery: Dock's notify pipeline needs to send to the Expo Push Service
-  with this device's token (finish / fail / needs-approval - the same alert
-  set T3 Code documents).
-- Approvals: `GET/POST /api/approvals` actions from the phone.
-- Activate a task from the phone (the API already supports it).
+- Approvals for money actions carry the full approval card detail (amount,
+  command) - the app currently shows type + prompt.
+- EAS Build + App Store distribution, notification tap → deep link into the
+  task (`scheme: dock`).
 
 ## Run
 

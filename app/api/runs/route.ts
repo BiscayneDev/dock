@@ -3,6 +3,8 @@ import { assistantContext, isUuid, projectInWorkspace } from "@/lib/assistant-st
 import { enqueueRun, listEventsForRuns, listRuns } from "@/lib/queue"
 import { ownerHasOnlineDevice } from "@/lib/devices"
 import { agentTokenAuthorized } from "@/lib/agent-auth"
+import { mobileTokenAuthorized, mobileTokenHas } from "@/lib/mobile-auth"
+import { resolveMobileOwnerContext } from "@/lib/mobile-auth-server"
 import { adminClient, agentTokenWorkspace } from "@/lib/tenancy"
 import { buildModel, parseModelRef, resolveModelRef, listConfiguredProviders } from "@/lib/inference"
 import { createShipyardCapture } from "@/lib/inference/shipyard-capture"
@@ -31,6 +33,11 @@ function maxBudgetCents(): number {
 export async function resolveContext(request: Request) {
   const ctx = await assistantContext()
   if (ctx) return ctx
+  // Scoped mobile token (owner's phone): same single-workspace owner binding.
+  if (mobileTokenAuthorized(request) && mobileTokenHas("runs:read")) {
+    const mobileCtx = await resolveMobileOwnerContext(request)
+    if (mobileCtx) return mobileCtx
+  }
   if (!agentTokenAuthorized(request)) return null
   const tokenWs = await agentTokenWorkspace()
   if (tokenWs === "forbidden") {

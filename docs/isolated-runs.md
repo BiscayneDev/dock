@@ -30,6 +30,13 @@ shared directory.
 6. Merge is a human decision. Agents never push or merge. Cleanup is
    `removeTaskWorktree`, which only ever deletes `dock/task-*` branches.
 
+The review surface reads with the owner session or the scoped mobile token
+(`DOCK_MOBILE_TOKEN`, capability `worktree:read`) - deliberately not the
+superuser agent token. The mobile token's whole surface is the capability list
+in `lib/mobile-auth.ts` (task read/activate, repo read, worktree read, messages,
+runs read, approval decisions, push registration); it cannot register repos,
+post notifications, or call agent callbacks.
+
 `GET /api/tasks/<id>/worktree` also runs `verifyTaskWorktree`: the worktree must
 still exist, stay inside its root after symlinks resolve, be registered with
 `git worktree list`, and be checked out on the task branch. Drift (e.g. an agent

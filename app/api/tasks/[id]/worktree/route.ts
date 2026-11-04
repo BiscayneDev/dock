@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { assistantContext } from "@/lib/assistant-store"
-import { agentTokenAuthorized } from "@/lib/agent-auth"
+import { requireMobileOrOwner } from "@/lib/mobile-auth-server"
 import { getConversation, taskConversationId } from "@/lib/conversations"
 import { diffForTaskBranch, verifyTaskWorktree } from "@/lib/isolation/worktree"
 
@@ -21,10 +21,10 @@ interface WorktreeEventData {
  * evidence the owner reviews before merging the task branch themselves.
  */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  // Owner session, or the agent token (the mobile client authenticates with it).
-  // The token can already activate isolated runs; reading their review surface is narrower.
-  const ctx = await assistantContext()
-  if (!ctx && !agentTokenAuthorized(request)) return NextResponse.json({ error: "Sign in required" }, { status: 401 })
+  // Owner session, or the scoped mobile token (worktree:read) - the phone reads
+  // the review surface with DOCK_MOBILE_TOKEN, not the superuser agent token.
+  const denied = await requireMobileOrOwner(request, "worktree:read")
+  if (denied) return denied
   const { id } = await params
 
   const conversation = await getConversation(taskConversationId(id))

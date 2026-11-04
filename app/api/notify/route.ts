@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { notificationEmitter, addRecentNotification } from "@/lib/notificationEmitter"
 import type { NotificationPayload } from "@/lib/notificationEmitter"
 import { requireAgentToken } from "@/lib/agent-auth"
+import { sendExpoPush } from "@/lib/expo-push"
 
 export async function POST(request: Request) {
   const denied = requireAgentToken(request)
@@ -27,6 +28,9 @@ export async function POST(request: Request) {
 
     // Broadcast to SSE listeners
     notificationEmitter.emit("notification", payload)
+
+    // Fan out to registered mobile devices via the Expo Push Service (best-effort).
+    sendExpoPush(`Dock · ${payload.agent}`, payload.message, { type: payload.type, id: payload.id }).catch(() => 0)
 
     return NextResponse.json({ ok: true, id: payload.id })
   } catch {

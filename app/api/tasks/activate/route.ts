@@ -6,6 +6,7 @@ import { enrichTaskBrief } from "@/lib/task-enrichment"
 import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 import { assistantContext } from "@/lib/assistant-store"
 import { agentTokenAuthorized } from "@/lib/agent-auth"
+import { mobileTokenAuthorized, mobileTokenHas } from "@/lib/mobile-auth"
 import { createTaskWorktree, isValidTaskRef, assertValidBaseRef } from "@/lib/isolation/worktree"
 import { assertRepoRegistered } from "@/lib/isolation/registered-repos"
 
@@ -69,7 +70,10 @@ export async function POST(request: Request) {
     // strictly validated before it reaches a git command line.
     let worktree: { repoPath: string; path: string; branch: string; baseRef: string } | null = null
     if (typeof repoPath === "string" && repoPath.trim()) {
-      const authed = (await assistantContext()) !== null || agentTokenAuthorized(request)
+      const authed =
+        (await assistantContext()) !== null ||
+        agentTokenAuthorized(request) ||
+        (mobileTokenAuthorized(request) && mobileTokenHas("tasks:activate"))
       if (!authed) {
         return NextResponse.json({ error: "Sign in required for isolated runs" }, { status: 401 })
       }

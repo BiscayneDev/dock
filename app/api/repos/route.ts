@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { assistantContext } from "@/lib/assistant-store"
+import { requireMobileOrOwner } from "@/lib/mobile-auth-server"
 import { listRegisteredRepos, registerRepo } from "@/lib/isolation/registered-repos"
 
 export const dynamic = "force-dynamic"
@@ -10,8 +11,9 @@ export const dynamic = "force-dynamic"
  * repo but cannot register one, so a token cannot point Dock at an arbitrary
  * host path.
  */
-export async function GET() {
-  if (!(await assistantContext())) return NextResponse.json({ error: "Sign in required" }, { status: 401 })
+export async function GET(request: Request) {
+  const denied = await requireMobileOrOwner(request, "repos:read")
+  if (denied) return denied
   return NextResponse.json({ repos: await listRegisteredRepos() })
 }
 
