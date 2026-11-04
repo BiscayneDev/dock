@@ -77,7 +77,7 @@ test("home-host isolated task: staged agent runs, key stays host-side, host adva
     registeredRepos: [repo],
     whichFn: (n) => n === "docker",
     spawnFn: fakeSpawn,
-    env: { SHIPYARD_INFERENCE_URL: `http://127.0.0.1:${upstream.address().port}`, SHIPYARD_INFERENCE_API_KEY: "fictional-key" },
+    env: { DOCK_ISOLATED_RUNTIME: "on", SHIPYARD_INFERENCE_URL: `http://127.0.0.1:${upstream.address().port}`, SHIPYARD_INFERENCE_API_KEY: "fictional-key" },
   })
 
   assert.equal(result.ok, true, JSON.stringify(result))
@@ -103,6 +103,6 @@ test("home-host isolated task: staged agent runs, key stays host-side, host adva
 test("home-host isolated task fails closed without a container runtime", async () => {
   await assert.rejects(
     runIsolatedAgentTask({ taskRef: "task-1", worktreePath: "/x/.dock-worktrees/y/task-1", brief: "b", registeredRepos: [], whichFn: () => false, env: {} }),
-    /worktree path does not exist|not a task worktree|no container runtime/,
+    /experimental isolated runtime disabled|worktree path does not exist|not a task worktree|no container runtime/,
   )
 })

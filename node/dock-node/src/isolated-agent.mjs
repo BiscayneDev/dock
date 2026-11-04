@@ -113,6 +113,7 @@ export async function runIsolatedAgentTask({
   spawnFn = (bin, argv, envVars) => defaultSpawn(bin, argv, { stdio: ["ignore", "inherit", "inherit"], env: envVars }),
   log = () => {},
 }) {
+  if (env.DOCK_ISOLATED_RUNTIME !== "on") throw new Error("experimental isolated runtime disabled; refusing launch")
   if (!brief || typeof brief !== "string") throw new Error("isolated agent task requires a brief")
   const { resolved, repo } = await resolveTaskWorktree(worktreePath, registeredRepos, taskRef)
   const mainGitDir = join(repo, ".git")

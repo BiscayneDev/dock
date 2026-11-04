@@ -10,6 +10,22 @@ import { isMoneyAction } from "./money.mjs"
 export async function executeRun(run, { api, localTools = null, diagnostics = false, log = () => {}, runDiagnostics, isolatedRunner = runIsolatedAgentTask }) {
   const action = run.proposedAction ?? null
 
+  if (isMoneyAction(action)) {
+    log(`run ${run.id}: refusing money action ${action.type} on the home node; sending to approval`)
+    await api.event(run.id, "action_refused", { actionId: action.id, type: action.type }).catch(() => null)
+    try {
+      await api.complete(run.id, { status: "awaiting_approval" })
+      return { outcome: "awaiting_approval" }
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) throw err
+      // The owner already decided on this action. It runs only on the cloud executor, so fail it here.
+      await api
+        .complete(run.id, { status: "failed", error: "approved money action cannot run on the home node" })
+        .catch(() => null)
+      return { outcome: "refused" }
+    }
+  }
+
   // Isolated coding task: run confined on this home host (fresh container, no
   // network, host-held inference key, host-finalized branch). The cloud emits
   // run.isolatedTask = { taskRef, worktreePath, brief } for these. Any failure
@@ -18,6 +34,7 @@ export async function executeRun(run, { api, localTools = null, diagnostics = fa
   if (run.isolatedTask) {
     await api.event(run.id, "started", { agentKey: run.agentKey, isolated: true })
     try {
+      if (process.env.DOCK_ISOLATED_RUNTIME !== "on") throw new Error("experimental isolated runtime disabled; refusing launch")
       const result = await isolatedRunner({
         taskRef: run.isolatedTask.taskRef,
         worktreePath: run.isolatedTask.worktreePath,
@@ -34,22 +51,6 @@ export async function executeRun(run, { api, localTools = null, diagnostics = fa
       const message = err instanceof Error ? err.message : "isolated task failed"
       await api.complete(run.id, { status: "failed", error: message.slice(0, 500) }).catch(() => null)
       return { outcome: "failed", error: message }
-    }
-  }
-
-  if (isMoneyAction(action)) {
-    log(`run ${run.id}: refusing money action ${action.type} on the home node; sending to approval`)
-    await api.event(run.id, "action_refused", { actionId: action.id, type: action.type }).catch(() => null)
-    try {
-      await api.complete(run.id, { status: "awaiting_approval" })
-      return { outcome: "awaiting_approval" }
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) throw err
-      // The owner already decided on this action. It runs only on the cloud executor, so fail it here.
-      await api
-        .complete(run.id, { status: "failed", error: "approved money action cannot run on the home node" })
-        .catch(() => null)
-      return { outcome: "refused" }
     }
   }
 
