@@ -33,7 +33,7 @@ test('lost delete response reconciles absent state, unreconciled deletion stays 
  const g=fixture({delete:async()=>{throw new Error('no delete')}});await assert.rejects(new T3OwnerWorker({...g,authority:async()=>true,enabled:true}).run(g.row.id,'t3:w'),/unverified/);assert.equal(g.row.phase,'cleanup_due')
 })
 test('different phone run never becomes original owner task result',async()=>{
- const f=fixture();const cli=f.provisioner.cli;f.provisioner.cli=async r=>{const x=await cli(r);if(r.args[1]==='show'){const d=JSON.parse(x.stdout);d.thread.latestRunId='phone-run';x.stdout=JSON.stringify(d)}return x}
+ const f=fixture();const cli=f.provisioner.cli;f.provisioner.cli=async r=>{const x=await cli(r);if(r.args[0]==='thread'&&r.args[1]==='show'){const d=JSON.parse(x.stdout);d.thread.latestRunId='phone-run';x.stdout=JSON.stringify(d)}return x}
  await new T3OwnerWorker({...f,authority:async()=>true,enabled:true}).run(f.row.id,'t3:w');assert.equal(f.row.artifact,undefined);assert.equal(f.instances.length,0)
 })
 test('Agent37 backend key stays in transport headers, never instance body/CLI',async()=>{
@@ -56,6 +56,6 @@ test('lost create with absent inventory is not proof final billing ended',async(
  assert.equal(await p.settled({task:{execution_id:null},deletedIds:[]}),false)
 })
 test('waiting status is not mistaken for terminal failure',async()=>{
- const f=fixture();const cli=f.provisioner.cli;let reads=0;f.provisioner.cli=async r=>{const x=await cli(r);if(r.args[1]==='show'&&reads++===0){const d=JSON.parse(x.stdout);d.thread.status='waiting';x.stdout=JSON.stringify(d)}return x}
+ const f=fixture();const cli=f.provisioner.cli;let reads=0;f.provisioner.cli=async r=>{const x=await cli(r);if(r.args[0]==='thread'&&r.args[1]==='show'&&reads++===0){const d=JSON.parse(x.stdout);d.thread.status='waiting';x.stdout=JSON.stringify(d)}return x}
  await new T3OwnerWorker({...f,authority:async()=>true,enabled:true}).run(f.row.id,'t3:w');assert.ok(f.row.artifact);assert.equal(f.instances.length,0)
 })
