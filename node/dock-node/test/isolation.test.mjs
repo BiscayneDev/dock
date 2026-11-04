@@ -4,7 +4,7 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import { detectContainerRuntime, isTaskWorktreePath, containerRunArgs, confinedCommand } from "../src/isolation.mjs"
 
-const WT = "/home/halsey/shipyard/.dock-worktrees/dock/task-1"
+const WT = "/home/demo/projects/.dock-worktrees/dock/task-1"
 
 test("detects the first available runtime", () => {
   assert.equal(detectContainerRuntime(() => false), null)
@@ -15,8 +15,8 @@ test("detects the first available runtime", () => {
 
 test("only Dock task worktrees may be mounted", () => {
   assert.equal(isTaskWorktreePath(WT), true)
-  assert.equal(isTaskWorktreePath("/home/halsey/shipyard/dock"), false)
-  assert.equal(isTaskWorktreePath("/home/halsey/.dock-worktrees/dock/task-1/deeper"), false)
+  assert.equal(isTaskWorktreePath("/home/demo/projects/dock"), false)
+  assert.equal(isTaskWorktreePath("/home/demo/.dock-worktrees/dock/task-1/deeper"), false)
   assert.equal(isTaskWorktreePath("relative/.dock-worktrees/dock/task-1"), false)
   assert.equal(isTaskWorktreePath("/etc"), false)
 })
@@ -29,7 +29,7 @@ test("argv confines: only the worktree, no network, no privileges", () => {
   assert.ok(joined.includes("--read-only"), joined)
   assert.ok(joined.includes("--cap-drop ALL"), joined)
   assert.ok(joined.includes("--user"), joined)
-  assert.ok(!joined.includes("/home/halsey/shipyard/dock:"), "main checkout is not mounted")
+  assert.ok(!joined.includes("/home/demo/projects/dock:"), "main checkout is not mounted")
 })
 
 test("refuses non-worktree mounts and empty commands", () => {

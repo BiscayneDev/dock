@@ -5,7 +5,20 @@
 import { NextResponse } from "next/server"
 import { assistantContext } from "./assistant-store"
 import { adminClient, agentTokenWorkspace } from "./tenancy"
-import { mobileTokenAuthorized, mobileTokenHas, type MobileCapability } from "./mobile-auth"
+import { mobileEnvTokenAuthorized, mobileTokenHas, presentedMobileToken, type MobileCapability } from "./mobile-auth"
+import { deviceTokenAuthorized } from "./mobile-pairing.ts"
+import { supabaseMobilePairingStore } from "./mobile-pairing-server.ts"
+
+/**
+ * True when the request carries a valid mobile credential: the env-token
+ * fast-path, or a live paired-device credential (hashed lookup in Supabase).
+ */
+export async function mobileTokenAuthorized(request: Request): Promise<boolean> {
+  if (mobileEnvTokenAuthorized(request)) return true
+  const provided = presentedMobileToken(request)
+  if (!provided) return false
+  return deviceTokenAuthorized(supabaseMobilePairingStore(), provided)
+}
 
 /**
  * Owner session, or the mobile token with the named capability.

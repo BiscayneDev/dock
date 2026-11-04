@@ -5,6 +5,20 @@ import {
 } from "react-native"
 import { StatusBar } from "expo-status-bar"
 import * as SecureStore from "expo-secure-store"
+import { Platform } from "react-native"
+
+// SecureStore has no web implementation; the web preview falls back to
+// localStorage. Native keeps hardware-backed storage.
+const store = {
+  async get(key: string): Promise<string | null> {
+    if (Platform.OS === "web") return window.localStorage.getItem(key)
+    return SecureStore.getItemAsync(key)
+  },
+  async set(key: string, value: string): Promise<void> {
+    if (Platform.OS === "web") { window.localStorage.setItem(key, value); return }
+    return SecureStore.setItemAsync(key, value)
+  },
+}
 import * as Notifications from "expo-notifications"
 
 // Dock mobile: thin native client for Dock's HTTP APIs. Dock stays the board
@@ -103,19 +117,20 @@ export default function App() {
           return
         }
       }
-      const base = await SecureStore.getItemAsync("dock:url")
-      const saved = await SecureStore.getItemAsync("dock:token")
+      const base = await store.get("dock:url")
+      const saved = await store.get("dock:token")
       if (base && saved) setConnected({ base, token: saved })
     })()
   }, [])
 
   // Register for push and hand the Expo token to Dock (notify pipeline fans out).
   const registerPush = useCallback(async (base: string, tok: string) => {
-    const perm = await Notifications.requestPermissionsAsync()
-    if (!perm.granted) return
+    if (Platform.OS === "web") return // push registration is native-only
+    const perm = await Notifications.requestPermissionsAsync().catch(() => null)
+    if (!perm?.granted) return
     const pushToken = await Notifications.getExpoPushTokenAsync().catch(() => null)
     if (pushToken) {
-      await SecureStore.setItemAsync("dock:pushToken", pushToken.data)
+      await store.set("dock:pushToken", pushToken.data)
       await api(base, tok, "/api/mobile/push-token", {
         method: "POST",
         body: JSON.stringify({ token: pushToken.data, platform: "ios" }),
@@ -152,14 +167,16 @@ export default function App() {
       setError("Pairing failed - codes are single-use and expire after 5 minutes.")
       return
     }
-    const ok = await api<Task[]>(base, paired.deviceToken, "/api/tasks")
+    // Authenticated connectivity check: a wrong or revoked credential fails
+    // loudly here instead of silently "connecting".
+    const status = await api<{ ok: boolean }>(base, paired.deviceToken, "/api/mobile/status")
     setBusy(false)
-    if (!ok) {
-      setError("Paired, but could not load tasks from that Dock URL.")
+    if (!status?.ok) {
+      setError("Paired, but the credential was rejected by that Dock. Pair again from the Dock web UI.")
       return
     }
-    await SecureStore.setItemAsync("dock:url", base)
-    await SecureStore.setItemAsync("dock:token", paired.deviceToken)
+    await store.set("dock:url", base)
+    await store.set("dock:token", paired.deviceToken)
     setConnected({ base, token: paired.deviceToken })
     registerPush(base, paired.deviceToken)
   }, [dockUrl, token, registerPush])

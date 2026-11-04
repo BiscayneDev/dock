@@ -7,7 +7,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 process.env.DOCK_MOBILE_TOKEN = "test-mobile-token-123"
-const { mobileTokenAuthorized, mobileTokenHas, MOBILE_CAPABILITIES } = await import("../lib/mobile-auth.ts")
+const { mobileEnvTokenAuthorized, mobileTokenHas, MOBILE_CAPABILITIES } = await import("../lib/mobile-auth.ts")
 const { isValidExpoPushToken, registerPushToken, unregisterPushToken, listPushTokens, sendExpoPush } = await import("../lib/expo-push.ts")
 
 function req(headers = {}) {
@@ -15,11 +15,11 @@ function req(headers = {}) {
 }
 
 test("mobile token: valid bearer passes, wrong/missing/unset fails", async () => {
-  assert.equal(await mobileTokenAuthorized(req({ authorization: "Bearer test-mobile-token-123" })), true)
-  assert.equal(await mobileTokenAuthorized(req({ "x-dock-mobile-token": "test-mobile-token-123" })), true)
-  assert.equal(await mobileTokenAuthorized(req({ authorization: "Bearer wrong" })), false)
-  assert.equal(await mobileTokenAuthorized(req({ authorization: "Bearer test-mobile-token-1234" })), false)
-  assert.equal(await mobileTokenAuthorized(req()), false)
+  assert.equal(mobileEnvTokenAuthorized(req({ authorization: "Bearer test-mobile-token-123" })), true)
+  assert.equal(mobileEnvTokenAuthorized(req({ "x-dock-mobile-token": "test-mobile-token-123" })), true)
+  assert.equal(mobileEnvTokenAuthorized(req({ authorization: "Bearer wrong" })), false)
+  assert.equal(mobileEnvTokenAuthorized(req({ authorization: "Bearer test-mobile-token-1234" })), false)
+  assert.equal(mobileEnvTokenAuthorized(req()), false)
 })
 
 test("capability surface is explicit and closed", () => {

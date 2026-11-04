@@ -3,6 +3,8 @@ import type { AgentRuntime, RuntimeSession } from "./types"
 export class StubRuntime implements AgentRuntime {
   readonly name = "Demo"
   readonly id = "demo"
+  // Prompt-level worktree hints are not confinement: this runtime cannot enforce isolation.
+  readonly enforcesWorktreeIsolation = false
 
   async healthCheck() {
     return { ok: true, version: "demo" }

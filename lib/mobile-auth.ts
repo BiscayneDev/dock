@@ -40,17 +40,15 @@ export function presentedMobileToken(request: Request): string {
 }
 
 /**
- * True when the request carries a valid mobile credential: the owner-configured
- * DOCK_MOBILE_TOKEN (escape hatch / single-phone deployments) or a paired,
- * revocable device credential from the pairing flow (./mobile-pairing).
+ * Env-token fast-path: the owner-configured DOCK_MOBILE_TOKEN (escape hatch /
+ * single-phone deployments). Paired-device credentials are checked separately
+ * by the server helper (./mobile-auth-server), which owns the store lookup.
  */
-export async function mobileTokenAuthorized(request: Request): Promise<boolean> {
+export function mobileEnvTokenAuthorized(request: Request): boolean {
   const provided = presentedMobileToken(request)
   if (!provided) return false
   const expected = (process.env.DOCK_MOBILE_TOKEN ?? "").trim()
-  if (expected && timingSafeEqual(digest(provided), digest(expected))) return true
-  const { deviceTokenAuthorized } = await import("./mobile-pairing.ts")
-  return deviceTokenAuthorized(provided)
+  return !!expected && timingSafeEqual(digest(provided), digest(expected))
 }
 
 export function mobileTokenHas(capability: MobileCapability): boolean {

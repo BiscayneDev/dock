@@ -30,7 +30,14 @@ export async function POST(request: Request) {
     notificationEmitter.emit("notification", payload)
 
     // Fan out to registered mobile devices via the Expo Push Service (best-effort).
-    sendExpoPush(`Dock · ${payload.agent}`, payload.message, { type: payload.type, id: payload.id }).catch(() => 0)
+    // Lockscreen payloads stay generic: no agent name, message text, or business
+    // detail. The full notification is only visible after opening the app.
+    const GENERIC_BODIES: Record<string, string> = {
+      approval: "A run needs your approval. Open Dock to decide.",
+      fail: "A run failed. Open Dock for details.",
+    }
+    const pushBody = GENERIC_BODIES[payload.type ?? ""] ?? "Dock activity. Open the app for details."
+    sendExpoPush("Dock", pushBody, { type: payload.type, id: payload.id }).catch(() => 0)
 
     return NextResponse.json({ ok: true, id: payload.id })
   } catch {

@@ -6,8 +6,9 @@ import { enrichTaskBrief } from "@/lib/task-enrichment"
 import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 import { assistantContext } from "@/lib/assistant-store"
 import { agentTokenAuthorized } from "@/lib/agent-auth"
-import { mobileTokenAuthorized, mobileTokenHas } from "@/lib/mobile-auth"
-import { createTaskWorktree, isValidTaskRef, assertValidBaseRef } from "@/lib/isolation/worktree"
+import { mobileTokenAuthorized } from "@/lib/mobile-auth-server"
+import { mobileTokenHas } from "@/lib/mobile-auth"
+import { createTaskWorktree, removeTaskWorktree, isValidTaskRef, assertValidBaseRef } from "@/lib/isolation/worktree"
 import { assertRepoRegistered } from "@/lib/isolation/registered-repos"
 
 interface BudgetCheckResult {
@@ -100,6 +101,22 @@ export async function POST(request: Request) {
         return NextResponse.json(
           { error: `Could not create task worktree: ${err instanceof Error ? err.message : "unknown"}` },
           { status: 400 },
+        )
+      }
+      // Hard isolation is a launch requirement, not a preference. The configured
+      // runtime must confine the agent to the worktree itself; a worktree path
+      // in a prompt is an instruction the agent can ignore. When the runtime
+      // cannot enforce, fail closed: remove the worktree and refuse the launch
+      // rather than silently running unconfined.
+      if (!runtime.enforcesWorktreeIsolation) {
+        await removeTaskWorktree({ repoPath: registeredRepo, taskRef: String(taskId), deleteBranch: true }).catch(() => null)
+        return NextResponse.json(
+          {
+            error: `Isolated runs are not available: the '${runtime.id}' runtime cannot confine an agent to a task worktree. ` +
+              "No unconfined launch was started. Use a runtime with enforcement (container/sandbox) for coding launches.",
+            code: "isolation_not_enforceable",
+          },
+          { status: 501 },
         )
       }
     }

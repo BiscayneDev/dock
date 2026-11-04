@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { assistantContext, isUuid } from "@/lib/assistant-store"
-import { mobileTokenHas, mobileTokenAuthorized } from "@/lib/mobile-auth"
+import { mobileTokenAuthorized } from "@/lib/mobile-auth-server"
+import { mobileTokenHas } from "@/lib/mobile-auth"
 import { resolveMobileOwnerContext } from "@/lib/mobile-auth-server"
 import { decideApproval } from "@/lib/queue"
 

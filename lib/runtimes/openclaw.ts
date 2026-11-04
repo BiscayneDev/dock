@@ -19,6 +19,8 @@ function ocExec(args: string[], timeout = 30000) {
 export class OpenClawRuntime implements AgentRuntime {
   readonly name = "OpenClaw"
   readonly id = "openclaw"
+  // Prompt-level worktree hints are not confinement: this runtime cannot enforce isolation.
+  readonly enforcesWorktreeIsolation = false
 
   async healthCheck() {
     try {

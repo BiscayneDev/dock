@@ -40,6 +40,14 @@ export interface AgentRuntime {
   /** Short identifier used in AGENT_RUNTIME env var */
   readonly id: string
 
+  /**
+   * True only when the runtime itself confines an activated agent to the
+   * task worktree it is handed (container, sandbox, or OS-user boundary the
+   * runtime owns). Passing the worktree path in a prompt is an instruction,
+   * not enforcement, and does not count.
+   */
+  readonly enforcesWorktreeIsolation: boolean
+
   /** Check if the runtime is reachable */
   healthCheck(): Promise<{ ok: boolean; version?: string; error?: string }>
 

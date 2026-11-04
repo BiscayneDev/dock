@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { requireMobileOrOwner } from "@/lib/mobile-auth-server"
 import { readFile, writeFile, mkdir } from "fs/promises"
 import { join, dirname } from "path"
 import { randomUUID } from "crypto"
@@ -57,6 +58,8 @@ function parseAgentMessage(summary: string, data?: Record<string, unknown>): { f
 }
 
 export async function GET(request: Request) {
+  const denied = await requireMobileOrOwner(request, "messages:read")
+  if (denied) return denied
   const url = new URL(request.url)
   const agent = url.searchParams.get("agent")
   const canonical = url.searchParams.get("canonical")
@@ -103,6 +106,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const denied = await requireMobileOrOwner(request, "messages:write")
+  if (denied) return denied
   try {
     const body = (await request.json()) as Partial<AgentMessage>
 
