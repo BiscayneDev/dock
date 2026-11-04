@@ -1,4 +1,5 @@
 import { ApiError } from "./api.mjs"
+import { runIsolatedAgentTask } from "./isolated-agent.mjs"
 import { runDiagnosticsTool, shouldRunDiagnostics } from "./local-tools.mjs"
 import { isMoneyAction } from "./money.mjs"
 
@@ -6,8 +7,35 @@ import { isMoneyAction } from "./money.mjs"
 // gate (complete with awaiting_approval) and the model is not called. Everything else is one model call through
 // Dock (POST /api/devices/infer), which applies the owner's budget and meters the spend.
 
-export async function executeRun(run, { api, localTools = null, diagnostics = false, log = () => {}, runDiagnostics }) {
+export async function executeRun(run, { api, localTools = null, diagnostics = false, log = () => {}, runDiagnostics, isolatedRunner = runIsolatedAgentTask }) {
   const action = run.proposedAction ?? null
+
+  // Isolated coding task: run confined on this home host (fresh container, no
+  // network, host-held inference key, host-finalized branch). The cloud emits
+  // run.isolatedTask = { taskRef, worktreePath, brief } for these. Any failure
+  // - including "no container runtime here" - fails the run closed; it never
+  // falls back to unconfined execution.
+  if (run.isolatedTask) {
+    await api.event(run.id, "started", { agentKey: run.agentKey, isolated: true })
+    try {
+      const result = await isolatedRunner({
+        taskRef: run.isolatedTask.taskRef,
+        worktreePath: run.isolatedTask.worktreePath,
+        brief: run.isolatedTask.brief,
+        log,
+      })
+      await api.complete(run.id, {
+        status: result.ok ? "succeeded" : "failed",
+        ...(result.ok ? { output: result.summary } : { error: String(result.summary ?? "isolated task failed").slice(0, 500) }),
+      })
+      return { outcome: result.ok ? "succeeded" : "failed", commitSha: result.commitSha ?? null }
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) throw err
+      const message = err instanceof Error ? err.message : "isolated task failed"
+      await api.complete(run.id, { status: "failed", error: message.slice(0, 500) }).catch(() => null)
+      return { outcome: "failed", error: message }
+    }
+  }
 
   if (isMoneyAction(action)) {
     log(`run ${run.id}: refusing money action ${action.type} on the home node; sending to approval`)
