@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { assistantContext } from "@/lib/assistant-store"
+import { agentTokenAuthorized } from "@/lib/agent-auth"
 import { getConversation, taskConversationId } from "@/lib/conversations"
 import { diffForTaskBranch, verifyTaskWorktree } from "@/lib/isolation/worktree"
 
@@ -19,9 +20,11 @@ interface WorktreeEventData {
  * its branch against base. Owner session only. Agents never merge: this is the
  * evidence the owner reviews before merging the task branch themselves.
  */
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  // Owner session, or the agent token (the mobile client authenticates with it).
+  // The token can already activate isolated runs; reading their review surface is narrower.
   const ctx = await assistantContext()
-  if (!ctx) return NextResponse.json({ error: "Sign in required" }, { status: 401 })
+  if (!ctx && !agentTokenAuthorized(request)) return NextResponse.json({ error: "Sign in required" }, { status: 401 })
   const { id } = await params
 
   const conversation = await getConversation(taskConversationId(id))

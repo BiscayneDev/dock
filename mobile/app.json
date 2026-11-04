@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "Dock",
+    "slug": "dock-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "dock",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "xyz.biscayneventures.dock"
+    },
+    "plugins": ["expo-secure-store", "expo-notifications"]
+  }
+}
