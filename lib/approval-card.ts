@@ -208,7 +208,7 @@ const STATUS_LABEL: Record<ApprovalStatus, string> = {
 export function buildApprovalCards(
   runs: ApprovalRunInput[],
   events: ApprovalEventInput[],
-  conversationId: string,
+  conversationId: string | null,
   projectNames: Record<string, string> = {},
   canDecideRun: (run: ApprovalRunInput) => boolean = () => true,
   now: number = Date.now(),
@@ -216,7 +216,7 @@ export function buildApprovalCards(
   const cards: ApprovalCardView[] = []
   // Runs arrive newest first, so the cards do too.
   for (const run of runs) {
-    if (run.conversationId !== conversationId) continue
+    if (conversationId !== null && run.conversationId !== conversationId) continue
     const runEvents = events.filter((e) => e.runId === run.id)
     const requested = [...runEvents].reverse().find((e) => e.kind === "approval_requested")
     if (!requested) continue
