@@ -1,0 +1,15 @@
+**
+!infra/
+!infra/execution-private/
+!infra/execution-private/repair.py
+!infra/execution-private/policy.json
+!infra/execution-private/settings.json
+!infra/execution-private/smoke.py
+!node/
+!node/dock-node/
+!node/dock-node/src/
+!node/dock-node/src/execution/
+!node/dock-node/src/execution/scoped-relay.mjs
+!node/dock-node/src/execution/chat-contract.mjs
+!node/dock-node/bin/
+!node/dock-node/bin/dock-private-pi.mjs

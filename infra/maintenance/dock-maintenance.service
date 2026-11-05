@@ -1,0 +1,20 @@
+# Source-only unit. Not installed, enabled or evidence of live supervision.
+[Unit]
+Description=Dock execution deadline maintenance
+After=network-online.target
+[Service]
+Type=simple
+User=dock-maintenance
+WorkingDirectory=/opt/dock
+ExecStart=/usr/bin/node /opt/dock/node/dock-node/bin/dock-maintenance-watchdog.mjs
+Environment=DOCK_MAINTENANCE_SECRET_FILE=/run/credentials/dock-maintenance.secret
+EnvironmentFile=/etc/dock/maintenance-endpoint.env
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/run/credentials/dock-maintenance.secret
+[Install]
+WantedBy=multi-user.target

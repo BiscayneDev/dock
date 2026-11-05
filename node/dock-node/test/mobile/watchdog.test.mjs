@@ -1,2 +1,9 @@
 import{test}from'node:test';import assert from'node:assert/strict';import{runExecutionWatchdog}from'../../src/execution/watchdog.mjs'
 test('independent watchdog continues after failed sweep and reports unresolved cleanup, no create authority',async()=>{const signal=new AbortController();let sweeps=0,alerts=0,beats=0;await runExecutionWatchdog({signal:signal.signal,sweep:async()=>{if(++sweeps===1)throw Error('failure');signal.abort();return{deleted:0,unresolved:1}},heartbeat:async()=>beats++,reportFailure:async()=>alerts++,sleep:async()=>{}});assert.equal(sweeps,2);assert.equal(alerts,2);assert.equal(beats,1)})
+import{maintenanceClient}from'../../src/execution/maintenance-client.mjs'
+test('deployable maintenance client uses only fixed maintenance route; redirects, stale or incomplete receipt never heartbeat success',async()=>{
+ const options={endpoint:'https://fictional.invalid/api/internal/mobile-maintenance',secret:'fictional-maintenance-secret-32-chars'};let calls=0
+ const sweep=maintenanceClient({...options,fetchImpl:async(url,i)=>{calls++;assert.equal(new URL(url).pathname,'/api/internal/mobile-maintenance');assert.equal(i.redirect,'error');assert.equal(i.method,'POST');assert.equal(i.headers.authorization,'Bearer '+options.secret);return{ok:true,json:async()=>({at:new Date().toISOString(),cleanup:{deleted:1,unresolved:0},uncertain:{found:0,unresolved:0}})}}});assert.equal((await sweep()).deleted,1);assert.equal(calls,1)
+ for(const receipt of[{},{at:'2000-01-01',cleanup:{deleted:1,unresolved:0},uncertain:{unresolved:0}}])await assert.rejects(maintenanceClient({...options,fetchImpl:async()=>({ok:true,json:async()=>receipt})})())
+ assert.throws(()=>maintenanceClient({...options,endpoint:'https://fictional.invalid/api/create'}));await assert.rejects(maintenanceClient({...options,fetchImpl:async()=>({ok:false})})())
+})

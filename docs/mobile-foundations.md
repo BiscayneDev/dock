@@ -260,3 +260,63 @@ read-only runtime mounts, denied outside-network access and independent writes.
 This is local negative containment evidence, not a qualified remote image or
 functional scoped model egress. It does not supply a deployed watchdog or prove
 the Agent37 boundary. There is no automatic remote activation from this proof.
+
+### Functional local scoped relay proof
+
+`DOCK_PROVE_SCOPED_RELAY=1 python3 scripts/proofs/linux-private-root.py`
+now runs two concurrent private namespace roots with independent Unix model
+sockets. Each network-disabled task receives its own fictional model response;
+substitution of the execution scope or an external URL is refused. The sibling
+socket, sibling git objects/worktree, controller marker, host paths and external
+network remain inaccessible. No capabilities or new privileges are available.
+The controller relay fixture contains no real credential and makes no provider
+request. Roots are removed after the proof.
+
+This proves the local mechanism for mediated access while task networking stays
+off. It does not qualify the remote Agent37 template, install this relay in the
+actual executor, establish provider-dollar controls or deploy a watchdog.
+
+
+### Actual remote qualification, November4
+
+Two user-approved temporary instances from pinned revision1 were concurrently
+alive; their probes ran sequentially. Both reproduced the runtime0500 startup
+bug, then passed the fixed owner-admin repair and nonroot T3 startup/running
+managed-policy check. Each could edit its own fictional source, could not read
+the sibling path/private git object, had no alternates or controller key in its
+environment, no sudo, and could not connect to an outside IP. Each fictional
+Unix relay returned only its own scope and refused scope/URL substitution.
+
+This is negative evidence for those repaired disposable hosts, not a full
+host-security audit, simultaneous workload proof, original-image attestation,
+live provider egress, paid-model proof or actual phone integration. API budget
+field was null despite requestedzero; do not call provider budgetzero verified.
+Networkdenyall stayed in force throughout. Test evidence was exported and
+early cleanup was handed to the independent cleanup owner with fixeddeadline.
+No retainedphone action was taken.
+
+`infra/execution-private` now carries the tested ownership/permission repair
+as an explicit build step and nonroot real T3 smoke test. This candidate is
+unpublished and unqualified until its own immutable build and remote proof.
+The candidate policy now fixes dockrelay/auto and a private-socket Pi wrapper, not the managed default. This source binding is not a remotely installed qualified Shipyard relay.
+
+### Actual local T3/Pi scoped relay integration
+
+`node scripts/proofs/t3-scoped-relay.mjs` now runs real installed T3v0.1.7 and
+Pi through the reusable loopback/private Unix relay and existing bounded
+controller gateway. The controller fixes execution identity, preserves
+`model:auto`, reserves the exact fictional quote and settles before releasing
+JSON or SSE. One actual T3 run completes with one fictional provider call and
+one settlement. T3 emits73function schemas; the bounded contract now accepts up
+to128 while retaining160KB canonical input and2048output-token limits. Regression
+tests refuse129tools, oversized schema/body and output-limit overrides.
+
+`infra/execution-private` includes the fixed `dockrelay/auto` wrapper/config,
+not a provider key. `infra/maintenance` contains a runnable maintenance-only
+worker and source-only supervisor unit. Both remain uninstalled/unqualified.
+
+These are local compatibility proofs, not actual iOS pixels, paid-provider
+requests, deployed independent missing-heartbeat alert or remote private-socket
+mount proof. The retained working phone is untouched. The upstream immutable
+price contract remains a separate blocker; receipt settlement alone is not a
+pre-dispatch dollar guarantee. No production activation follows from these tests.
