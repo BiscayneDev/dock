@@ -207,3 +207,10 @@ its actual MCP connection. `scripts/proofs/pi-memory-registration.mjs` reproduce
 this with an explicitly installed Pi binary and fictional temporary environment.
 No model call, live provider inference, remote image install or runtime isolation
 is proved by tool discovery. The controller cannot activate from this test.
+
+The installed Pi provider also completed a real local tool-calling turn using a
+fictional OpenAI-compatible model server: it selected the registered memory-note
+MCP tool, made exactly one private-note call, then completed on its next model
+turn. `scripts/proofs/pi-memory-turn.mjs` reproduces the process. Both HTTP
+services are fixtures. This does not make the plain-text bounded model gateway
+OpenAI/tool-compatible; that live transport and its price contract remain missing.
