@@ -19,31 +19,33 @@ its own digest/revision inspection and remote qualification before activation.
 Do not reuse the old revision1 attestation as proof of this candidate.
 
 The candidate now names `dockrelay/auto`, not the managed default. The fixed
-Pi wrapper starts a loopback bridge to `/run/dock/model.sock`; it holds no
-provider/controller key and uses a private temporary Pi config. The controller
-owns the other end, fixes execution identity and consumes bounded quote + settle
-before releasing text/tool calls. Local real Pi compatibility passes, including
-SSE after settlement. This is not an activated upstream max-price guarantee.
+Pi wrapper creates task-local model/memory Unix sockets and a loopback bridge
+with a fresh random local token. It enqueues canonical requests in the private
+execution spool. The controller reads/replies using Agent37's documented exec
+control plane, which remains available under networkdenyall. This removes the
+unsupported assumption that an external controller socket can be mounted into
+a remote instance. No provider, controller or execution capability enters the
+workload; the local token grants no external account access.
+
+Controller verifies actual host/execution metadata, binds the private capability
+to that execution, and claims request identity in its own durable Postgres ledger
+before dispatch. Task spool files are untrusted data, not authority. Unknown
+claims/requests never redispatch. Quote/settlement and Beacon scope checks use
+existing real controller endpoint functions. The80000byte mailbox input bound
+fits exec's512KB stdout cap even after JSON escaping; replies are capped200KB.
+Truncation/timeouts are unconfirmed, never free usage or implicit retry.
 
 Build context must be repository root, with
 `docker build -f infra/execution-private/Dockerfile .`.
-The image is inert without a private controller socket mounted into a separately
-network-isolated task namespace. No broad host socket or shared task mount is
-allowed. The candidate does not install that controller or claim Agent37 supports
-this private mount/network design. Remote Unix fixture tests did not qualify an
-external Shipyard connection. Preserve Jev and the existing eligible model pool.
-No caller/model may turn these files into execution or spending authority.
+The image remains unbuilt/unqualified. Supported control-plane semantics do not
+prove remote spool permissions, latency, running policy or billed model bounds.
+Loopback is not a public listener; host networking still needs independent
+verification because template preview ports can otherwise be routed. The random
+local token is an additional guard, not a replacement for networkdenyall or
+private task roots. Preserve Jev and the eligible model pool. No spending or
+execution authority is created by this source.
 
 Public sources:
 - https://www.agent37.com/docs/agents-api/templates.md
 - https://www.agent37.com/docs/agents-api/instance-network.md
 - https://www.agent37.com/docs/agents-api/exec.md
-
-Beacon now uses a second fixed private mount `/run/dock/memory.sock`. The wrapper
-registers only Dock's search/private-note/distill MCP in its fresh Pi state;
-`--no-mcp` was removed from the locked launch policy. The controller binds the
-memory client to a single capability and refuses identity/destination overrides
-and promotion. Candidate workload needs no execution bearer, provider key or
-controller key. A real local Pi tool turn through both sockets, actual Next and
-Postgres persists one private note and settles two model calls. This does not
-prove the candidate image was built or remote mounts are available.

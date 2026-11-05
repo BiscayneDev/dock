@@ -1,3 +1,4 @@
+import{readMailboxCommand,replyMailboxCommand}from'./mailbox-commands.mjs'
 import{readExecutionRunCommand,parseExecutionRunRead,prepareExecutionCommand}from'./commands.mjs';
 // Backend-only controller adapter. Disabled by default. No management secret is
 // copied into instance commands, source, prompts, ACP or the phone environment.
@@ -48,6 +49,8 @@ export function agent37ExecutionController({ apiKey, enabled = false, template, 
         async start(input) { const result = JSON.parse(await exec(input.instanceId, await launchCommand(input))); if (!result.runId || !result.threadId)
             throw Error('Launch uncertain'); return result; },
         async findExecution(executionId) { if(!/^[a-zA-Z0-9_-]{1,100}$/.test(executionId))throw Error('Invalid execution'); const inventory=await call('/instances'); if(!Array.isArray(inventory?.data)||inventory.has_more||inventory.next_cursor||inventory.pagination?.has_more)throw Error('Complete controller inventory required'); return inventory.data.filter(x=>x.metadata?.dock_execution_id===executionId&&x.name==='dock-task-'+executionId&&x.status!=='deleted').map(x=>({id:id(x.id)})); },
+        async readMailbox(input){const state=await call('/instances/'+id(input.instanceId));if(!state||state.id!==input.instanceId||state.metadata?.dock_execution_id!==input.executionId)throw Error('Mailbox instance ownership mismatch');return JSON.parse(await exec(input.instanceId,readMailboxCommand(input)));},
+        async replyMailbox(input){const state=await call('/instances/'+id(input.instanceId));if(!state||state.id!==input.instanceId||state.metadata?.dock_execution_id!==input.executionId)throw Error('Mailbox instance ownership mismatch');const result=JSON.parse(await exec(input.instanceId,replyMailboxCommand(input)));if(result.replied!==true)throw Error('Mailbox reply uncertain');return true;},
         async readRun(input) { const state=await call('/instances/'+id(input.instanceId)); if(!state||state.id!==input.instanceId||state.metadata?.dock_execution_id!==input.executionId)throw Error('Controller result execution identity mismatch'); return parseExecutionRunRead(await exec(input.instanceId,readExecutionRunCommand(input)),input); },
         async inspect(instanceId) { return call('/instances/' + id(instanceId)); },
         async deleteApproved(instanceId) { return call('/instances/' + id(instanceId), { method: 'DELETE' }); }

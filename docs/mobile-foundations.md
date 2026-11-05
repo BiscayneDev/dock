@@ -365,3 +365,30 @@ read-only mount differs from the unbuilt image, so this is not remote image,
 remote private-mount, paid-provider, live lifecycle or nativeiOS qualification.
 The normal Pi MCP extension must load; `--no-extensions` is not compatible with
 this Beacon registration (candidate locked policy does not disable extensions).
+
+### Supported remote transport correction
+
+External controller-owned Unix socket injection is not a documented Agent37
+capability. The candidate no longer relies on it: model/memory sockets live
+inside the task, connected to a private request spool. Controller reads/replies
+through documented authenticated exec while outbound networking stays denied.
+This needs no new provider/account/platform, no workload account credential and
+no externally bound application listener. Template preview URLs make an empty
+public_ports array insufficient as proof of no reachable service.
+
+Controller fixes host/execution identity from inventory, verifies its private
+capability against that execution and inserts an exclusive durable mailbox claim
+before dispatch. The task spool is untrusted input. A claimed/unknown request is
+never dispatched again; durable skipped IDs prevent an old request blocking the
+queue. Fixed exec commands use bounded data, safe directory/file descriptors and
+no-follow opens. Input is capped80000bytes to stay below exec's512KB output cap
+even after JSON escaping; reply cap is200KB. Actual task-local loopback bridge
+requires a random local token, not a provider/controller key.
+
+Two concurrent isolated actual Pi wrappers pass using this spool candidate.
+Generated exec commands run locally and reject symlink roots; adapter tests
+refuse sibling host binding before exec. Remote API calls remain mocked, durable
+mailbox migration is draft and worker deployment is not active. Operational
+remote proof, upstream hard-dollar bounds, independent alerting and nativeiOS
+remain unverified. The earlier injected-socket proof describes local mechanics,
+not the current remote transport design.

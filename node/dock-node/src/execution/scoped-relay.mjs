@@ -20,10 +20,10 @@ export async function scopedExecutionRelay({socketPath,executionId,gateway}){
 }
 // Task-side loopback bridge has no controller/provider credential. It reaches
 // exactly the mounted Unix socket. A namespace denies all external networking.
-export async function taskLoopbackBridge({socketPath,port=0}){
+export async function taskLoopbackBridge({socketPath,port=0,localToken}){
  if(typeof socketPath!=='string'||!socketPath.startsWith('/'))throw Error('Mounted socket required')
  const server=http.createServer(async(req,res)=>{
-  if(req.method!=='POST'||req.url!=='/v1/chat/completions'){res.writeHead(403);res.end();return}
+  if(localToken&&req.headers.authorization!=='Bearer '+localToken||req.method!=='POST'||req.url!=='/v1/chat/completions'){res.writeHead(403);res.end();return}
   let bytes=0;const upstream=http.request({socketPath,path:'/v1/chat/completions',method:'POST',headers:{'content-type':'application/json'}},reply=>{res.writeHead(reply.statusCode??502,{'content-type':reply.headers['content-type']??'application/json','cache-control':'no-store'});reply.pipe(res)})
   upstream.on('error',()=>{if(!res.headersSent)res.writeHead(502);res.end()});upstream.setTimeout(95000,()=>upstream.destroy())
   req.on('data',x=>{bytes+=x.length;if(bytes>170000){upstream.destroy();req.destroy()}else upstream.write(x)});req.on('end',()=>upstream.end());req.on('error',()=>upstream.destroy())
