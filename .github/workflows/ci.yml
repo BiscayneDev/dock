@@ -35,3 +35,5 @@ jobs:
         run: |
           test "$(docker inspect --format '{{.Config.User}}' dock-t3-smoke:${{ github.sha }})" = node
           docker run --rm --entrypoint python3 dock-t3-smoke:${{ github.sha }} /opt/dock-image-smoke.py
+      - name: Prove management-only repair of original root0500 runtime defect
+        run: sh infra/t3-private/repair-regression.sh dock-t3-smoke:${{ github.sha }}
