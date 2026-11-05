@@ -1,5 +1,6 @@
 import pgserver,subprocess,concurrent.futures,tempfile,json
 srv=pgserver.get_server(tempfile.mkdtemp(prefix='dock-mobile-pg-'));uri=srv.get_uri()
+import atexit,signal;atexit.register(srv.cleanup);signal.signal(signal.SIGTERM,lambda *args:__import__('sys').exit(0))
 def sql(q):
  p=subprocess.run(['/usr/lib/postgresql/14/bin/psql',uri,'-tAX','-v','ON_ERROR_STOP=1','-c',q],capture_output=True,text=True)
  if p.returncode:raise RuntimeError(p.stderr)
@@ -73,4 +74,14 @@ sql(f"update devices set revoked_at=now()where id='{d}'")
 refused(f"select *from beacon_mobile_recall({identity},'Private',20)")
 assert sql("select count(*)from memory_items where visibility='business'")=='1'
 assert sql("select count(*)from memory_items where visibility='personal'")=='2'
-print(json.dumps({'proof':'Real local PostgreSQL Beacon recall distill promote on existing memory_items','privateSiblingReadRefused':True,'unapprovedCandidateNotRecalled':True,'changedPromotionRefused':True,'unauthorizedPromotionRefused':True,'concurrentPromotions':8,'promotionWinners':1,'businessAssignmentRequired':True,'assignmentRevocationImmediate':True,'revokedDeviceRefused':True,'legacyRowsRemainPersonal':True,'executionBoundRecallVerified':True,'expiredExecutionRefused':True,'fixtureAuthorityOnly':True,'deployed':False}))
+sql("alter table memory_items enable row level security")
+sql("grant usage on schema public,auth to authenticated;grant select on memory_items to authenticated;grant execute on function auth.uid()to authenticated")
+outsider='00000000-0000-0000-0000-000000000078'
+sql(f"insert into users values('{outsider}')")
+assert sql(f"set role authenticated;set request.jwt.claim.sub='{outsider}';select count(*)from memory_items").splitlines()[-1]=='0'
+sql(f"insert into memory_business_members(workspace_id,user_id,role)values('{w}','{outsider}','member')")
+assert sql(f"set role authenticated;set request.jwt.claim.sub='{outsider}';select count(*)from memory_items where visibility='business'").splitlines()[-1]=='1'
+assert sql(f"set role authenticated;set request.jwt.claim.sub='{outsider}';select count(*)from memory_items where visibility in('agent','personal')").splitlines()[-1]=='0'
+sql(f"update memory_business_members set revoked_at=now()where user_id='{outsider}'")
+assert sql(f"set role authenticated;set request.jwt.claim.sub='{outsider}';select count(*)from memory_items").splitlines()[-1]=='0'
+print(json.dumps({'rlsTwoUsersVerified':True,'businessMemberCannotReadPersonalOrAgent':True,'memberRevocationImmediate':True,'proof':'Real local PostgreSQL Beacon recall distill promote on existing memory_items','privateSiblingReadRefused':True,'unapprovedCandidateNotRecalled':True,'changedPromotionRefused':True,'unauthorizedPromotionRefused':True,'concurrentPromotions':8,'promotionWinners':1,'businessAssignmentRequired':True,'assignmentRevocationImmediate':True,'revokedDeviceRefused':True,'legacyRowsRemainPersonal':True,'executionBoundRecallVerified':True,'expiredExecutionRefused':True,'fixtureAuthorityOnly':True,'deployed':False}))

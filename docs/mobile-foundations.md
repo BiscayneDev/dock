@@ -192,3 +192,11 @@ reverse proxy rewrites the internal URL. Forwarded headers never choose it.
 POST can promote that candidate. Local browser proof is
 `scripts/proofs/beacon-owner-ui.mjs`, requiring an explicitly installed Puppeteer
 package and local Chrome. The fixture session is not a live owner grant.
+
+Execution-scoped Beacon tools now have a fixed HTTP and MCP surface:
+`memory_search`, `memory_note`, `memory_distill`. The durable execution chooses
+owner/project/agent; requests cannot override identity or promote facts. Local
+production Next -> real PostgreSQL proof exercises private note, candidate and
+recall through the capability endpoint. Two-user RLS proof also checks business
+membership and revocation. These components are not yet registered with a live
+qualified specialist provider. A tested MCP server file is not an installed tool.

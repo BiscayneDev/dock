@@ -1,3 +1,4 @@
+import{memoryLooksSecret}from'@/node/dock-node/src/execution/memory-secret-filter.mjs'
 import{ownerOriginMatches}from'@/lib/mobile/origin'
 import{NextResponse}from'next/server'
 import{assistantContext,isUuid}from'@/lib/assistant-store'
@@ -8,7 +9,7 @@ export async function POST(request:Request){
  if(!ownerOriginMatches(request))return NextResponse.json({error:'Same-origin owner action required'},{status:403})
  if(process.env.DOCK_BEACON_ENABLED!=='true')return NextResponse.json({error:'Beacon memory not activated'},{status:503})
  let body;try{body=await request.json()}catch{return NextResponse.json({error:'Exact candidate required'},{status:400})}
- if(!isUuid(body.candidateId??'')||typeof body.content!=='string'||body.content.length>4000)return NextResponse.json({error:'Exact candidate required'},{status:400})
+ if(!isUuid(body.candidateId??'')||typeof body.content!=='string'||body.content.length>4000||memoryLooksSecret(body.content))return NextResponse.json({error:'Exact candidate required'},{status:400})
  const{data,error}=await adminClient().rpc('beacon_promote',{p_candidate:body.candidateId,p_actor:ctx.userId,p_content:body.content})
  if(error)return NextResponse.json({error:'Candidate or business authority changed'},{status:409})
  return NextResponse.json({memoryId:data,visibility:'business'})

@@ -1,5 +1,6 @@
 import pgserver,subprocess,concurrent.futures,tempfile,json
 srv=pgserver.get_server(tempfile.mkdtemp(prefix='dock-mobile-pg-'));uri=srv.get_uri()
+import atexit,signal;atexit.register(srv.cleanup);signal.signal(signal.SIGTERM,lambda *args:__import__('sys').exit(0))
 def sql(q):
  p=subprocess.run(['/usr/lib/postgresql/14/bin/psql',uri,'-tAX','-v','ON_ERROR_STOP=1','-c',q],capture_output=True,text=True)
  if p.returncode:raise RuntimeError(p.stderr)
