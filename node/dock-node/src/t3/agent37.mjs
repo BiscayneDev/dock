@@ -1,6 +1,7 @@
+import{runtimeRepairCommand}from'./runtime-admin.mjs'
 // Backend-only Agent37 transport. Never sends workspace key in exec bodies/env.
 // No retries for writes. Caller owns persisted intent and separate cleanup sweep.
-export function agent37Provisioner({apiKey,enabled=false,fetchImpl=fetch,bootstrap,sourceSnapshot,modelCreditMicros=0,budgetForTask,template,execTimeoutMs=60000}){
+export function agent37Provisioner({apiKey,enabled=false,fetchImpl=fetch,bootstrap,sourceSnapshot,modelCreditMicros=0,budgetForTask,template,repairRuntime=false,execTimeoutMs=60000}){
  const id=x=>{if(!/^[a-z0-9]{1,64}$/.test(x??''))throw new Error('invalid instance');return x}
  async function request(path,{method='GET',body,exec=false}={}){
   if(!enabled||!apiKey)throw new Error('Agent37 transport disabled')
@@ -21,6 +22,13 @@ export function agent37Provisioner({apiKey,enabled=false,fetchImpl=fetch,bootstr
   async prepare({task}){
    // Both callbacks are trusted backend configuration, never caller/model paths.
    // Snapshot reader must export only selected committed base, no .git/env/history.
+   // Owner-admin repair is fixed code, only on the known broken private pin,
+   // before any source reaches the instance. Never caller/model parameters.
+   if(repairRuntime){
+    if(template!=='dock-t3-owner-20261104@1')throw new Error('Repair only supported for reviewed private pin')
+    const repaired=await request(`/instances/${id(task.execution_id)}/exec`,{method:'POST',exec:true,body:{command:runtimeRepairCommand,user:'root'}})
+    if(repaired?.exit_code!==0||repaired.truncated||!repaired.stdout?.includes('OWNER_ADMIN_RUNTIME_REPAIR_OK'))throw new Error('Owner admin repair unverified')
+   }
    const snapshot=await sourceSnapshot(task)
    if(snapshot.baseSha!==task.base_sha||snapshot.repoKey!==task.repo_key)throw new Error('registered base snapshot mismatch')
    const command=await bootstrap({task,snapshot})

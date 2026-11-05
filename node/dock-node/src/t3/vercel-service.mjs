@@ -12,7 +12,7 @@ export async function vercelT3Tick(db,{cleanupOnly=false,env=process.env,workerI
  if(env.DOCK_T3_CLEANUP!=='on'||!env.AGENT37_API_KEY)throw new Error('Private lifecycle not configured')
  const config=cleanupOnly?{}:JSON.parse(env.DOCK_T3_BACKEND_CONFIG??'{}')
  const sources=config.sources??{},grants=()=>JSON.parse(env.DOCK_T3_BACKEND_CONFIG??'{}').grants??{}
- const provisioner=agent37Provisioner({enabled:true,apiKey:env.AGENT37_API_KEY,template:config.template,execTimeoutMs:40000,fetchImpl,bootstrap:privateBootstrap,sourceSnapshot:publicSnapshotReader(sources,{fetchImpl}),budgetForTask:async task=>(await grants())[task.id]?.maxModelCreditMicros})
+ const provisioner=agent37Provisioner({enabled:true,apiKey:env.AGENT37_API_KEY,template:config.template,repairRuntime:config.repairRuntime===true,execTimeoutMs:40000,fetchImpl,bootstrap:privateBootstrap,sourceSnapshot:publicSnapshotReader(sources,{fetchImpl}),budgetForTask:async task=>(await grants())[task.id]?.maxModelCreditMicros})
  const service=t3Service({enabled:true,durable:true,store:persistentT3Store(db),provisioner,sources,grants,onError})
  // A single control step limits source/bootstrap/CLI wall-time below one lease.
  // Cleanup endpoint remains independent of this source/grant admission logic.

@@ -247,3 +247,25 @@ old root0500 runtime with a node-owned nested executable cannot run/change as
 node; fixed owner-admin repair normalizes all descendants to root and a+rX,a-w;
 actual node startup verifies running approval-required policy, no sudo/write
 capability. https://github.com/BiscayneDev/dock/actions/runs/41944777065/job/126974140764
+
+### Fixed owner-admin runtime correction in the controller
+
+`repairRuntime:true` in reviewed backend configuration now supports ONLY exact
+private pin `dock-t3-owner-20261104@1`. Before reading/transferring any source,
+the controller sends the fixed parameterless repair as exec user=root, checks
+exit0/nontruncated success marker, then runs bootstrap and ALL agent CLI
+commands as the default nonroot user. The model cannot request or parameterize
+root exec; task text never reaches the admin command. Repair failure prevents
+source disclosure and enters cleanup. This is the same fixed operation proved
+by CI161 and the separately approved live phone restoration, not a generalized
+root execution facility. No template publication is needed for this route.
+Config defaults false. The retained phone host remains outside task lifecycle.
+
+46 node tests now pass, including fixed root command before source callback,
+nonroot workload transport and failure preventing source disclosure. API fixture
+proof is not live autonomous provisioning proof. The persistent controller key
+must still be delivered through a supported private route before activation.
+
+Final implementation audit also avoids queue head-of-line blockage by counting
+only authorized tasks against the per-invocation work limit. No storage of
+account data, secrets, screenshots or raw operation exports in this repository.

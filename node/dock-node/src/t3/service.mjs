@@ -12,6 +12,10 @@ export function t3Service({store,provisioner,sources,grants,enabled=false,durabl
   if(!enabled)throw new Error('T3 service disabled')
   if(!durable||cleanupOnly)await worker.sweep(workerId,{maxTasks})
   if(cleanupOnly)return
-  for(const{id}of (await (durable?store.runnable():store.queued())).slice(0,maxTasks))try{const task=await store.get(id);if(await authority(task))await worker[durable?'step':'run'](id,workerId)}catch(e){onError(e)}
+  let processed=0
+  for(const{id}of await (durable?store.runnable():store.queued())){
+   if(processed>=maxTasks)break
+   try{const task=await store.get(id);if(await authority(task)){processed++;await worker[durable?'step':'run'](id,workerId)}}catch(e){onError(e)}
+  }
  },authority}
 }

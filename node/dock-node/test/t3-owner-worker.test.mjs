@@ -59,3 +59,13 @@ test('waiting status is not mistaken for terminal failure',async()=>{
  const f=fixture();const cli=f.provisioner.cli;let reads=0;f.provisioner.cli=async r=>{const x=await cli(r);if(r.args[0]==='thread'&&r.args[1]==='show'&&reads++===0){const d=JSON.parse(x.stdout);d.thread.status='waiting';x.stdout=JSON.stringify(d)}return x}
  await new T3OwnerWorker({...f,authority:async()=>true,enabled:true}).run(f.row.id,'t3:w');assert.ok(f.row.artifact);assert.equal(f.instances.length,0)
 })
+test('fixed admin repair precedes source disclosure; workload CLI stays default nonroot',async()=>{
+ const calls=[],task={id:'fictional',execution_id:'fictional1',repo_key:'repo',base_sha:'a'.repeat(40)}
+ let repaired=false
+ const p=agent37Provisioner({enabled:true,apiKey:'fixture-key',template:'dock-t3-owner-20261104@1',repairRuntime:true,sourceSnapshot:async()=>{assert.ok(repaired);return{repoKey:'repo',baseSha:task.base_sha,files:[]}},bootstrap:async()=> 'fixed-bootstrap',fetchImpl:async(url,o)=>{const b=JSON.parse(o.body);calls.push(b);if(b.user==='root'){repaired=true;assert.match(b.command,/OWNER_ADMIN_RUNTIME_REPAIR_OK/);assert.doesNotMatch(b.command,/fixture-key/);return new Response(JSON.stringify({exit_code:0,stdout:'OWNER_ADMIN_RUNTIME_REPAIR_OK'}))}return new Response(JSON.stringify({exit_code:0,stdout:JSON.stringify({executionId:task.execution_id,baseSha:task.base_sha,policyRootOwned:true,policyReadOnlyToAgent:true})}))}})
+ await p.prepare({task});assert.equal(calls[0].user,'root');assert.equal(calls[1].user,undefined);assert.equal(calls.length,2)
+})
+test('failed admin repair cannot receive source snapshot',async()=>{
+ let sourceRead=false;const p=agent37Provisioner({enabled:true,apiKey:'fixture-key',template:'dock-t3-owner-20261104@1',repairRuntime:true,sourceSnapshot:async()=>{sourceRead=true},fetchImpl:async()=>new Response(JSON.stringify({exit_code:1,stdout:''}))})
+ await assert.rejects(p.prepare({task:{execution_id:'fictional1'}}),/repair unverified/);assert.equal(sourceRead,false)
+})
