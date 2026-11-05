@@ -12,3 +12,8 @@ test('real private socket + loopback consumes gateway reserve/settle with fixed 
  await assert.rejects(scopedExecutionRelay({socketPath:path,executionId:'other',gateway}))
  }finally{await bridge.close();await relay.close();await rm(root,{recursive:true,force:true})}
 })
+test('uncertain settlement emits no assistant/tool SSE and task cannot get provider redirects',async()=>{
+ const root=await mkdtemp(tmpdir()+'/dock-relay-');let calls=0
+ const relay=await scopedExecutionRelay({socketPath:root+'/model.sock',executionId:'fixed-task',gateway:async()=>{calls++;throw Error('unknown receipt')}}),bridge=await taskLoopbackBridge({socketPath:root+'/model.sock'})
+ try{const r=await fetch(`http://127.0.0.1:${bridge.port}/v1/chat/completions`,{method:'POST',body:JSON.stringify({model:'auto',stream:true,messages:[{role:'user',content:'work'}]})});assert.equal(r.status,403);assert.equal(calls,1);const body=await r.text();assert.equal(body.includes('data:'),false);assert.equal(body.includes('choices'),false);assert.equal(body.includes('unknown receipt'),false)}finally{await bridge.close();await relay.close();await rm(root,{recursive:true,force:true})}
+})

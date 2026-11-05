@@ -320,3 +320,29 @@ requests, deployed independent missing-heartbeat alert or remote private-socket
 mount proof. The retained working phone is untouched. The upstream immutable
 price contract remains a separate blocker; receipt settlement alone is not a
 pre-dispatch dollar guarantee. No production activation follows from these tests.
+
+The combined local Next/Postgres proof now also routes actual Pi model traffic
+through this reusable Unix relay before the real capability endpoint. Its
+private note persists and both tool-turn model calls settle in Postgres before
+output; canonical conversation replay/result-once and temporary reader revoke
+checks still pass. `PROOF_PRIVATE_RELAY=true` enables this optional proof branch.
+Identity HTTP shim and upstream model remain fictional. A separate scoped
+memory capability is still installed for the memory endpoint in this branch.
+
+`node scripts/proofs/watchdog-process.mjs` starts the actual maintenance worker
+as a separate process, kills a fictional workload, confirms another sweep and
+heartbeat at the actual30second cadence, then takes the fictional HTTPS endpoint
+down and observes failure alert output. This proves local process independence,
+not an independently deployed controller or external missing-heartbeat alert.
+No real provider deletion or lifecycle grant occurs in that proof.
+
+The combined proof can open real local T3 at a390x844viewport using a short-lived
+read-only local pairing token and inspect the actual Dock conversation reply in
+the T3 web UI (`PROOF_T3_SCREENSHOT` output). Its pixels show the canonical-memory
+and graph reply with the Dock provider selected. This is a responsive-browser
+proof, not actual native iOS delivery, push or connection to the retained phone.
+The optional screenshot branch refuses success unless the exact reply is present.
+
+A separate read-only heartbeat monitor now reports stale/missing/source-unavailable
+states and deduplicates unchanged alerts, with recovery tests. No external alert
+destination, deployment or lifecycle permission is supplied by this source.
