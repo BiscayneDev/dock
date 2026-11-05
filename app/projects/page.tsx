@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useState } from "react"
-import type { Repo } from "@/app/api/projects/route"
+import type { Repo } from "@/lib/projects-source"
 
 const PINNED = ["shipyard", "mission-control", "superteam-miami", "arken"]
 

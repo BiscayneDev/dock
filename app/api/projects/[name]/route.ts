@@ -4,7 +4,7 @@ import { join } from "path"
 import { listConversations, type ConversationSummary } from "@/lib/conversations"
 import { listAlerts, syncDerivedAlertsFromRuns } from "@/lib/alerts"
 import type { Task } from "@/lib/tasks"
-import { fetchProjects, type Repo } from "@/app/api/projects/route"
+import { fetchProjects, type Repo } from "@/lib/projects-source"
 
 const TASKS_PATH = join(process.cwd(), "data", "tasks.json")
 

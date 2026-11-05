@@ -1,0 +1,24 @@
+import{readFile}from'node:fs/promises'
+import{createHash,timingSafeEqual}from'node:crypto'
+import{adminClient}from'@/lib/tenancy'
+import{modelHoldStore}from'./executions'
+import{boundedModelGateway}from'../../node/dock-node/src/execution/gateway.mjs'
+import{pricedModelTransport}from'../../node/dock-node/src/execution/http-model.mjs'
+// Per-execution bearer only, never an owner/controller key. Capability hashes
+// are created by trusted provisioning after exact decision, not by the phone.
+export async function executionModelRequest(request:Request){
+ if(process.env.DOCK_EXECUTION_MODEL_ENABLED!=='true')throw Error('Execution model gateway not activated')
+ const match=/^Bearer dockexec\.([a-f0-9-]{36})\.([A-Za-z0-9_-]{32,200})$/i.exec(request.headers.get('authorization')??'')
+ if(!match)throw Error('Execution capability required')
+ const db=adminClient();const{data:cap,error}=await db.from('mobile_execution_capabilities').select('execution_id,secret_hash,expires_at,revoked_at').eq('id',match[1]).maybeSingle()
+ const hash=createHash('sha256').update(match[2]).digest('hex')
+ if(error||!cap||cap.revoked_at||Date.parse(cap.expires_at)<=Date.now()||typeof cap.secret_hash!=='string'||cap.secret_hash.length!==hash.length||!timingSafeEqual(Buffer.from(hash),Buffer.from(cap.secret_hash)))throw Error('Capability expired or revoked')
+ const bytes=await request.text();if(Buffer.byteLength(bytes)>170000)throw Error('Request too large')
+ const input=JSON.parse(bytes)
+ if(typeof input.requestId!=='string'||!/^[a-f0-9-]{36}$/i.test(input.requestId)||typeof input.model!=='string'||typeof input.prompt!=='string')throw Error('Bound model request required')
+ const path=process.env.DOCK_EXECUTION_MODEL_CONTRACT;if(!path?.startsWith('/'))throw Error('Private qualified model contract unavailable')
+ const contract=JSON.parse(await readFile(path,'utf8'))
+ const transport=pricedModelTransport({endpoint:contract.endpoint,apiKey:process.env.DOCK_EXECUTION_UPSTREAM_KEY,contract})
+ const gateway=boundedModelGateway({store:modelHoldStore(db),...transport})
+ return{text:await gateway({executionId:cap.execution_id,requestId:input.requestId,model:input.model,prompt:input.prompt})}
+}

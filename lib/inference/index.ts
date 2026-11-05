@@ -85,8 +85,11 @@ export async function inferenceStream({
   system,
   override,
   history,
+  limits,
 }: InferenceChatParams & {
   override?: ResolvedModel | null
+  /** Explicit caller controls; no automatic retry after a possibly billed request. */
+  limits?: { maxOutputTokens: number; maxRetries: number; signal: AbortSignal }
   /** Earlier turns of the same conversation, oldest first. The new message is appended after them. */
   history?: Array<{ role: "user" | "assistant"; content: string }>
 }) {
@@ -96,6 +99,7 @@ export async function inferenceStream({
   const turns = history && history.length > 0 ? [...history, { role: "user" as const, content: message }] : null
   return streamText({
     model: resolved.model,
+    ...(limits ? { maxOutputTokens: limits.maxOutputTokens, maxRetries: limits.maxRetries, abortSignal: limits.signal } : {}),
     ...(turns ? { messages: turns } : { prompt: message }),
     ...(system ? { system } : {}),
   })

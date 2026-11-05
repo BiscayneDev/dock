@@ -28,7 +28,7 @@ function maxBudgetCents(): number {
  * owner — but only in single-workspace deployments. Multi-workspace installs
  * reject agent-token auth (fail closed) instead of binding to the first workspace.
  */
-export async function resolveContext(request: Request) {
+async function resolveContext(request: Request) {
   const ctx = await assistantContext()
   if (ctx) return ctx
   if (!agentTokenAuthorized(request)) return null

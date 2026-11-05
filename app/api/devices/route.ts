@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   const raw = typeof body.name === "string" ? body.name.trim() : ""
   const name = raw ? raw.slice(0, NAME_MAX) : "My laptop"
   try {
-    const pairing = await createPairing(ctx.supabase, { workspaceId: ctx.workspaceId, ownerId: ctx.userId, name })
+    const pairing = await createPairing(ctx.supabase, { workspaceId: ctx.workspaceId, ownerId: ctx.userId, name, purpose:body.purpose === "mobile" ? "mobile" : "home" })
     return NextResponse.json(
       {
         id: pairing.deviceId,
