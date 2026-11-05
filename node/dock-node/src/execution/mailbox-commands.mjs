@@ -12,6 +12,7 @@ for name in sorted(os.listdir(directory)):
  with os.fdopen(fd)as f:
   assert stat.S_ISREG(os.fstat(f.fileno()).st_mode)
   raw=f.read(80001);assert len(raw.encode())<=80000
+  assert json.loads(raw).get('id')==name[:-8]
  print(json.dumps(raw));break
 else:print('null')
 PY`}
