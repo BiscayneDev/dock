@@ -223,3 +223,23 @@ The current Pi process proof consumes that structured adapter with two fixture
 reservations and settlements around a private memory tool call. Actual production-built Next capability/quote/hold/settlement has passed against
 real local PostgreSQL and a fictional TLS upstream, including duplicate-request
 refusal. Live upstream pricing/attempt/tool-schema token guarantees are not proved. No fixture contract authorizes real provider traffic.
+
+The optional `PI_BIN` path in `scripts/proofs/next-mobile.mjs` now runs the actual
+Pi process through the actual Next structured gateway, real local PostgreSQL
+capability holds/settlements, and fixed memory MCP. It checks exactly two settled
+model calls and one persisted private note. The TLS model and its price contract
+remain fictional. This is not live upstream, runtime-isolation, or phone proof.
+
+Business rows contain only the approved fact and business approval metadata, not
+private agent/source identifiers or source-memory links. The private candidate
+keeps the promotion link instead. A real two-user PostgreSQL test checks both the
+member-readable row's absence of private provenance and private-side lineage.
+
+Private child working notes are keyed to the durable execution, not just the
+reusable specialist role. Same-role children cannot recall or distill each
+other's notes. Context replay uses that same exact execution identity; supplied
+parent/sibling scratch fields are not inherited. Execution context fails closed
+rather than falling back to broad personal recall when Beacon is disabled.
+Completed specialist output returns to its owner's canonical conversation once,
+but is not automatically inserted into personal recall or business memory.
+Sharing a distilled fact still requires the exact owner/admin promotion.

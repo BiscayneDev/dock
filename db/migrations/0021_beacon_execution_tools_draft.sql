@@ -12,11 +12,11 @@ begin
  if p_operation='recall'then select coalesce(jsonb_agg(to_jsonb(r)),'[]'::jsonb)into result from beacon_execution_recall(e.id,left(p_content,1000),8)r;return result;end if;
  if p_content is null or length(trim(p_content))not between 1 and 2000 then raise exception 'Bound memory content required';end if;
  if p_operation='note'then
-  insert into memory_items(owner_id,workspace_id,project_id,scope,type,content,visibility,author_agent,source_reference)values(e.owner_id,e.workspace_id,e.project_id,'fact','fact',p_content,'agent',e.agent_key,'execution:'||e.id)returning id into result_id;
+  insert into memory_items(owner_id,workspace_id,project_id,scope,type,content,visibility,author_agent,private_execution_id,source_reference)values(e.owner_id,e.workspace_id,e.project_id,'fact','fact',p_content,'agent',e.agent_key,e.id,'execution:'||e.id)returning id into result_id;
  elsif p_operation='distill'then
-  select *into n from memory_items where id=p_note and owner_id=e.owner_id and workspace_id=e.workspace_id and project_id is not distinct from e.project_id and visibility='agent'and memory_state='active'and author_agent=e.agent_key;
+  select *into n from memory_items where id=p_note and owner_id=e.owner_id and workspace_id=e.workspace_id and project_id is not distinct from e.project_id and visibility='agent'and memory_state='active'and author_agent=e.agent_key and private_execution_id=e.id;
   if not found then raise exception 'Own private source note required';end if;
-  insert into memory_items(owner_id,workspace_id,project_id,scope,type,content,visibility,author_agent,memory_state,source_memory_id,source_reference)values(e.owner_id,e.workspace_id,e.project_id,'fact','fact',p_content,'agent',e.agent_key,'proposed',n.id,'execution:'||e.id)returning id into result_id;
+  insert into memory_items(owner_id,workspace_id,project_id,scope,type,content,visibility,author_agent,private_execution_id,memory_state,source_memory_id,source_reference)values(e.owner_id,e.workspace_id,e.project_id,'fact','fact',p_content,'agent',e.agent_key,e.id,'proposed',n.id,'execution:'||e.id)returning id into result_id;
  else raise exception 'Unsupported memory operation';end if;
  return jsonb_build_object('id',result_id,'shared',false);
 end;$$;

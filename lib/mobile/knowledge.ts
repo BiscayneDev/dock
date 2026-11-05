@@ -1,6 +1,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import { recall } from '@/lib/memory';
 import{beaconMemory}from'./beacon'
+import{scopedMemoryReader}from'../../node/dock-node/src/knowledge/memory-scope.mjs'
 import { knowledgeGateway } from '../../node/dock-node/src/knowledge/context.mjs';
 // One immutable snapshot per process, shared by roles. Avoid reparsing the full
 // graph for every provider probe/read/status/turn. A changed file invalidates it.
@@ -21,7 +22,7 @@ export async function canonicalKnowledge() {
         return cached.gateway;
     if (loading)
         return loading;
-    loading = (async () => { const [manifest, graph] = await Promise.all([readFile(manifestPath, 'utf8').then(JSON.parse), readFile(graphPath, 'utf8').then(JSON.parse)]); const gateway = knowledgeGateway({ manifest, graph, readMemory: async(owner:any,query:string,projectId:string|null,limit:number,principal:any)=>process.env.DOCK_BEACON_ENABLED==='true'?(principal.executionId?beaconMemory().executionRecall(principal.executionId,query):beaconMemory().recall({...principal,projectId},query)):recall(owner,query,projectId,limit) }); cached = { key, gateway }; return gateway; })();
+    loading = (async () => { const [manifest, graph] = await Promise.all([readFile(manifestPath, 'utf8').then(JSON.parse), readFile(graphPath, 'utf8').then(JSON.parse)]); const gateway = knowledgeGateway({ manifest, graph, readMemory:scopedMemoryReader({enabled:()=>process.env.DOCK_BEACON_ENABLED==='true',executionRecall:(id:string,q:string)=>beaconMemory().executionRecall(id,q),mobileRecall:(p:any,q:string)=>beaconMemory().recall(p,q),legacyRecall:recall}) }); cached = { key, gateway }; return gateway; })();
     try {
         return await loading;
     }

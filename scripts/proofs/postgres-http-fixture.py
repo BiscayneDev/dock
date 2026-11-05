@@ -34,6 +34,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     digest=hashlib.sha256('fictional-execution-capability-secret'.encode()).hexdigest()
     cap=sql(f"select mobile_capability_issue('{e}','{digest}',now()+interval '4 minutes')")
     result={'token':'dockexec.'+cap+'.fictional-execution-capability-secret'}
+   elif u.path=='/fixture/model-state':result={'holds':int(sql("select count(*)from mobile_model_holds")),'settled':int(sql("select count(*)from mobile_model_holds where state='settled'")),'architectNotes':int(sql("select count(*)from memory_items where visibility='agent'and author_agent='architect'and memory_state='active'"))}
    elif u.path=='/fixture/beacon-state':result={'candidates':int(sql("select count(*)from memory_items where visibility='agent'and memory_state='proposed'")),'privateNotes':int(sql("select count(*)from memory_items where visibility='agent'and memory_state='active'")),'shared':int(sql("select count(*)from memory_items where visibility='business'"))}
    elif u.path=='/fixture/prepare-execution':
     session=body['sessionId'];assert isinstance(session,str)and len(session)==36

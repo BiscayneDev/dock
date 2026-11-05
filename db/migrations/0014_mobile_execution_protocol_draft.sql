@@ -31,7 +31,8 @@ begin
  select * into s from mobile_sessions where id=p.session_id and owner_id=e.owner_id and workspace_id=e.workspace_id;
  if not found then raise exception 'Canonical conversation not owned';end if;
  insert into messages(conversation_id,role,content,agent,meta)values(s.conversation_id,'agent',p_text,e.agent_key,jsonb_build_object('executionId',e.id,'parentExecutionId',e.parent_execution_id,'success',p_success));
- insert into memory_items(workspace_id,owner_id,project_id,scope,type,content,conversation_id)values(e.workspace_id,e.owner_id,e.project_id,'conversation','conversation',left('Specialist result: '||p_text,3000),s.conversation_id);
+ -- Result is returned to its owner conversation, not auto-promoted into
+ -- personal recall where a sibling could inherit private execution output.
  insert into mobile_notices(session_id,request_id,kind)values(s.id,e.id,case when p_success then'reply_ready'else'turn_failed'end)on conflict do nothing;
  update mobile_executions set result=p_text,result_recorded_at=now(),state='cleanup_pending',last_operational_state=case when p_success then'complete'else'failed'end,updated_at=now()where id=e.id;
  insert into mobile_execution_events(execution_id,kind,details)values(e.id,'result_recorded',jsonb_build_object('success',p_success));

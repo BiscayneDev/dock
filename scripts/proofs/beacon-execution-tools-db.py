@@ -67,6 +67,23 @@ try:tool('promote','Must not share');raise AssertionError('Agent promotion accep
 except RuntimeError:pass
 try:tool('recall','Private specialist',hash='b'*64);raise AssertionError('Wrong secret accepted')
 except RuntimeError:pass
+# A distinct child with the same role must not inherit this execution's notes.
+sibling='00000000-0000-0000-0000-000000000097'
+siblingproposal=sql(f"insert into mobile_task_proposals(session_id,request_id,ordinal,owner_id,workspace_id,proposal,status,approved_digest)select session_id,gen_random_uuid(),ordinal,owner_id,workspace_id,proposal,status,approved_digest from mobile_task_proposals where id='{proposal}' returning id").splitlines()[0]
+sql(f"insert into mobile_executions(id,proposal_id,owner_id,workspace_id,agent_key,repo_key,source_commit,approved_proposal_digest,owner_decision_ref,managed_budget_micros,max_compute_cost_micros,lifecycle_approved,cleanup_deadline,state,decision_expires_at,approved_text,source_paths)select '{sibling}','{siblingproposal}',owner_id,workspace_id,agent_key,repo_key,source_commit,approved_proposal_digest,owner_decision_ref,managed_budget_micros,max_compute_cost_micros,lifecycle_approved,cleanup_deadline,'bound',decision_expires_at,approved_text,source_paths from mobile_executions where id='{e}'")
+assert sql(f"select count(*)from beacon_execution_recall('{sibling}','Private specialist',20)")=='0'
+sql(f"update mobile_executions set instance_id='isolated-same-role'where id='{sibling}'")
+siblingcap=sql(f"select mobile_capability_issue('{sibling}','{'c'*64}',now()+interval '3 minutes')")
+refused(f"select beacon_execution_memory('{siblingcap}','{'c'*64}','distill','Steal same role note','{note}')")
+siblingnote=json.loads(sql(f"select beacon_execution_memory('{siblingcap}','{'c'*64}','note','Same-role sibling private')"))['id']
+assert not any(row['id']==siblingnote for row in tool('recall','Same-role sibling'))
+assert tool('recall','Private specialist')[0]['id']==note
+sql(f"update mobile_executions set state='running',run_id='private-result-run'where id='{sibling}'")
+assert sql(f"select mobile_execution_result('{sibling}','isolated-same-role','private-result-run','Private same-role result sentinel',true)")=='t'
+assert sql(f"select mobile_execution_result('{sibling}','isolated-same-role','private-result-run','Private same-role result sentinel',true)")=='f'
+assert tool('recall','Private same-role result sentinel')==[]
+assert sql("select count(*)from memory_items where content like '%Private same-role result sentinel%'")=='0'
+assert sql("select count(*)from messages where content='Private same-role result sentinel'")=='1'
 sql(f"update mobile_executions set agent_key='sibling'where id='{e}'")
 assert tool('recall','Private specialist')==[]
 try:tool('distill','Steal sibling note',note);raise AssertionError('Sibling note accepted')
@@ -75,4 +92,4 @@ sql(f"update mobile_execution_capabilities set revoked_at=now()where id='{cap}'"
 try:tool('note','After revocation');raise AssertionError('Revoked note accepted')
 except RuntimeError:pass
 assert sql("select count(*)from memory_items where visibility='business'")=='0'
-print(json.dumps({'proof':'Real local PostgreSQL execution capability Beacon tools','ownPrivateNoteRecalled':True,'distilledCandidateNotShared':True,'agentPromotionUnavailable':True,'wrongSecretRefused':True,'siblingPrivateNoteExcluded':True,'siblingDistillRefused':True,'revokedCapabilityRefused':True,'businessWrites':0,'fixtureAuthorityOnly':True,'deployed':False}))
+print(json.dumps({'proof':'Real local PostgreSQL execution capability Beacon tools','sameRoleSiblingWritesIsolated':True,'privateResultNotAutoRecalledOrPromoted':True,'privateResultReplayIdempotent':True,'sameRoleSiblingRecallExcluded':True,'sameRoleSiblingDistillRefused':True,'ownPrivateNoteRecalled':True,'distilledCandidateNotShared':True,'agentPromotionUnavailable':True,'wrongSecretRefused':True,'siblingPrivateNoteExcluded':True,'siblingDistillRefused':True,'revokedCapabilityRefused':True,'businessWrites':0,'fixtureAuthorityOnly':True,'deployed':False}))
