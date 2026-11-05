@@ -158,3 +158,28 @@ steps, token-price upper bounds and authoritative usage. It sends non-streaming
 fixed-model2048-token requests with no retry/redirect and settles usage under the
 reserved quote. Test fixture contract values are not live vendor evidence. This
 adapter does not make existing arbitrary auto-routing gateway traffic price-bounded.
+
+## Beacon alignment correction
+
+The original draft reused canonical recall but did not implement the Beacon
+recall/distill/promote design. Reusing a table was not the complete shared-memory
+system. The current disabled addition extends that same `memory_items` table:
+legacy rows remain personal; agent working notes are private; distilled candidates
+are excluded from recall until an exact owner/admin promotion creates a business
+fact. Assigned agents share approved business facts, not sibling notes. Source
+references and approval lineage are retained. Dinghy's database remains separate.
+
+Migration0020, `lib/mobile/beacon.ts`, the bound recall path and the owner promotion
+endpoint are draft code. Local PostgreSQL checks prove the scope/promotion races;
+production-built mobile integration exercises the real bound recall RPC with
+fictional credentials. Specialist execution-bound memory access, owner review UI,
+team membership/assignment administration and full end-to-end promotion are still
+unfinished. Do not enable Beacon from these component checks alone.
+
+Build now runs a fresh mandatory TypeScript check in its own process before
+webpack. The build uses a bounded heap, one compiler process and one page worker.
+Both clean-cache and warm-cache `npm run build` completed locally after this
+change. Type errors fail before webpack; Next's duplicate typecheck is skipped
+only by the wrapper after that successful fresh check. Graph files are external
+runtime inputs, not imported bundles. The graph still has a measured cold-process
+RAM cost and is not production-sized by assumption.

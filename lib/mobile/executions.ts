@@ -13,7 +13,7 @@ export function executionStore(db:SupabaseClient=adminClient()){
   async runningExecutions(limit:number){const{data,error}=await db.from('mobile_executions').select('id,instance_id,thread_id,run_id').in('state',['running','reconcile']).not('run_id','is',null).limit(limit);if(error)throw Error(error.message);return(data??[]).map(e=>({id:e.id,instanceId:e.instance_id,threadId:e.thread_id,runId:e.run_id}))},
   async verifyApproval(id:string){const e=await get(id);if(!e||e.state!=='approved'||!e.decision_expires_at||Date.parse(e.decision_expires_at)<=Date.now())return null;
    const{data:p,error}=await db.from('mobile_task_proposals').select('id,owner_id,workspace_id,project_id,status,approved_digest').eq('id',e.proposal_id).eq('owner_id',e.owner_id).eq('workspace_id',e.workspace_id).maybeSingle();if(error)throw error;
-   if(!p||p.status!=='approved'||p.approved_digest!==e.approved_proposal_digest||p.project_id!==e.project_id||!e.owner_decision_ref)return null;
+   if(!p||p.status!=='approved'||p.approved_digest!==e.approved_proposal_digest||p.project_id!==e.project_id||!e.owner_decision_ref||!Number.isSafeInteger(e.managed_budget_micros)||e.managed_budget_micros%10000!==0)return null;
    return{approved:true,executionId:e.id,ownerId:e.owner_id,workspaceId:e.workspace_id,projectId:e.project_id,agentId:e.agent_key,sourceCommit:e.source_commit,repoKeys:[e.repo_key],sourcePaths:e.source_paths,text:e.approved_text,totalBudgetCents:Math.floor(e.managed_budget_micros/10000),maxComputeCostMicros:e.max_compute_cost_micros,computeLifecycleApproved:e.lifecycle_approved,cleanupDeadline:e.cleanup_deadline}
   },
   async claimExecution(a:any){return await transition(a.executionId,'approved','provision_intent')?{status:'claimed'}:{status:(await get(a.executionId))?.state??'missing'}},
@@ -44,7 +44,7 @@ export function modelHoldStore(db:SupabaseClient=adminClient()){
 // Only backend-prepared packets from verified catalogs reach this function.
 // The function is not exported through a device/model write endpoint.
 export async function stageExecutionReview(packet:any,db:SupabaseClient=adminClient()){
- if(packet?.status!=='needs-owner-review'||!/^[a-f0-9]{64}$/.test(packet.digest??'')||!packet.ownerId||!packet.workspaceId||!packet.proposalId||Date.parse(packet.expiresAt)<=Date.now())throw Error('Current exact backend review packet required')
+ if(packet?.status!=='needs-owner-review'||!Number.isFinite(Date.parse(packet.expiresAt))||!/^[a-f0-9]{64}$/.test(packet.digest??'')||!packet.ownerId||!packet.workspaceId||!packet.proposalId||Date.parse(packet.expiresAt)<=Date.now())throw Error('Current exact backend review packet required')
  const{data,error}=await db.from('mobile_execution_reviews').insert({proposal_id:packet.proposalId,owner_id:packet.ownerId,workspace_id:packet.workspaceId,packet,digest:packet.digest,expires_at:packet.expiresAt}).select('id').single()
  if(error)throw Error(error.message);return{id:data.id,digest:packet.digest}
 }

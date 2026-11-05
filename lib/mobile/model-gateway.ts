@@ -19,6 +19,6 @@ export async function executionModelRequest(request:Request){
  const path=process.env.DOCK_EXECUTION_MODEL_CONTRACT;if(!path?.startsWith('/'))throw Error('Private qualified model contract unavailable')
  const contract=JSON.parse(await readFile(path,'utf8'))
  const transport=pricedModelTransport({endpoint:contract.endpoint,apiKey:process.env.DOCK_EXECUTION_UPSTREAM_KEY,contract})
- const gateway=boundedModelGateway({store:modelHoldStore(db),...transport})
+ const store=modelHoldStore(db);const gateway=boundedModelGateway({store:{...store,reserve:async(i:{requestId:string;quoteId:string;maxCostMicros:number})=>{const{data,error}=await db.rpc('mobile_capability_reserve',{p_capability:match[1],p_hash:hash,p_request:i.requestId,p_quote:i.quoteId,p_max:i.maxCostMicros});if(error)throw Error('Capability reservation refused');return{allowed:!!data,holdId:data}}},...transport})
  return{text:await gateway({executionId:cap.execution_id,requestId:input.requestId,model:input.model,prompt:input.prompt})}
 }

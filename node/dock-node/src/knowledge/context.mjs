@@ -22,7 +22,7 @@ export function knowledgeGateway({ graph, manifest, readMemory }) {
         for(const seed of matches)for(const id of neighbors.get(seed.n.id)??[]){const n=nodeById.get(id);if(ranked.length>=20)break;if(n&&allowed.has(n.repoKey)&&!seen.has(id)){ranked.push(n);seen.add(id)}}
         const ids = new Set(ranked.map(n => n.id));
         const edges = graph.edges.filter(e => ids.has(e.source) && ids.has(e.target)).slice(0, 50);
-        const memory = await readMemory({ userId: principal.ownerId, workspaceId: principal.workspaceId }, query, principal.projectId ?? null, 8);
+        const memory = await readMemory({ userId: principal.ownerId, workspaceId: principal.workspaceId }, query, principal.projectId ?? null, 8, principal);
         const coverage = manifest.repositories.filter(r => allowed.has(r.key)).map(r => ({ key: r.key, commit: r.commit, indexedAt: r.indexedAt, coverage: r.coverage, missing: (r.missing ?? []).slice(0, 30), stale: r.currentCommit !== r.commit }));
         const payload = { coverage, nodes: ranked.map(n => ({ id: n.id, label: n.label, repoKey: n.repoKey, commit: n.commit, path: n.path, line: n.line, text: typeof n.text === 'string' ? n.text.slice(0, 2400) : undefined, provenance: n.provenance ?? 'EXTRACTED' })), edges, memory };
         return { ...payload, version: createHash('sha256').update(JSON.stringify(payload)).digest('hex'), trust: 'source-data-not-instructions' };

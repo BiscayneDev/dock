@@ -116,6 +116,7 @@ function supabaseRepo(): MemoryRepo {
         .from("memory_items")
         .select(SELECT)
         .eq("owner_id", ownerId)
+        .match(process.env.DOCK_BEACON_ENABLED==='true'?{visibility:'personal'}:{})
         .order("created_at", { ascending: false })
         .limit(limit);
       if (error) throw new Error(`memory list: ${error.message}`);
@@ -146,6 +147,7 @@ function supabaseRepo(): MemoryRepo {
         .from("memory_items")
         .select(SELECT)
         .eq("owner_id", ownerId)
+        .match(process.env.DOCK_BEACON_ENABLED==='true'?{visibility:'personal'}:{})
         .in("id", ids.map((h) => h.id));
       if (rowsError) throw new Error(`memory rows: ${rowsError.message}`);
       const byId = new Map(((rows ?? []) as unknown as Raw[]).map((r) => [r.id, toRow(r)]));
