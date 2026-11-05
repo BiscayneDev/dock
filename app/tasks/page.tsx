@@ -16,6 +16,7 @@ import {
   PRIORITY_CONFIG,
 } from "@/lib/tasks"
 import AgentInbox from "@/components/tasks/AgentInbox"
+import T3OwnerPanel from "@/components/tasks/T3OwnerPanel"
 import RunsPanel from "@/components/tasks/RunsPanel"
 import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 
@@ -920,6 +921,7 @@ export default function TasksPage() {
 
       {view === "inbox" ? (
         <>
+          <T3OwnerPanel />
           <RunsPanel />
           <AgentInbox tasks={tasks} onRefresh={() => fetchTasks(true)} />
         </>

@@ -1,5 +1,16 @@
 {
   "crons": [
-    { "path": "/api/worker/tick", "schedule": "* * * * *" }
+    {
+      "path": "/api/worker/tick",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/t3/control",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/t3/cleanup",
+      "schedule": "* * * * *"
+    }
   ]
 }

@@ -19,3 +19,21 @@ jobs:
 
       - run: npm ci
       - run: npm run build
+
+  t3-image:
+    # Standard Linux runner in this public repo is free. Never publish the image,
+    # upload artifacts/caches, call a model, or receive account/runtime credentials.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned image and run final nonroot managed-policy startup smoke
+        run: docker build --progress=plain --no-cache -t dock-t3-smoke:${{ github.sha }} infra/t3-private
+      - name: Confirm final image identity and policy permissions
+        run: |
+          test "$(docker inspect --format '{{.Config.User}}' dock-t3-smoke:${{ github.sha }})" = node
+          docker run --rm --entrypoint python3 dock-t3-smoke:${{ github.sha }} /opt/dock-image-smoke.py
+      - name: Prove management-only repair of original root0500 runtime defect
+        run: sh infra/t3-private/repair-regression.sh dock-t3-smoke:${{ github.sha }}
