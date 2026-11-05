@@ -21,7 +21,7 @@ export async function canonicalKnowledge() {
         return cached.gateway;
     if (loading)
         return loading;
-    loading = (async () => { const [manifest, graph] = await Promise.all([readFile(manifestPath, 'utf8').then(JSON.parse), readFile(graphPath, 'utf8').then(JSON.parse)]); const gateway = knowledgeGateway({ manifest, graph, readMemory: async(owner:any,query:string,projectId:string|null,limit:number,principal:any)=>process.env.DOCK_BEACON_ENABLED==='true'?beaconMemory().recall({...principal,projectId},query):recall(owner,query,projectId,limit) }); cached = { key, gateway }; return gateway; })();
+    loading = (async () => { const [manifest, graph] = await Promise.all([readFile(manifestPath, 'utf8').then(JSON.parse), readFile(graphPath, 'utf8').then(JSON.parse)]); const gateway = knowledgeGateway({ manifest, graph, readMemory: async(owner:any,query:string,projectId:string|null,limit:number,principal:any)=>process.env.DOCK_BEACON_ENABLED==='true'?(principal.executionId?beaconMemory().executionRecall(principal.executionId,query):beaconMemory().recall({...principal,projectId},query)):recall(owner,query,projectId,limit) }); cached = { key, gateway }; return gateway; })();
     try {
         return await loading;
     }

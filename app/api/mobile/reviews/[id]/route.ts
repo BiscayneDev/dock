@@ -1,3 +1,4 @@
+import{ownerOriginMatches}from'@/lib/mobile/origin'
 import{NextResponse}from'next/server'
 import{assistantContext,isUuid}from'@/lib/assistant-store'
 import{adminClient}from'@/lib/tenancy'
@@ -11,7 +12,7 @@ export async function GET(_request:Request,{params}:{params:Promise<{id:string}>
 }
 export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){
  const ctx=await assistantContext();if(!ctx)return NextResponse.json({error:'Sign in required'},{status:401})
- if(request.headers.get('origin')!==new URL(request.url).origin)return NextResponse.json({error:'Same-origin owner action required'},{status:403})
+ if(!ownerOriginMatches(request))return NextResponse.json({error:'Same-origin owner action required'},{status:403})
  if(process.env.DOCK_EXECUTION_REVIEW_ENABLED!=='true')return NextResponse.json({error:'Execution review is not activated'},{status:503})
  const{id}=await params;if(!isUuid(id))return NextResponse.json({error:'Not found'},{status:404})
  let body;try{body=await request.json()}catch{return NextResponse.json({error:'Exact review required'},{status:400})}

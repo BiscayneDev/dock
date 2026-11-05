@@ -7,6 +7,7 @@ export function beaconMemory(db:SupabaseClient=adminClient()){
  async function call(name:string,input:Record<string,unknown>){const{data,error}=await db.rpc(name,input);if(error)throw Error('Scoped Beacon memory refused');return data}
  return{
   recall:(p:BoundMemory,query:string)=>call('beacon_mobile_recall',{...args(p),p_query:query,p_limit:8}),
+  executionRecall:(executionId:string,query:string)=>call('beacon_execution_recall',{p_execution:executionId,p_query:query,p_limit:8}),
   note:(p:BoundMemory,content:string,source:string)=>call('beacon_mobile_note',{...args(p),p_content:content,p_source:source}),
   distill:(p:BoundMemory,noteId:string,content:string)=>call('beacon_mobile_distill',{...args(p),p_note:noteId,p_content:content}),
  }

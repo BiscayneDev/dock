@@ -172,9 +172,11 @@ references and approval lineage are retained. Dinghy's database remains separate
 Migration0020, `lib/mobile/beacon.ts`, the bound recall path and the owner promotion
 endpoint are draft code. Local PostgreSQL checks prove the scope/promotion races;
 production-built mobile integration exercises the real bound recall RPC with
-fictional credentials. Specialist execution-bound memory access, owner review UI,
-team membership/assignment administration and full end-to-end promotion are still
-unfinished. Do not enable Beacon from these component checks alone.
+fictional credentials. Execution-bound specialist recall is consumed by dispatch and tested against
+current decisions. The owner review page has passed local production-Next browser
+approval through real PostgreSQL with fictional identity. Team membership/assignment
+administration, execution-authenticated note/distill calls, production deployment
+and actual phone validation remain unfinished. Do not enable Beacon from these component checks alone.
 
 Build now runs a fresh mandatory TypeScript check in its own process before
 webpack. The build uses a bounded heap, one compiler process and one page worker.
@@ -183,3 +185,10 @@ change. Type errors fail before webpack; Next's duplicate typecheck is skipped
 only by the wrapper after that successful fresh check. Graph files are external
 runtime inputs, not imported bundles. The graph still has a measured cold-process
 RAM cost and is not production-sized by assumption.
+
+The configured `DOCK_PUBLIC_ORIGIN` pins the owner decision origin when a trusted
+reverse proxy rewrites the internal URL. Forwarded headers never choose it.
+`/memory/review` renders exact candidate text; only the owner's authenticated
+POST can promote that candidate. Local browser proof is
+`scripts/proofs/beacon-owner-ui.mjs`, requiring an explicitly installed Puppeteer
+package and local Chrome. The fixture session is not a live owner grant.

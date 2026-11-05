@@ -62,4 +62,20 @@ begin
 end;$$;
 revoke all on function beacon_mobile_identity(uuid,uuid,uuid,uuid,text),beacon_mobile_recall(uuid,uuid,uuid,uuid,text,text,int),beacon_mobile_note(uuid,uuid,uuid,uuid,text,text,text),beacon_mobile_distill(uuid,uuid,uuid,uuid,text,uuid,text),beacon_promote(uuid,uuid,text)from public,anon,authenticated;
 grant execute on function beacon_mobile_recall(uuid,uuid,uuid,uuid,text,text,int),beacon_mobile_note(uuid,uuid,uuid,uuid,text,text,text),beacon_mobile_distill(uuid,uuid,uuid,uuid,text,uuid,text),beacon_promote(uuid,uuid,text)to service_role;
+
+-- A child/specialist obtains identity from its durable execution, never from a
+-- prompt-supplied agent id. Only approved business facts and its own notes.
+create function beacon_execution_recall(p_execution uuid,p_query text,p_limit int default 8)returns setof memory_items language plpgsql security definer set search_path=public as $$
+declare e mobile_executions;
+begin
+ select * into e from mobile_executions where id=p_execution;
+ if not found or e.state not in('bound','start_intent','running')or e.decision_expires_at<=now()or e.decision_expires_at is null or e.cleanup_deadline<=now()then raise exception 'Current exact execution memory identity required';end if;
+ if not exists(select 1 from mobile_task_proposals p join mobile_sessions s on s.id=p.session_id join mobile_grants g on g.device_id=s.device_id join devices d on d.id=g.device_id where p.id=e.proposal_id and p.owner_id=e.owner_id and p.workspace_id=e.workspace_id and p.status='approved'and p.approved_digest=e.approved_proposal_digest and g.revoked_at is null and d.revoked_at is null and g.project_id is not distinct from e.project_id and e.repo_key=any(g.repo_keys))then raise exception 'Current source decision required';end if;
+ return query select m.*from memory_items m where m.owner_id=e.owner_id and m.workspace_id=e.workspace_id and(m.project_id is null or m.project_id=e.project_id)and(
+ (m.visibility='personal'and m.memory_state='active')or(m.visibility='agent'and m.author_agent=e.agent_key and m.memory_state='active')or
+ (m.visibility='business'and m.memory_state='approved'and exists(select 1 from memory_agent_assignments a where a.workspace_id=e.workspace_id and a.project_id is not distinct from m.project_id and a.agent_key=e.agent_key and a.revoked_at is null)))
+ and(coalesce(trim(p_query),'')=''or m.content ilike '%'||left(p_query,200)||'%'or to_tsvector('english',m.content)@@websearch_to_tsquery('english',left(p_query,1000)))order by m.created_at desc limit greatest(1,least(p_limit,20));
+end;$$;
+revoke all on function beacon_execution_recall(uuid,text,int)from public,anon,authenticated;
+grant execute on function beacon_execution_recall(uuid,text,int)to service_role;
 commit;

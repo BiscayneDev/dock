@@ -34,6 +34,7 @@ except RuntimeError:pass
 sql(f"update mobile_grants set revoked_at=null where device_id='{d}'")
 sql("create schema auth;create function auth.uid()returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$")
 sql("alter table memory_items add column created_at timestamptz default now()")
+sql(open('db/migrations/0013_mobile_execution_draft.sql').read());sql(open('db/migrations/0014_mobile_execution_protocol_draft.sql').read())
 sql(open('db/migrations/0020_beacon_memory_draft.sql').read())
 def refused(q):
  try:sql(q);raise AssertionError('Expected refusal')
@@ -61,8 +62,15 @@ assert sql(f"select count(*)from beacon_mobile_recall({other},'Reviewed',20)wher
 sql(f"update memory_agent_assignments set revoked_at=now()where workspace_id='{w}'")
 assert sql(f"select count(*)from beacon_mobile_recall({other},'Reviewed',20)where visibility='business'")=='0'
 refused(f"select beacon_mobile_distill({other},'{note}','Steal sibling note')")
+# Actual execution-bound recall derives agent from the approved durable row.
+proposal=sql('select id from mobile_task_proposals limit 1');execution='00000000-0000-0000-0000-000000000099'
+sql(f"update mobile_task_proposals set status='approved',approved_digest='fixture-digest'where id='{proposal}';update memory_agent_assignments set revoked_at=null where workspace_id='{w}';insert into mobile_executions(id,proposal_id,owner_id,workspace_id,agent_key,repo_key,source_commit,approved_proposal_digest,owner_decision_ref,managed_budget_micros,max_compute_cost_micros,lifecycle_approved,cleanup_deadline,state,decision_expires_at,approved_text,source_paths,instance_id)values('{execution}','{proposal}','{o}','{w}','architect','dock','{'a'*40}','fixture-digest','fixture-authority',1000000,1000,true,now()+interval '10 minutes','bound',now()+interval '5 minutes','Review',array['README.md'],'fixture-instance')")
+assert sql(f"select count(*)from beacon_execution_recall('{execution}','Reviewed',20)where visibility='business'")=='1'
+assert sql(f"select count(*)from beacon_execution_recall('{execution}','Private',20)where visibility='agent'")=='0'
+sql(f"update mobile_executions set decision_expires_at=now()-interval '1 second'where id='{execution}'")
+refused(f"select *from beacon_execution_recall('{execution}','Reviewed',20)")
 sql(f"update devices set revoked_at=now()where id='{d}'")
 refused(f"select *from beacon_mobile_recall({identity},'Private',20)")
 assert sql("select count(*)from memory_items where visibility='business'")=='1'
 assert sql("select count(*)from memory_items where visibility='personal'")=='2'
-print(json.dumps({'proof':'Real local PostgreSQL Beacon recall distill promote on existing memory_items','privateSiblingReadRefused':True,'unapprovedCandidateNotRecalled':True,'changedPromotionRefused':True,'unauthorizedPromotionRefused':True,'concurrentPromotions':8,'promotionWinners':1,'businessAssignmentRequired':True,'assignmentRevocationImmediate':True,'revokedDeviceRefused':True,'legacyRowsRemainPersonal':True,'fixtureAuthorityOnly':True,'deployed':False}))
+print(json.dumps({'proof':'Real local PostgreSQL Beacon recall distill promote on existing memory_items','privateSiblingReadRefused':True,'unapprovedCandidateNotRecalled':True,'changedPromotionRefused':True,'unauthorizedPromotionRefused':True,'concurrentPromotions':8,'promotionWinners':1,'businessAssignmentRequired':True,'assignmentRevocationImmediate':True,'revokedDeviceRefused':True,'legacyRowsRemainPersonal':True,'executionBoundRecallVerified':True,'expiredExecutionRefused':True,'fixtureAuthorityOnly':True,'deployed':False}))

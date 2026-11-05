@@ -1,10 +1,11 @@
+import{ownerOriginMatches}from'@/lib/mobile/origin'
 import{NextResponse}from'next/server'
 import{assistantContext,isUuid}from'@/lib/assistant-store'
 import{adminClient}from'@/lib/tenancy'
 import{beaconReviewCandidates}from'@/lib/mobile/beacon'
 export async function POST(request:Request){
  const ctx=await assistantContext();if(!ctx)return NextResponse.json({error:'Sign in required'},{status:401})
- if(request.headers.get('origin')!==new URL(request.url).origin)return NextResponse.json({error:'Same-origin owner action required'},{status:403})
+ if(!ownerOriginMatches(request))return NextResponse.json({error:'Same-origin owner action required'},{status:403})
  if(process.env.DOCK_BEACON_ENABLED!=='true')return NextResponse.json({error:'Beacon memory not activated'},{status:503})
  let body;try{body=await request.json()}catch{return NextResponse.json({error:'Exact candidate required'},{status:400})}
  if(!isUuid(body.candidateId??'')||typeof body.content!=='string'||body.content.length>4000)return NextResponse.json({error:'Exact candidate required'},{status:400})

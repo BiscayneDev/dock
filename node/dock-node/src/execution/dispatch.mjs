@@ -24,7 +24,7 @@ export function isolatedDispatcher({ verifyApproval, store, controller, source, 
             const snapshot = await source(approval);
             if (snapshot.sha !== approval.sourceCommit)
                 throw Error('Approved source mismatch');
-            const shared = await context({ ownerId: approval.ownerId, workspaceId: approval.workspaceId, projectId: approval.projectId, repoKeys: approval.repoKeys }, approval.text);
+            const shared = await context({ ownerId: approval.ownerId, workspaceId: approval.workspaceId, projectId: approval.projectId, executionId:approval.executionId,agentId:approval.agentId,repoKeys: approval.repoKeys }, approval.text);
             // Controller alone places committed source + shared knowledge into sandbox.
             // No management key, parent scratch state, sibling git data or owner token.
             await controller.prepare({ instanceId: instance.id, snapshot, shared, executionId: approval.executionId });

@@ -1,4 +1,5 @@
-import pgserver,tempfile,subprocess,json,http.server,urllib.parse,hashlib,datetime
+import pgserver,tempfile,subprocess,json,http.server,urllib.parse,hashlib,datetime,atexit,signal
+signal.signal(signal.SIGTERM,lambda *args:__import__('sys').exit(0))
 srv=pgserver.get_server(tempfile.mkdtemp(prefix='dock-mobile-http-pg-'));uri=srv.get_uri()
 def sql(q):
  r=subprocess.run(['/usr/lib/postgresql/14/bin/psql',uri,'-qtAX','-v','ON_ERROR_STOP=1','-c',q],capture_output=True,text=True)
@@ -14,6 +15,9 @@ sql(f"insert into users values('{o}');insert into workspaces values('{w}','{o}')
 if __import__('os').environ.get('PROOF_BEACON')=='true':
  sql(open('db/migrations/0020_beacon_memory_draft.sql').read())
  sql(f"insert into memory_agent_assignments(workspace_id,agent_key)values('{w}','chief')")
+if __import__('os').environ.get('PROOF_BEACON_UI')=='true':
+ note=sql(f"select beacon_mobile_note('{d}','{o}','{w}',null,'chief','Fictional private source note','fixture:ui-proof')")
+ candidate=sql(f"select beacon_mobile_distill('{d}','{o}','{w}',null,'chief','{note}','Fictional business fact reviewed through the actual owner page')")
 class Handler(http.server.BaseHTTPRequestHandler):
  def log_message(self,*a):pass
  def do_GET(self):self.handle_request()
@@ -23,13 +27,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
   try:
    u=urllib.parse.urlparse(self.path);qs=urllib.parse.parse_qs(u.query);body=json.loads(self.rfile.read(int(self.headers.get('content-length','0')))or'{}')
    if u.path=='/auth/v1/user':result={'id':o,'email':'demo@example.com','aud':'authenticated'}
+   elif u.path=='/fixture/beacon-state':result={'candidates':int(sql("select count(*)from memory_items where visibility='agent'and memory_state='proposed'")),'privateNotes':int(sql("select count(*)from memory_items where visibility='agent'and memory_state='active'")),'shared':int(sql("select count(*)from memory_items where visibility='business'"))}
    elif u.path=='/fixture/prepare-execution':
     session=body['sessionId'];assert isinstance(session,str)and len(session)==36
     proposal=sql(f"insert into mobile_task_proposals(session_id,request_id,ordinal,owner_id,workspace_id,proposal,status,approved_digest)values({lit(session)},gen_random_uuid(),0,'{o}','{w}','{{}}','approved','fictional-proof')returning id")
     execution=sql(f"insert into mobile_executions(proposal_id,owner_id,workspace_id,agent_key,repo_key,source_commit,approved_proposal_digest,owner_decision_ref,managed_budget_micros,max_compute_cost_micros,lifecycle_approved,cleanup_deadline,state,instance_id,thread_id,run_id)values({lit(proposal)},'{o}','{w}','architect','dock','{'a'*40}','fictional-proof','local-only-not-owner-authority',1000000,100000,true,now()+interval '10 minutes','running','fictional-local',{lit(body['threadId'])},{lit(body['runId'])})returning id")
     result={'executionId':execution}
    elif u.path.startswith('/rest/v1/rpc/'):
-    name=u.path.split('/')[-1];assert name in ['mobile_open','mobile_claim','mobile_complete','mobile_execution_result','beacon_mobile_recall','beacon_mobile_note','beacon_mobile_distill','beacon_promote'];args=','.join(k+'=>'+lit(json.dumps(v)if isinstance(v,(dict,list))else v)for k,v in body.items());r=sql("select coalesce(json_agg(r),'[]'::json)from "+name+' ('+args+')r')if name=='beacon_mobile_recall'else sql('select '+name+'('+args+')');result=True if r=='t'else False if r=='f'else r if name in['beacon_mobile_note','beacon_mobile_distill','beacon_promote']else json.loads(r)if r else None
+    name=u.path.split('/')[-1];assert name in ['mobile_open','mobile_claim','mobile_complete','mobile_execution_result','beacon_mobile_recall','beacon_mobile_note','beacon_mobile_distill','beacon_promote','beacon_execution_recall'];args=','.join(k+'=>'+lit(json.dumps(v)if isinstance(v,(dict,list))else v)for k,v in body.items());r=sql("select coalesce(json_agg(r),'[]'::json)from "+name+' ('+args+')r')if name in['beacon_mobile_recall','beacon_execution_recall']else sql('select '+name+'('+args+')');result=True if r=='t'else False if r=='f'else r if name in['beacon_mobile_note','beacon_mobile_distill','beacon_promote','beacon_execution_recall']else json.loads(r)if r else None
    elif u.path.startswith('/rest/v1/'):
     table=u.path.split('/')[-1];assert table in ['workspaces','devices','agents','mobile_grants','mobile_sessions','mobile_turns','mobile_notices','mobile_task_proposals','mobile_executions','mobile_execution_events','memory_items','messages','conversations']
     clauses=[]
