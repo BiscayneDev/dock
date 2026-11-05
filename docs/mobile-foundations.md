@@ -353,3 +353,15 @@ capability→Next→Postgres and settles two model calls, with no execution bear
 in its environment. Image wrapper now explicitly registers scoped Beacon MCP
 in fresh state; its policy no longer disablesMCP. Candidate remains unbuilt and
 remote private-socket/mount enforcement unqualified.
+
+`node scripts/proofs/private-wrapper-namespace.mjs` joins local containment with
+actual candidate wrapper consumption. Two concurrent isolated local roots each
+run the fixed Pi wrapper, private model+memory sockets, fresh Pi config and
+scoped Beacon MCP registration. Each completes two fictional model settlements
+and one own private note. Outside networking and host/sibling paths are absent;
+effective capabilities arezero and no-new-privileges is asserted before wrapper.
+NamespaceUID0 maps to hostUID1000, unlike remote finalUSERnode. The local runtime
+read-only mount differs from the unbuilt image, so this is not remote image,
+remote private-mount, paid-provider, live lifecycle or nativeiOS qualification.
+The normal Pi MCP extension must load; `--no-extensions` is not compatible with
+this Beacon registration (candidate locked policy does not disable extensions).
