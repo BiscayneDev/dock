@@ -184,3 +184,66 @@ The narrow fix changes runtime normalization to `a+rX,a-w`, retaining root owner
 Job proof: https://github.com/BiscayneDev/dock/actions/runs/41939828116/job/126957479171
 
 This was standard free GitHub-hosted Linux compute for this public repository. No image, artifact or cache was published, and no private account data entered CI. The image was ephemeral and not imported into Agent37. The private Agent37 template still points at broken revision1. Its normal UI has public image-reference import and read-only template listing in Playground, but no cloud-build upload operation. Private replacement registration therefore remains blocked on supported credential transport; no further user setup request is pending. This proof fixes the container startup defect, not the full phone-to-Dock path. Agent37 runtime retest, linking, owner-task result and production activation remain separate and unverified.
+
+## Durable Vercel control steps (review-only preparation)
+
+The external blocking worker remains supported for a separately authorized host,
+but is NOT used by request handlers. New `/api/t3/control` and independent
+`/api/t3/cleanup` use the existing Vercel project and minute cron; both are
+CRON_SECRET protected and defaultOFF. No request body/query can supply grants,
+source URLs, credentials or task identity. Both handlers return generic errors,
+never private provider output. Work and cleanup switches are separate, so
+stopping admission does not stop deletion. Cleanup does not parse source/grant
+config and needs no create/model authority.
+
+Durable SQL claim/release functions use row locks and versioned leases. One
+invocation performs create, prepare/launch, or one correlated result read. No
+blocking loop, timers, model wait, second prompt or create retry. Create and
+launch intents are committed before writes and never reclaimed as work after a
+crash. Stable instance name plus saved ID support cleanup reconciliation.
+`launched` read polling alone may resume after its lease expires; independent
+watchdog leaves that resumable state alone until the cleanup deadline. Stale
+versions cannot release another worker's lease. Results are stored before
+DELETE and retained after deletion. Unverified create/delete/ledger stays due.
+
+Vercel config is backend-only `DOCK_T3_BACKEND_CONFIG` JSON with reviewed pinned
+`template`, exact source registry and exact task grants in the previously
+specified shape. AGENT37_API_KEY is only a transport header, never instance
+configuration, source, command or phone data. DOCK_T3_CLEANUP=on is required
+before DOCK_T3_SERVICE=on. Private owner task UI/API switches remain separate.
+No environment variable, migration, merge or deployment has been activated.
+
+Vercel sources use registered PUBLIC GitHub repository names and allowlisted
+immutable base files, with no local git dependency or private repo credential.
+The reader verifies repository identity/public status, regular tree modes, blob
+hash and decoded byte length. No symlinks, dotpaths, env/history or arbitrary
+URLs. Up to three files and512KiB total per task; larger/private sources fail
+closed. This narrow source scope is deliberate, not access to every repo.
+
+Fresh worker actions use bounded transport deadlines. At most one task/control
+invocation, no synchronous cleanup sweep on the durable work endpoint, separate
+cleanup cron. Source requests bounded5s each, bootstrap/CLI40s each, controller
+lease3min, functionmax300s. Production network/restart behavior remains unproved.
+Best-effort/duplicate cron delivery is handled by persistent claims/reconciliation,
+not by assuming the scheduler calls exactly once.
+
+Local evidence:44 node tests passed;191 root mjs tests passed with2 skips;
+TypeScript no-emit passed. Real scratch Postgres applied both migrations and
+proved8-way single claim, stale release denial, ready handoff, non-retryable
+provision/launch intent, restart polling, cleanup takeover after lost create and
+stored result retained through deleted state. These are fictional fixtures,
+not live Vercel/Dock proof. No account data or phone screenshot enters CI.
+
+Still required before full Dock activation: reviewed corrected private template
+or separately verified owner-admin repair before each workload; supported
+persistent backend management credential delivery; current lifecycle/model
+approval records and independent cleanup enabled; reviewed migrations/merge/
+deployment/source configuration; real owner phone -> Dock -> private execution
+-> stored Dock result proof. The separately retained phone restoration host
+is not this production integration and is not managed by these task crons.
+
+Repair CI161 at head10136704bd6ec566a0db3d1b27c515a79e6d6f46 additionally proved
+old root0500 runtime with a node-owned nested executable cannot run/change as
+node; fixed owner-admin repair normalizes all descendants to root and a+rX,a-w;
+actual node startup verifies running approval-required policy, no sudo/write
+capability. https://github.com/BiscayneDev/dock/actions/runs/41944777065/job/126974140764

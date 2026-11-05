@@ -85,9 +85,9 @@ export class T3OwnerWorker{
   if(storageError)throw storageError // Physical cleanup completed; durable reconciliation remains due.
   return this.store.advance(task,'deleted')
  }
- async sweep(worker){
+ async sweep(worker,{maxTasks=100}={}){
   if(!this.enabled)throw new Error('T3 worker disabled')
   const due=await this.store.due()
-  for(const{id}of due){try{const task=await this.store.takeCleanup(id,worker);if(task)await this.cleanup(task)}catch(e){this.onError(e)}}
+  for(const{id}of due.slice(0,maxTasks)){try{const task=await this.store.takeCleanup(id,worker);if(task)await this.cleanup(task)}catch(e){this.onError(e)}}
  }
 }

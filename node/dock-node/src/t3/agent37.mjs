@@ -1,10 +1,10 @@
 // Backend-only Agent37 transport. Never sends workspace key in exec bodies/env.
 // No retries for writes. Caller owns persisted intent and separate cleanup sweep.
-export function agent37Provisioner({apiKey,enabled=false,fetchImpl=fetch,bootstrap,sourceSnapshot,modelCreditMicros=0,budgetForTask,template}){
+export function agent37Provisioner({apiKey,enabled=false,fetchImpl=fetch,bootstrap,sourceSnapshot,modelCreditMicros=0,budgetForTask,template,execTimeoutMs=60000}){
  const id=x=>{if(!/^[a-z0-9]{1,64}$/.test(x??''))throw new Error('invalid instance');return x}
  async function request(path,{method='GET',body,exec=false}={}){
   if(!enabled||!apiKey)throw new Error('Agent37 transport disabled')
-  const r=await fetchImpl((exec?'https://sandbox.agent37.app/v1':'https://api.agent37.com/v1')+path,{method,headers:{[exec?'X-Agent37-Key':'Authorization']:exec?apiKey:`Bearer ${apiKey}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),redirect:'error',signal:AbortSignal.timeout(exec?60000:30000)})
+  const r=await fetchImpl((exec?'https://sandbox.agent37.app/v1':'https://api.agent37.com/v1')+path,{method,headers:{[exec?'X-Agent37-Key':'Authorization']:exec?apiKey:`Bearer ${apiKey}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),redirect:'error',signal:AbortSignal.timeout(exec?execTimeoutMs:30000)})
   if(r.status===404)return null
   if(!r.ok)throw new Error(`Agent37 response uncertain/refused (${r.status})`)
   return r.json()
