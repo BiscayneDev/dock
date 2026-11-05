@@ -200,3 +200,10 @@ production Next -> real PostgreSQL proof exercises private note, candidate and
 recall through the capability endpoint. Two-user RLS proof also checks business
 membership and revocation. These components are not yet registered with a live
 qualified specialist provider. A tested MCP server file is not an installed tool.
+
+A local installed Pi CLI has now registered the fixed stdio MCP server and
+successfully discovered `memory_search`, `memory_note`, `memory_distill` through
+its actual MCP connection. `scripts/proofs/pi-memory-registration.mjs` reproduces
+this with an explicitly installed Pi binary and fictional temporary environment.
+No model call, live provider inference, remote image install or runtime isolation
+is proved by tool discovery. The controller cannot activate from this test.
