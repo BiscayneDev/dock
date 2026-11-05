@@ -173,3 +173,14 @@ private template was missing. Local Docker/BuildKit limitation remains accurate,
 but no longer blocks image construction. Next activation is bounded paid runtime
 verification of this exact pin, separate migration/deployment review, and phone
 result/approval proof. No ongoing compute has been enabled.
+
+
+## Runtime defect and corrected container proof, 2026-11-04
+
+The bounded authorized test of Agent37 template revision1 failed before any model call: the installer runtime directory was root-only mode0500, so nonroot node could not launch T3. Runtime restrictions did hold: policy was root-owned and unwritable, no sudo/setid paths were present, and no management API key was exposed. The instance was deleted and absence verified. Final compute was $0.00033; temporary test keys were revoked. Revision1 must not be used as a working T3 image.
+
+The narrow fix changes runtime normalization to `a+rX,a-w`, retaining root ownership and write denial. CI run155 at head `c48592d7b442b07b5bf22e886d3f271c8bdd0f7d` then built the same pinned-base Dockerfile without cache and passed actual T3 startup twice: during final USERnode build step and a separate container run. The checks waited for the environment endpoint and verified the running server loaded approval-required policy. Both printed `NONROOT_STARTUP_MANAGED_POLICY_OK`; nonroot identity, root ownership/write denial and no sudo assertions passed. No model call or account credential was used.
+
+Job proof: https://github.com/BiscayneDev/dock/actions/runs/41939828116/job/126957479171
+
+This was standard free GitHub-hosted Linux compute for this public repository. No image, artifact or cache was published, and no private account data entered CI. The image was ephemeral and not imported into Agent37. The private Agent37 template still points at broken revision1. Its normal UI has public image-reference import and read-only template listing in Playground, but no cloud-build upload operation. Private replacement registration therefore remains blocked on supported credential transport; no further user setup request is pending. This proof fixes the container startup defect, not the full phone-to-Dock path. Agent37 runtime retest, linking, owner-task result and production activation remain separate and unverified.
