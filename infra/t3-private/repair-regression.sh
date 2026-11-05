@@ -6,6 +6,7 @@ trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
 docker create --name "$name" --entrypoint sleep "$image" 300
 docker start "$name"
 # Recreate the exact broken installer directory mode from template revision1.
+docker exec --user root "$name" chown node:node /opt/dock-t3-runtime/package.json
 docker exec --user root "$name" chmod 0500 /opt/dock-t3-runtime
 if docker exec --user node "$name" /opt/dock-t3-runtime/t3 --version; then
   echo 'Expected old0500 runtime failure' >&2; exit 1
