@@ -346,3 +346,10 @@ The optional screenshot branch refuses success unless the exact reply is present
 A separate read-only heartbeat monitor now reports stale/missing/source-unavailable
 states and deduplicates unchanged alerts, with recovery tests. No external alert
 destination, deployment or lifecycle permission is supplied by this source.
+
+The latest combined private-relay variant also places Beacon behind a separate
+fixed memory Unix socket. Actual Pi persists one note through socket→controller
+capability→Next→Postgres and settles two model calls, with no execution bearer
+in its environment. Image wrapper now explicitly registers scoped Beacon MCP
+in fresh state; its policy no longer disablesMCP. Candidate remains unbuilt and
+remote private-socket/mount enforcement unqualified.

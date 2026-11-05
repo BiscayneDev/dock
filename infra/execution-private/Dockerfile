@@ -12,8 +12,8 @@ RUN python3 /opt/dock-runtime-repair.py
 COPY infra/execution-private/policy.json infra/execution-private/settings.json /etc/t3code/
 COPY infra/execution-private/smoke.py /opt/dock-image-smoke.py
 RUN chown -R root:root /etc/t3code && chmod 755 /etc/t3code && chmod 644 /etc/t3code/*.json
-COPY node/dock-node/src/execution/scoped-relay.mjs node/dock-node/src/execution/chat-contract.mjs /opt/dock-relay/src/execution/
-COPY node/dock-node/bin/dock-private-pi.mjs /opt/dock-relay/bin/
+COPY node/dock-node/src/execution/scoped-relay.mjs node/dock-node/src/execution/chat-contract.mjs node/dock-node/src/execution/scoped-memory-socket.mjs node/dock-node/src/execution/memory-client.mjs node/dock-node/src/execution/memory-mcp.mjs /opt/dock-relay/src/execution/
+COPY node/dock-node/bin/dock-private-pi.mjs node/dock-node/bin/dock-memory-mcp.mjs /opt/dock-relay/bin/
 RUN chmod 555 /opt/dock-relay/bin/dock-private-pi.mjs && chown -R root:root /opt/dock-relay && chmod -R a-w /opt/dock-relay
 USER node
 # Catch root-only installer directory modes before publishing a workspace image.

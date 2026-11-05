@@ -13,3 +13,8 @@
 !node/dock-node/src/execution/chat-contract.mjs
 !node/dock-node/bin/
 !node/dock-node/bin/dock-private-pi.mjs
+
+!node/dock-node/src/execution/scoped-memory-socket.mjs
+!node/dock-node/src/execution/memory-client.mjs
+!node/dock-node/src/execution/memory-mcp.mjs
+!node/dock-node/bin/dock-memory-mcp.mjs

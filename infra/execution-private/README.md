@@ -38,3 +38,12 @@ Public sources:
 - https://www.agent37.com/docs/agents-api/templates.md
 - https://www.agent37.com/docs/agents-api/instance-network.md
 - https://www.agent37.com/docs/agents-api/exec.md
+
+Beacon now uses a second fixed private mount `/run/dock/memory.sock`. The wrapper
+registers only Dock's search/private-note/distill MCP in its fresh Pi state;
+`--no-mcp` was removed from the locked launch policy. The controller binds the
+memory client to a single capability and refuses identity/destination overrides
+and promotion. Candidate workload needs no execution bearer, provider key or
+controller key. A real local Pi tool turn through both sockets, actual Next and
+Postgres persists one private note and settles two model calls. This does not
+prove the candidate image was built or remote mounts are available.

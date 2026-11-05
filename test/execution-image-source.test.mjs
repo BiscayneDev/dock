@@ -9,3 +9,5 @@ test('unpublished image recipe consumes tested fixed repair before real nonroot 
  assert.match(smoke,/assert os.getuid\(\)!=0/);assert.match(smoke,/server=subprocess.Popen/);assert.match(smoke,/loaded this policy/)
  assert.deepEqual(readdirSync(root).filter(x=>/\.env|\.pem|\.key|credential/i.test(x)),[])
 })
+
+test('candidate provider consumes private Beacon socket instead of disabling MCP or installing capabilities',()=>{const policy=readFileSync(new URL('policy.json',root),'utf8'),docker=readFileSync(new URL('Dockerfile',root),'utf8'),wrapper=readFileSync(new URL('../../node/dock-node/bin/dock-private-pi.mjs',root),'utf8');assert.match(policy,/--provider dockrelay --model auto/);assert.doesNotMatch(policy,/--no-mcp/);assert.match(docker,/scoped-memory-socket.mjs/);assert.match(wrapper,/'mcp','add','dock-memory'/);assert.match(wrapper,/DOCK_MEMORY_SOCKET:'\/run\/dock\/memory.sock'/);assert.doesNotMatch(wrapper,/DOCK_EXECUTION_TOKEN:/)})
