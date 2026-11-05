@@ -214,3 +214,12 @@ MCP tool, made exactly one private-note call, then completed on its next model
 turn. `scripts/proofs/pi-memory-turn.mjs` reproduces the process. Both HTTP
 services are fixtures. This does not make the plain-text bounded model gateway
 OpenAI/tool-compatible; that live transport and its price contract remain missing.
+
+The disabled execution gateway now also accepts bounded text/function chat requests
+at `/api/internal/execution-model/v1/chat/completions`. It quotes the complete
+canonical message/tool schema, refuses unknown billing fields, reserves once,
+uses one nonstream upstream call and settles before emitting compatible chunks.
+The current Pi process proof consumes that structured adapter with two fixture
+reservations and settlements around a private memory tool call. Actual production-built Next capability/quote/hold/settlement has passed against
+real local PostgreSQL and a fictional TLS upstream, including duplicate-request
+refusal. Live upstream pricing/attempt/tool-schema token guarantees are not proved. No fixture contract authorizes real provider traffic.
