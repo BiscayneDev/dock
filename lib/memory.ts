@@ -57,9 +57,11 @@ async function embed(text: string): Promise<number[] | null> {
   return embedText(text);
 }
 
-const SELECT = "id, owner_id, workspace_id, project_id, scope, type, content, conversation_id, embedding_model, created_at, projects(name)";
+const SELECT = "*, projects(name)";
 
 type Raw = {
+  visibility?: MemoryRow["visibility"];
+  memory_state?: string;
   id: string;
   owner_id: string;
   workspace_id: string;
@@ -77,6 +79,8 @@ function toRow(r: Raw): MemoryRow {
   const project = Array.isArray(r.projects) ? r.projects[0] : r.projects;
   return {
     id: r.id,
+    visibility:r.visibility,
+    memoryState:r.memory_state,
     ownerId: r.owner_id,
     workspaceId: r.workspace_id,
     projectId: r.project_id,
@@ -116,7 +120,7 @@ function supabaseRepo(): MemoryRepo {
         .from("memory_items")
         .select(SELECT)
         .eq("owner_id", ownerId)
-        .match(process.env.DOCK_BEACON_ENABLED==='true'?{visibility:'personal'}:{})
+
         .order("created_at", { ascending: false })
         .limit(limit);
       if (error) throw new Error(`memory list: ${error.message}`);
@@ -147,7 +151,7 @@ function supabaseRepo(): MemoryRepo {
         .from("memory_items")
         .select(SELECT)
         .eq("owner_id", ownerId)
-        .match(process.env.DOCK_BEACON_ENABLED==='true'?{visibility:'personal'}:{})
+
         .in("id", ids.map((h) => h.id));
       if (rowsError) throw new Error(`memory rows: ${rowsError.message}`);
       const byId = new Map(((rows ?? []) as unknown as Raw[]).map((r) => [r.id, toRow(r)]));
@@ -192,7 +196,7 @@ export function forget(owner: MemoryOwner, id: string): Promise<boolean> {
 /** Facts and project knowledge for the /memory page (conversation turns excluded). */
 export async function listDurable(owner: MemoryOwner, limit = 300): Promise<MemoryRow[]> {
   const rows = await supabaseRepo().listRecent(owner.userId, limit);
-  return rows.filter((r) => r.scope === "fact" || r.scope === "project");
+  return rows.filter((r) => (!r.visibility || r.visibility==="personal") && (!r.memoryState || r.memoryState==="active") && (r.scope === "fact" || r.scope === "project"));
 }
 
 /** Extract durable facts from one finished turn. Returns the number stored. Never throws. */
