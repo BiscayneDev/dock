@@ -253,3 +253,10 @@ hold and never retry. This depends on the unactivated inference draft at
 https://github.com/BiscayneDev/shipyard-inference/pull/51 and actual operator stage
 contracts, none configured here. The cross-repository local proof uses actual
 Dock transport and inference gateway/router, with fictional prices/providers.
+
+`scripts/proofs/linux-private-root.py` also exercises two actual concurrent local
+Linux namespace/private-root workloads, capability dropping, no-new-privileges,
+read-only runtime mounts, denied outside-network access and independent writes.
+This is local negative containment evidence, not a qualified remote image or
+functional scoped model egress. It does not supply a deployed watchdog or prove
+the Agent37 boundary. There is no automatic remote activation from this proof.
