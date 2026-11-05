@@ -1,0 +1,1 @@
+{"enableProviderUpdateChecks":false,"defaultRuntimeMode":"approval-required","providerInstances":{"pi":{"driver":"pi","enabled":true,"config":{"binaryPath":"/opt/dock-relay/bin/dock-private-pi.mjs","launchArgs":"--offline --no-skills --no-context-files --provider dockrelay --model auto"}}}}

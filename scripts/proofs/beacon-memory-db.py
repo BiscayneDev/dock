@@ -1,0 +1,89 @@
+import pgserver,subprocess,concurrent.futures,tempfile,json
+srv=pgserver.get_server(tempfile.mkdtemp(prefix='dock-mobile-pg-'));uri=srv.get_uri()
+import atexit,signal;atexit.register(srv.cleanup);signal.signal(signal.SIGTERM,lambda *args:__import__('sys').exit(0))
+def sql(q):
+ p=subprocess.run(['/usr/lib/postgresql/14/bin/psql',uri,'-tAX','-v','ON_ERROR_STOP=1','-c',q],capture_output=True,text=True)
+ if p.returncode:raise RuntimeError(p.stderr)
+ return p.stdout.strip()
+sql("create role anon; create role authenticated; create role service_role; create table users(id uuid primary key); create table workspaces(id uuid primary key,owner_id uuid); create table projects(id uuid primary key,workspace_id uuid); create table devices(id uuid primary key,owner_id uuid,workspace_id uuid,revoked_at timestamptz); create table conversations(id uuid primary key default gen_random_uuid(),workspace_id uuid,owner_id uuid,project_id uuid,title text,agent text,preview text,updated_at timestamptz); create table memory_items(id uuid primary key default gen_random_uuid(),workspace_id uuid,owner_id uuid,project_id uuid,scope text,type text,content text,conversation_id uuid);create table messages(id uuid primary key default gen_random_uuid(),conversation_id uuid,role text,content text,agent text,meta jsonb,created_at timestamptz default now());")
+sql(open('db/migrations/0012_mobile_foundations.sql').read())
+o='00000000-0000-0000-0000-000000000001';w='00000000-0000-0000-0000-000000000002';d='00000000-0000-0000-0000-000000000003';r='00000000-0000-0000-0000-000000000004';r2='00000000-0000-0000-0000-000000000005'
+sql(f"insert into users values('{o}'); insert into workspaces values('{w}','{o}');insert into devices(id,owner_id,workspace_id,revoked_at,purpose) values('{d}','{o}','{w}',null,'mobile');insert into mobile_grants(device_id,owner_id,workspace_id,agent_key,repo_keys,inference_enabled)values('{d}','{o}','{w}','chief',array['dock'],true)")
+def opening(i):return json.loads(sql(f"select mobile_open('{d}','{o}','{w}','{r}')"))['id']
+with concurrent.futures.ThreadPoolExecutor(8)as ex: sessions=list(ex.map(opening,range(8)))
+assert len(set(sessions))==1; s=sessions[0]
+def claiming(i):return json.loads(sql(f"select mobile_claim('{s}','{d}','{o}','{w}','{r}','same')"))['status']
+with concurrent.futures.ThreadPoolExecutor(8)as ex:claims=list(ex.map(claiming,range(8)))
+assert claims.count('claimed')==1 and claims.count('pending')==7,claims
+assert json.loads(sql(f"select mobile_claim('{s}','{d}','{o}','{w}','{r2}','other')"))['status']=='busy'
+try:sql(f"select mobile_claim('{s}','{d}','{o}','{w}','{r}','altered')");raise AssertionError('conflict accepted')
+except RuntimeError:pass
+sql(f'''select mobile_complete('{s}','{d}','{o}','{w}','{r}','same','owner question','canonical response','{{"text":"canonical response","contextVersion":"v1"}}')''')
+assert sql('select count(*) from memory_items')=='1';assert sql('select count(*) from messages')=='2';assert sql('select count(*) from mobile_notices')=='1';assert json.loads(sql(f"select mobile_claim('{s}','{d}','{o}','{w}','{r}','same')"))['status']=='complete'
+notice=sql('select id from mobile_notices limit 1')
+assert sql(f"select mobile_ack_notice('{s}','{d}','{o}','{w}','{notice}')")=='t'
+assert sql('select count(*) from mobile_notices where delivered_at is not null')=='1'
+assert json.loads(sql(f"select mobile_claim('{s}','{d}','{o}','{w}','{r2}','next')"))['status']=='claimed'
+proposal={'text':'Proposed work','proposals':[{'goal':'Review canonical memory','budgetCents':100,'assignments':[{'agentKey':'architect','prompt':'Review'}]}]}
+sql(f"select mobile_complete('{s}','{d}','{o}','{w}','{r2}','next','Review request','Proposed work','{json.dumps(proposal)}')")
+assert sql('select count(*) from mobile_task_proposals')=='1'
+assert sql('select count(*) from memory_items')=='2'
+sql(f"update mobile_grants set revoked_at=now() where device_id='{d}'")
+try:claiming(1);raise AssertionError('revoked accepted')
+except RuntimeError:pass
+
+sql(f"update mobile_grants set revoked_at=null where device_id='{d}'")
+sql("create schema auth;create function auth.uid()returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$")
+sql("alter table memory_items add column created_at timestamptz default now()")
+sql(open('db/migrations/0013_mobile_execution_draft.sql').read());sql(open('db/migrations/0014_mobile_execution_protocol_draft.sql').read())
+sql(open('db/migrations/0020_beacon_memory_draft.sql').read())
+def refused(q):
+ try:sql(q);raise AssertionError('Expected refusal')
+ except RuntimeError:pass
+identity=f"'{d}','{o}','{w}',null,'chief'"
+note=sql(f"select beacon_mobile_note({identity},'Private architecture note','fixture:conversation')")
+candidate=sql(f"select beacon_mobile_distill({identity},'{note}','Reviewed shared architecture')")
+# A second real registered agent with an independent paired device.
+d2='00000000-0000-0000-0000-000000000006'
+sql(f"insert into devices(id,owner_id,workspace_id,purpose)values('{d2}','{o}','{w}','mobile');insert into mobile_grants(device_id,owner_id,workspace_id,agent_key,repo_keys,inference_enabled)values('{d2}','{o}','{w}','architect',array['dock'],false)")
+other=f"'{d2}','{o}','{w}',null,'architect'"
+assert sql(f"select count(*)from beacon_mobile_recall({other},'Private',20)")=='0'
+assert sql(f"select count(*)from beacon_mobile_recall({identity},'Private',20)")=='1'
+assert sql(f"select count(*)from beacon_mobile_recall({identity},'Reviewed',20)where id='{candidate}'")=='0'
+refused(f"select beacon_promote('{candidate}','00000000-0000-0000-0000-000000000098','Reviewed shared architecture')")
+refused(f"select beacon_promote('{candidate}','{o}','Changed content')")
+def promote(i):
+ try:return sql(f"select beacon_promote('{candidate}','{o}','Reviewed shared architecture')")
+ except RuntimeError:return 'refused'
+with concurrent.futures.ThreadPoolExecutor(8)as ex:decisions=list(ex.map(promote,range(8)))
+assert decisions.count('refused')==7
+assert sql(f"select count(*)from beacon_mobile_recall({other},'Reviewed',20)where visibility='business'")=='0'
+sql(f"insert into memory_agent_assignments(workspace_id,agent_key)values('{w}','architect')")
+assert sql(f"select count(*)from beacon_mobile_recall({other},'Reviewed',20)where visibility='business'")=='1'
+sql(f"update memory_agent_assignments set revoked_at=now()where workspace_id='{w}'")
+assert sql(f"select count(*)from beacon_mobile_recall({other},'Reviewed',20)where visibility='business'")=='0'
+refused(f"select beacon_mobile_distill({other},'{note}','Steal sibling note')")
+# Actual execution-bound recall derives agent from the approved durable row.
+proposal=sql('select id from mobile_task_proposals limit 1');execution='00000000-0000-0000-0000-000000000099'
+sql(f"update mobile_task_proposals set status='approved',approved_digest='fixture-digest'where id='{proposal}';update memory_agent_assignments set revoked_at=null where workspace_id='{w}';insert into mobile_executions(id,proposal_id,owner_id,workspace_id,agent_key,repo_key,source_commit,approved_proposal_digest,owner_decision_ref,managed_budget_micros,max_compute_cost_micros,lifecycle_approved,cleanup_deadline,state,decision_expires_at,approved_text,source_paths,instance_id)values('{execution}','{proposal}','{o}','{w}','architect','dock','{'a'*40}','fixture-digest','fixture-authority',1000000,1000,true,now()+interval '10 minutes','bound',now()+interval '5 minutes','Review',array['README.md'],'fixture-instance')")
+assert sql(f"select count(*)from beacon_execution_recall('{execution}','Reviewed',20)where visibility='business'")=='1'
+assert sql(f"select count(*)from beacon_execution_recall('{execution}','Private',20)where visibility='agent'")=='0'
+sql(f"update mobile_executions set decision_expires_at=now()-interval '1 second'where id='{execution}'")
+refused(f"select *from beacon_execution_recall('{execution}','Reviewed',20)")
+sql(f"update devices set revoked_at=now()where id='{d}'")
+refused(f"select *from beacon_mobile_recall({identity},'Private',20)")
+assert sql("select count(*)from memory_items where visibility='business'")=='1'
+assert sql("select count(*)from memory_items where visibility='personal'")=='2'
+sql("alter table memory_items enable row level security")
+sql("grant usage on schema public,auth to authenticated;grant select on memory_items to authenticated;grant execute on function auth.uid()to authenticated")
+outsider='00000000-0000-0000-0000-000000000078'
+sql(f"insert into users values('{outsider}')")
+assert sql(f"set role authenticated;set request.jwt.claim.sub='{outsider}';select count(*)from memory_items").splitlines()[-1]=='0'
+sql(f"insert into memory_business_members(workspace_id,user_id,role)values('{w}','{outsider}','member')")
+assert sql(f"set role authenticated;set request.jwt.claim.sub='{outsider}';select count(*)from memory_items where visibility='business'").splitlines()[-1]=='1'
+assert sql(f"set role authenticated;set request.jwt.claim.sub='{outsider}';select count(*)from memory_items where visibility in('agent','personal')").splitlines()[-1]=='0'
+assert sql(f"set role authenticated;set request.jwt.claim.sub='{outsider}';select count(*)from memory_items where visibility='business'and(source_memory_id is not null or source_reference is not null or author_agent is not null or promoted_memory_id is not null)").splitlines()[-1]=='0'
+assert sql(f"select count(*)from memory_items c join memory_items b on b.id=c.promoted_memory_id where c.id='{candidate}'and c.visibility='agent'and b.visibility='business'")=='1'
+sql(f"update memory_business_members set revoked_at=now()where user_id='{outsider}'")
+assert sql(f"set role authenticated;set request.jwt.claim.sub='{outsider}';select count(*)from memory_items").splitlines()[-1]=='0'
+print(json.dumps({'businessHasNoPrivateProvenance':True,'privateCandidateRetainsPromotionLineage':True,'rlsTwoUsersVerified':True,'businessMemberCannotReadPersonalOrAgent':True,'memberRevocationImmediate':True,'proof':'Real local PostgreSQL Beacon recall distill promote on existing memory_items','privateSiblingReadRefused':True,'unapprovedCandidateNotRecalled':True,'changedPromotionRefused':True,'unauthorizedPromotionRefused':True,'concurrentPromotions':8,'promotionWinners':1,'businessAssignmentRequired':True,'assignmentRevocationImmediate':True,'revokedDeviceRefused':True,'legacyRowsRemainPersonal':True,'executionBoundRecallVerified':True,'expiredExecutionRefused':True,'fixtureAuthorityOnly':True,'deployed':False}))

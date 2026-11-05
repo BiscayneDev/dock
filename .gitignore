@@ -46,3 +46,7 @@ next-env.d.ts
 .env.local
 # Shipyard OS — do not commit personal config
 .env*.local
+
+# Local Python proof bytecode
+__pycache__/
+*.pyc

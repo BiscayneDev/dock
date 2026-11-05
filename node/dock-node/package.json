@@ -5,13 +5,15 @@
   "private": true,
   "type": "module",
   "bin": {
-    "dock-node": "bin/dock-node.mjs"
+    "dock-node": "bin/dock-node.mjs",
+    "dock-acp": "bin/dock-acp.mjs",
+    "dock-memory-mcp": "bin/dock-memory-mcp.mjs"
   },
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs test/mobile/*.test.mjs"
   },
   "license": "UNLICENSED"
 }

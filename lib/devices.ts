@@ -64,11 +64,11 @@ export async function ownerHasOnlineDevice(supabase: SupabaseClient): Promise<bo
 /** Owner creates a device slot and a one-time pairing code (10 minutes). The device is not usable until paired. */
 export async function createPairing(
   supabase: SupabaseClient,
-  input: { workspaceId: string; ownerId: string; name: string },
+  input: { workspaceId: string; ownerId: string; name: string; purpose?: "home" | "mobile" },
 ): Promise<{ deviceId: string; code: string; expiresAt: string }> {
   const { data, error } = await supabase
     .from("devices")
-    .insert({ workspace_id: input.workspaceId, owner_id: input.ownerId, name: input.name })
+    .insert({ workspace_id: input.workspaceId, owner_id: input.ownerId, name: input.name, ...(input.purpose === "mobile" ? {purpose:"mobile"}: {}) })
     .select("id")
     .single()
   if (error || !data) throw new Error(`device: ${error?.message ?? "insert failed"}`)
@@ -113,13 +113,18 @@ export async function loadDeviceRow(admin: SupabaseClient, deviceId: string): Pr
 }
 
 /** Bearer-token auth for device endpoints. Never falls back to a session. */
-export async function authenticateDevice(request: Request): Promise<DeviceAuth> {
+export async function authenticateDevice(request: Request, purpose: "home" | "mobile" = "home"): Promise<DeviceAuth> {
   const header = request.headers.get("authorization") ?? ""
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : null
   const parsed = parseDeviceToken(token)
   if (!parsed) return authenticateDeviceToken(token, null)
-  const row = await loadDeviceRow(adminClient(), parsed.deviceId)
-  return authenticateDeviceToken(token, row)
+  const admin=adminClient()
+  const row=await loadDeviceRow(admin,parsed.deviceId)
+  const {data:devicePurpose,error:purposeError}=await admin.from('devices').select('purpose').eq('id',parsed.deviceId).maybeSingle()
+  if(purposeError) return {ok:false,reason:'unknown'}
+  const result=authenticateDeviceToken(token,row)
+ if(result.ok&&(devicePurpose?.purpose??'home')!==purpose)return {ok:false,reason:'bad_secret'}
+ return result
 }
 
 /**

@@ -107,10 +107,12 @@ export default function MemoryPage() {
         <div>
           <h1 className="text-2xl font-bold text-white leading-none">Memory</h1>
           <p className="text-xs text-zinc-500 mt-0.5">
-            What the Chief remembers about you and your projects. Only you can see or delete it.
+            Your personal memory and project notes. Business facts use a separate review step before assigned agents share them.
           </p>
         </div>
       </div>
+
+      <a href="/memory/review" className="mb-5 inline-block rounded-lg border border-zinc-700 px-4 py-3 text-sm text-zinc-300">Review proposed shared knowledge</a>
 
       {error && (
         <div

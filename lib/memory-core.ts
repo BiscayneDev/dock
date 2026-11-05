@@ -6,6 +6,9 @@ export type MemoryScope = "conversation" | "fact" | "project";
 export type MemoryType = "conversation" | "fact" | "person" | "preference" | "org" | "event";
 
 export interface MemoryRow {
+  /** Legacy recall must never expose Beacon private/shared rows as personal. */
+  visibility?: "personal" | "business" | "agent";
+  memoryState?: string;
   id: string;
   ownerId: string;
   workspaceId: string;
@@ -151,7 +154,7 @@ function keywordScore(queryTokens: string[], content: string): number {
 
 /** A row is visible to a chat in projectId when it is owner-wide or belongs to that project. */
 export function visibleTo(row: MemoryRow, projectId: string | null): boolean {
-  return row.projectId === null || row.projectId === projectId;
+  return (!row.visibility || row.visibility === "personal") && (!row.memoryState || row.memoryState === "active") && (row.projectId === null || row.projectId === projectId);
 }
 
 /**

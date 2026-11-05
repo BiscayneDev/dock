@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: { cpus: 1, webpackBuildWorker: false, webpackMemoryOptimizations: true },
+  // Only the sequential build wrapper sets this after a successful fresh tsc.
+  typescript: { ignoreBuildErrors: process.env.DOCK_BUILD_TYPES_CHECKED === "true" },
   // Approval previews: the headless Chromium (@sparticuz/chromium) must load from node_modules unbundled,
   // and its binary files must ship with the worker tick function that captures previews.
   serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],

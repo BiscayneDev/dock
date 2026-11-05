@@ -1,5 +1,13 @@
 {
   "crons": [
-    { "path": "/api/worker/tick", "schedule": "* * * * *" }
-  ]
+    {
+      "path": "/api/worker/tick",
+      "schedule": "* * * * *"
+    }
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "review/mobile-knowledge-foundations": false
+    }
+  }
 }

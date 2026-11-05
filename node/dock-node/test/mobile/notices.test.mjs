@@ -1,0 +1,5 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { noticeDelivery } from '../../src/mobile/notices.mjs';
+test('no private body in notification; only provider acknowledgment marks delivered; retry uses same event', async () => { let pending = true, locked = false, fail = true, acks = 0; const events = []; const store = { pendingNotices: async () => pending ? [{ id: 'n', kind: 'reply_ready', sessionId: 's', privateReply: 'DO NOT DISCLOSE' }] : [], claimNotice: async () => locked ? false : (locked = true), ackNotice: async () => { pending = false; acks++; locked = false; }, releaseNotice: async () => { locked = false; } }; const deliver = noticeDelivery({ store, publish: async (e) => { events.push(e); if (fail)
+        throw Error('offline'); return { accepted: true, eventId: e.eventId }; } }); assert.equal((await deliver()).delivered, 0); assert.equal(acks, 0); fail = false; assert.equal((await deliver()).delivered, 1); assert.equal((await deliver()).delivered, 0); assert.equal(acks, 1); assert.equal(events[0].eventId, events[1].eventId); assert.equal(JSON.stringify(events).includes('DO NOT DISCLOSE'), false); });
