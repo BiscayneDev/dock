@@ -4,6 +4,7 @@ import{adminClient}from'@/lib/tenancy'
 import{modelHoldStore}from'./executions'
 import{boundChatRequest}from'../../node/dock-node/src/execution/chat-contract.mjs'
 import{boundedModelGateway}from'../../node/dock-node/src/execution/gateway.mjs'
+import{quotedShipyardTransport}from'../../node/dock-node/src/execution/shipyard-model.mjs'
 import{pricedModelTransport}from'../../node/dock-node/src/execution/http-model.mjs'
 // Per-execution bearer only, never an owner/controller key. Capability hashes
 // are created by trusted provisioning after exact decision, not by the phone.
@@ -19,7 +20,8 @@ export async function executionModelRequest(request:Request,chat=false){
  if(typeof input.requestId!=='string'||!/^[a-f0-9-]{36}$/i.test(input.requestId)||typeof input.model!=='string'||typeof input.prompt!=='string')throw Error('Bound model request required')
  const path=process.env.DOCK_EXECUTION_MODEL_CONTRACT;if(!path?.startsWith('/'))throw Error('Private qualified model contract unavailable')
  const contract=JSON.parse(await readFile(path,'utf8'))
- const transport=pricedModelTransport({endpoint:contract.endpoint,apiKey:process.env.DOCK_EXECUTION_UPSTREAM_KEY,contract,structuredChat:chat})
+ if(contract.kind==='shipyard-stage-quote'&&!chat)throw Error('Quoted routing requires structured chat')
+ const transport=contract.kind==='shipyard-stage-quote'?quotedShipyardTransport({endpoint:contract.endpoint,apiKey:process.env.DOCK_EXECUTION_UPSTREAM_KEY,contract}):pricedModelTransport({endpoint:contract.endpoint,apiKey:process.env.DOCK_EXECUTION_UPSTREAM_KEY,contract,structuredChat:chat})
  const store=modelHoldStore(db);const gateway=boundedModelGateway({store:{...store,reserve:async(i:{requestId:string;quoteId:string;maxCostMicros:number})=>{const{data,error}=await db.rpc('mobile_capability_reserve',{p_capability:match[1],p_hash:hash,p_request:i.requestId,p_quote:i.quoteId,p_max:i.maxCostMicros});if(error)throw Error('Capability reservation refused');return{allowed:!!data,holdId:data}}},...transport})
  const text=await gateway({executionId:cap.execution_id,requestId:input.requestId,model:input.model,prompt:input.prompt});return chat?{chat:JSON.parse(text),stream:bound?.stream}:{text}
 }

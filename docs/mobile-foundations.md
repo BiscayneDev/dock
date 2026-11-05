@@ -243,3 +243,13 @@ rather than falling back to broad personal recall when Beacon is disabled.
 Completed specialist output returns to its owner's canonical conversation once,
 but is not automatically inserted into personal recall or business memory.
 Sharing a distilled fact still requires the exact owner/admin promotion.
+
+A separate optional `shipyard-stage-quote` transport consumes request-bound
+three-stage quotes while preserving `model: auto` and Jev routing. It does not
+reuse the single-stage fixed-model contract. It verifies exact request digest,
+stable revision, quote expiry/identity and authoritative all-stage settlement;
+Dock reserves its own execution budget before serve. Unknown outcomes keep the
+hold and never retry. This depends on the unactivated inference draft at
+https://github.com/BiscayneDev/shipyard-inference/pull/51 and actual operator stage
+contracts, none configured here. The cross-repository local proof uses actual
+Dock transport and inference gateway/router, with fictional prices/providers.
