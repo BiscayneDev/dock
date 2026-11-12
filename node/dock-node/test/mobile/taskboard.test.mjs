@@ -54,3 +54,16 @@ test('definitely-unsent retry can succeed', async () => {
     await b.deliver(o.key, { send: async () => { if (++n < 2) throw Object.assign(Error('x'), { definitelyNotSent: true }); } });
     assert.equal(o.status, 'delivered'); assert.equal(n, 2);
 });
+test('routine task closes on proof without the owner; owner-review task waits', () => {
+    const b = taskBoard(); b.create({ id: 'r', brief: 'x', agentId: 'a', review: 'none' }); b.create({ id: 'p', brief: 'x', agentId: 'a' });
+    for (const id of ['r', 'p']) { b.transition(id, 'delegated'); b.transition(id, 'running'); }
+    assert.throws(() => b.transition('r', 'done', { actor: 'agent' }), /Proof/);
+    assert.equal(b.transition('r', 'done', { actor: 'agent', evidence: ['fictional passing check'] }).state, 'done');
+    assert.throws(() => b.transition('p', 'done', { actor: 'agent', evidence: ['e'] }), /owner/);
+});
+test('state changes carry no authority; payment-style handoffs never auto-retry', async () => {
+    const b = mk(); b.transition('t1', 'delegated'); const o = b.enqueue('t1', 'pay', 'm', { noRetry: true }); let n = 0;
+    await b.deliver(o.key, { send: async () => { n++; throw Object.assign(Error('x'), { definitelyNotSent: true }); } });
+    assert.equal(n, 1); assert.equal(o.status, 'failed'); assert.equal(b.inbox()[0].state, 'blocked');
+    assert.equal(typeof b.approve, 'undefined'); assert.equal(typeof b.spend, 'undefined');
+});
