@@ -21,7 +21,7 @@ try {
     await page.screenshot({ path: '/downloads/dock-tasks-390px-bottom-FICTIONAL-LOCAL.png' });
     const m = await page.evaluate(() => { const nav = [...document.querySelectorAll('*')].filter(e => getComputedStyle(e).position === 'fixed' && e.getBoundingClientRect().bottom >= innerHeight - 2 && e.getBoundingClientRect().height < 200).map(e => e.getBoundingClientRect().top)[0]; const cards = [...document.querySelectorAll('article')]; const last = cards.at(-1).getBoundingClientRect(); return { navTop: nav ?? null, lastBottom: last.bottom, w: [document.documentElement.scrollWidth, innerWidth] }; });
     console.log(page.url()); console.log(text); console.log(JSON.stringify(m));
-    const low = text.toLowerCase(); assert.ok(['waiting on you', 'you decide: pick headline a or b', 'ready for you to check', 'we don\'t know if it was received', 'fictional result: the pricing table now shows three plans.', 'fictional check: 12 of 12 passed', 'done'].every(x => low.includes(x)));
+    const low = text.toLowerCase(); assert.ok(['waiting on you', 'you decide: pick headline a or b', 'ready for you to check', 'stopped before reporting back', 'fictional result: the pricing table now shows three plans.', 'fictional check: 12 of 12 passed', 'done'].every(x => low.includes(x)));
     for (const bad of ['proof 0', 'handoff delivered', 'review not required']) assert.ok(!low.includes(bad), bad);
     assert.ok(m.w[0] <= m.w[1], 'no horizontal overflow'); if (m.navTop !== null) assert.ok(m.lastBottom <= m.navTop - 8, 'last card clear of fixed nav ' + JSON.stringify(m));
     console.log('UI_PASS');

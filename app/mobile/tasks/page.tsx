@@ -18,13 +18,13 @@ export default async function Tasks() {
     // Only say what the ledger actually records. Nothing is inferred beyond it.
     const reason = (t: any) => {
         if (t.state === 'waiting_on_you') return `You decide: ${t.waiting_on}`;
-        if (t.state === 'blocked') return handoff(t.id) === 'uncertain' ? `Sent to ${label(t.agent_key)}, but we don't know if it was received. It was not sent again.` : 'Stopped. Nothing is running.';
+        if (t.state === 'blocked') return handoff(t.id) === 'uncertain' ? `${label(t.agent_key)} started this, then stopped before reporting back. We don't know how far it got. It was not run again.` : 'Stopped. Nothing is running.';
         if (t.state === 'failed') return 'This did not finish. Nothing was retried automatically.';
         if (t.state === 'ready_for_review') return t.review_policy === 'owner' ? 'Needs your check before it counts as done.' : '';
         return '';
     };
     return <main className="mx-auto max-w-xl space-y-6 px-4 pt-8 pb-40">
-        <header className="space-y-1"><p className="text-sm text-neutral-500">Dock / Tasks</p><h1 className="text-2xl font-semibold">What needs you</h1></header>
+        <header className="space-y-1"><p className="text-sm text-neutral-500">Dock / Tasks</p><h1 className="text-2xl font-semibold">{(tasks ?? []).some((t: any) => ['waiting_on_you', 'blocked', 'failed', 'ready_for_review'].includes(t.state)) ? 'What needs you' : 'Tasks'}</h1></header>
         {(tasks ?? []).length === 0 && <p className="text-neutral-500">Nothing yet. Tasks from your phone show up here.</p>}
         {GROUPS.map(([state, title], gi) => { if (GROUPS.findIndex(g => g[1] === title) !== gi) return null;
             const rows = (tasks ?? []).filter((t: any) => GROUPS.some(([s, n]) => n === title && s === t.state)); if (!rows.length) return null;

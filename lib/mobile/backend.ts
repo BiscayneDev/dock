@@ -26,7 +26,7 @@ export async function mobileBackend(request: Request) {
     const context = async (...args: Parameters<Awaited<ReturnType<typeof canonicalKnowledge>>>) => (await canonicalKnowledge())(...args);
     const store = mobileStore(principal);
     const tasks = process.env.DOCK_MOBILE_TASK_LEDGER === 'true' ? taskLedger({ db: adminClient(), principal }) : undefined; // default off; needs migration 0023
-    const service = mobileConversationService({ tasks, onTaskError: () => { }, store, context, recordTurn: async () => { }, // canonical turn memory is inserted atomically by mobile_complete
+    const service = mobileConversationService({ tasks, queue: tasks !== undefined && process.env.DOCK_MOBILE_TASK_QUEUE === 'true', onTaskError: () => { }, store, context, recordTurn: async () => { }, // canonical turn memory is inserted atomically by mobile_complete
         answer: async ({ session, text, history, context, signal }: any) => {
             if (signal?.aborted)
                 throw Error('Cancelled');

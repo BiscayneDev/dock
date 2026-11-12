@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 // records the task after its own durable turn completion, so no client or task supplies completion.
 // Flag-on: the claim is authoritative (fail closed before the model), the turn is not cancelled by client
 // disconnect, and the recorded result is recoverable by the same request id. Display transitions are best-effort.
-export function mobileConversationService({ store, context, answer, recordTurn, planSpecialist = undefined, tasks = /** @type {any} */ (undefined), onTaskError = () => { } }) {
+export function mobileConversationService({ store, context, answer, recordTurn, planSpecialist = undefined, tasks = /** @type {any} */ (undefined), queue = false, onTaskError = () => { } }) {
     const track = async fn => { if (!tasks) return; try { await fn(); } catch (e) { onTaskError(e); } };
     const hash = x => createHash('sha256').update(JSON.stringify(x)).digest('hex');
     async function get(principal, id) { const s = await store.session(id); if (!s || s.deviceId !== principal.deviceId || s.ownerId !== principal.ownerId || s.workspaceId !== principal.workspaceId)
@@ -20,9 +20,11 @@ export function mobileConversationService({ store, context, answer, recordTurn, 
             const fingerprint = hash({ sessionId, text }), receipt = await store.claim(s, requestId, fingerprint);
             if (receipt.status === 'complete')
                 return receipt.result;
+            if (queue && tasks && receipt.status !== 'claimed')
+                return { text: 'Already queued. Check your tasks for the result.', queued: true, sessionId: s.id, requestId, proposals: [] };
             if (receipt.status !== 'claimed')
                 throw Error('Turn pending or conflicted; read status, do not replay inference');
-            if (tasks) {
+            if (tasks && !queue) {
                 // Flag-on: the durable claim is authoritative and fails closed BEFORE any model dispatch.
                 // Only display transitions below are best-effort.
                 try {
@@ -36,6 +38,15 @@ export function mobileConversationService({ store, context, answer, recordTurn, 
                     throw Error('Task claim not recorded; nothing was sent to the model');
                 }
                 await track(async () => { await tasks.transition(requestId, 'delegated', 'system'); await tasks.transition(requestId, 'running', 'agent'); });
+            }
+            if (queue && tasks) {
+                // Durable queue mode: nothing is sent to a model here. A separate lease-fenced worker runs the job.
+                try { await tasks.open({ id: requestId, sessionId, agentKey: s.agentId, review: 'none', brief: text.slice(0, 500) }); if (await tasks.enqueue(requestId, text) !== true) throw Error('not queued'); }
+                catch (e) { onTaskError(e); await store.fail(s, requestId, fingerprint).catch(() => { }); throw Error('Task not queued; nothing was started'); }
+                const ack = { text: 'Queued. The result will appear in your tasks.', queued: true, sessionId: s.id, requestId, proposals: [] };
+                // Close the turn-store claim with the acknowledgement so the session is not blocked and a retry returns it.
+                await store.complete(s, requestId, fingerprint, { user: text, assistant: ack.text, reply: ack, proposals: [], agentId: s.agentId });
+                return ack;
             }
             try {
                 const shared = await context({ ...principal, projectId: s.projectId, repoKeys: s.repoKeys, agentId: s.agentId }, text);

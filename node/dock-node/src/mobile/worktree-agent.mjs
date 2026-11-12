@@ -17,6 +17,7 @@ export function worktreeAgent({ repoDir, worktreesRoot, edit }) {
         const after = tests(dir), stat = git(dir, 'diff', '--shortstat', 'HEAD~1', 'HEAD').trim();
         const pass = s => (s.out.match(/# pass (\d+)/) || [])[1] ?? '?', fail = s => (s.out.match(/# fail (\d+)/) || [])[1] ?? '?';
         if (!after.ok) throw Error('Tests still failing after the change');
-        return { text: `Changed the code in its own branch ${branch}; the tests now pass.`, evidence: [`Tests before: ${pass(before)} passed, ${fail(before)} failed. After: ${pass(after)} passed, ${fail(after)} failed.`, `Diff: ${stat}`, `Branch ${branch} in its own worktree; the shared checkout was not touched.`] };
+        const files = (stat.match(/(\d+) files? changed/) || [])[1] ?? '?';
+        return { text: `Fixed. All ${pass(after)} tests pass.`, evidence: [`Tests: ${fail(before)} failing before, ${fail(after)} failing after (${pass(after)} passing).`, `Changed ${files} file${files === '1' ? '' : 's'}: ${stat.replace(/^\s*\d+ files? changed, /, '')}`, `Kept on its own branch (${branch.slice(0, 13)}...), apart from the shared code.`] };
     };
 }
