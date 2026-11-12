@@ -7,7 +7,7 @@ import { verifyReceipt } from './receipt.mjs';
 // unless the caller passes a board over fileTaskStore (or a future server-side store).
 // Recovery lookups must be backend-authenticated and scoped: the receipt has to name the same
 // owner, session and request, and carry a digest the backend computed. The task cannot supply it.
-export function taskBackedDock({ dock, board = taskBoard(), agentId = 'dock', ownerId = undefined, workspaceId = undefined, receiptKey = undefined, status = undefined, health = undefined, now = () => Date.now() }) {
+export function taskBackedDock({ dock, board = taskBoard(), agentId = 'dock', ownerId = undefined, workspaceId = undefined, receiptKey = undefined, status = undefined, health = undefined, ledger = undefined, now = () => Date.now() }) {
     // Completion only counts as a backend-signed receipt (Ed25519 public key held here) for this exact scope.
     const scoped = (r, sessionId, requestId) => receiptKey && ownerId ? verifyReceipt(receiptKey, r, { ownerId, workspaceId, sessionId, requestId }, { now: now() }) : null;
     const proof = {};
@@ -24,10 +24,29 @@ export function taskBackedDock({ dock, board = taskBoard(), agentId = 'dock', ow
             try { board.create({ id, brief: text.slice(0, 500), agentId, review: 'none' }); board.transition(id, 'delegated'); } catch (e) { if (e.message !== 'Task exists') throw e; }
             const h = board.enqueue(id, 'turn', text, { noRetry: true });
             let reply;
+            // Durable mode: open the server-side task and claim the single attempt BEFORE sending. If the claim
+            // is already taken (earlier attempt, possibly before a restart), do not send: recover by receipt only.
+            if (ledger) {
+                await ledger.open({ id, sessionId, agentKey: agentId, review: 'none', brief: text.slice(0, 500) });
+                await ledger.transition(id, 'delegated', 'system').catch(() => { });
+                if (h.status === 'pending' && !await ledger.claimAttempt(id, 'turn')) { h.status = 'uncertain'; h.attempts = Math.max(h.attempts, 1); }
+            }
             await board.deliver(h.key, {
                 send: async () => { reply = await dock.turn({ sessionId, requestId, text, signal }); },
                 lookup: status && ownerId && receiptKey ? async () => { const r = scoped(await status({ ownerId, sessionId, requestId }), sessionId, requestId); if (r?.status === 'complete') { proof[id] = r.replyDigest; return true; } return r?.status === 'failed' ? false : undefined; } : undefined
             });
+            let receipt;
+            if (h.status === 'delivered' && board.get(id).state === 'done') return { text: 'Dock already completed this request. Open the session to read the reply.' };
+            if (ledger && h.status === 'delivered') {
+                // Durable completion needs a verified backend receipt, whether the send returned a reply or not.
+                receipt = status && ownerId && receiptKey ? scoped(await status({ ownerId, sessionId, requestId }), sessionId, requestId) : null;
+                if (receipt?.status !== 'complete') h.status = 'uncertain';
+                else {
+                    await ledger.finish(id, 'turn', 'delivered', receipt.replyDigest);
+                    await ledger.transition(id, 'delegated', 'system').catch(() => { }); await ledger.transition(id, 'running', 'agent').catch(() => { });
+                    if (!await ledger.transition(id, 'done', 'agent', [`signed receipt ${receipt.replyDigest}`])) h.status = 'uncertain';
+                }
+            }
             if (h.status === 'delivered') {
                 const t = board.get(id); if (t.state === 'blocked') board.transition(id, 'delegated', { actor: 'system' });
                 if (t.state === 'delegated') board.transition(id, 'running');
@@ -35,7 +54,7 @@ export function taskBackedDock({ dock, board = taskBoard(), agentId = 'dock', ow
                 if (reply) return reply;
             }
             if (h.status === 'delivered') return { text: 'Dock already completed this request. Open the session to read the reply.' };
-            if (h.status === 'uncertain' || h.status === 'failed') { try { board.transition(id, h.status === 'failed' ? 'failed' : 'blocked', { actor: 'system' }); } catch { } }
+            if (h.status === 'uncertain' || h.status === 'failed') { if (ledger) await ledger.transition(id, h.status === 'failed' ? 'failed' : 'blocked', 'system').catch(() => { }); try { board.transition(id, h.status === 'failed' ? 'failed' : 'blocked', { actor: 'system' }); } catch { } }
             throw Error(h.status === 'uncertain' ? 'Dock turn status uncertain; not replaying' : 'Dock turn failed; not retried');
         }
     };
