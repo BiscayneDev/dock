@@ -41,7 +41,13 @@ try {
     await page.goto('http://127.0.0.1:3107/assistant?id=' + sess.conversation_id, { waitUntil: 'networkidle2', timeout: 90000 }).catch(() => {});
     try { await page.waitForFunction(() => document.body.innerText.includes('Fixed. All 2'), { timeout: 60000 }); } catch { console.log('RESULT NOT SHOWN'); }
     console.log('TEXT', (await page.evaluate(() => document.body.innerText)).slice(0, 500));
+    const T0 = await page.evaluate(() => document.body.innerText); console.log('REGEN_ON_WORKER_RESULT', T0.includes('Regenerate'));
+    const composerOk = await page.evaluate(() => { const box = [...document.querySelectorAll('textarea')][0].closest('div[class*=rounded]').parentElement.getBoundingClientRect(); const btn = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Run in background').getBoundingClientRect(); return { inside: btn.right <= box.right && btn.left >= box.left, btnH: btn.height, boxRight: box.right, btnRight: btn.right }; }); console.log('COMPOSER', JSON.stringify(composerOk));
     await page.screenshot({ path: '/downloads/dock-chat-390px-top-FICTIONAL-LOCAL.png' });
     await page.evaluate(() => { for (const e of [document.scrollingElement, ...document.querySelectorAll('*')]) if (e && e.scrollHeight > e.clientHeight + 40) e.scrollTop = e.scrollHeight; }); await new Promise(r => setTimeout(r, 600));
-    await page.screenshot({ path: '/downloads/dock-chat-390px-bottom-FICTIONAL-LOCAL.png' }); await browser.close();
+    await page.screenshot({ path: '/downloads/dock-chat-390px-bottom-FICTIONAL-LOCAL.png' });
+    // ordinary chat is unchanged: a plain assistant reply as the last message keeps Regenerate
+    await fetch('http://127.0.0.1:4597/rest/v1/messages', { method: 'POST', body: JSON.stringify({ conversation_id: sess.conversation_id, role: 'assistant', content: 'FICTIONAL ordinary reply', agent: 'chief', meta: {} }) });
+    await page.goto('http://127.0.0.1:3107/assistant?id=' + sess.conversation_id, { waitUntil: 'networkidle2', timeout: 90000 }).catch(() => {}); await new Promise(r => setTimeout(r, 2500));
+    console.log('REGEN_ON_ORDINARY_REPLY', (await page.evaluate(() => document.body.innerText)).includes('Regenerate')); await browser.close();
 } catch (e) { console.error('FAIL', e.message); } finally { console.log('LOG', log.slice(-1500)); next?.kill(); pg.kill(); process.exit(0); }

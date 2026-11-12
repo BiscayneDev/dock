@@ -333,7 +333,11 @@ export function ChatThread({
                 text={getText(message)}
                 agent={agent}
                 isLast={index === lastAssistantIndex && !busy}
-                onRegenerate={() => regenerate(model ? { body: { model } } : undefined).catch(() => null)}
+                onRegenerate={
+                  (message.metadata as { workerResult?: boolean } | undefined)?.workerResult
+                    ? undefined
+                    : () => regenerate(model ? { body: { model } } : undefined).catch(() => null)
+                }
                 conversationId={conversationId}
                 runId={(message.metadata as { runId?: string } | undefined)?.runId}
                 briefIds={(message.metadata as { briefIds?: string[] } | undefined)?.briefIds}

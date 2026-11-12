@@ -71,6 +71,8 @@ export function toInitialMessages(detail: ConversationDetail | null): UIMessage[
     metadata: {
       ...(message.runId ? { runId: message.runId } : {}),
       ...(Array.isArray(message.meta?.briefIds) ? { briefIds: message.meta.briefIds as string[] } : {}),
+      // Server-written provenance of a durable worker result (never inferred from the text).
+      ...(message.role === "agent" && typeof message.meta?.mobileTaskId === "string" ? { workerResult: true } : {}),
       ...(typeof message.meta?.kind === "string" ? { kind: message.meta.kind as string } : {}),
     },
   })) as UIMessage[]

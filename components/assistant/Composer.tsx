@@ -303,8 +303,8 @@ export function Composer({
           className="w-full resize-none bg-transparent text-[15px] leading-relaxed outline-none"
           style={{ color: "var(--ink)" }}
         />
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1">
+        <div className="mt-3 flex items-end justify-between gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
             <input
               ref={fileInput}
               type="file"
@@ -334,7 +334,7 @@ export function Composer({
                   onClick={() => onBackgroundChange(!background)}
                   aria-pressed={background}
                   title="Queue this message as a background run"
-                  className="rounded-full px-2.5 py-1 text-[12px] transition-colors"
+                  className="whitespace-nowrap rounded-full px-2.5 py-1 text-[12px] transition-colors"
                   style={{
                     color: background ? "var(--ink)" : "var(--ink-3)",
                     background: background ? "rgba(231,201,121,0.14)" : "transparent",
