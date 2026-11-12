@@ -9,5 +9,6 @@
     "deploymentEnabled": {
       "review/mobile-knowledge-foundations": false
     }
-  }
+  },
+  "buildCommand": "next build"
 }
