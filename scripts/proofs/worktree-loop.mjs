@@ -15,7 +15,7 @@ writeFileSync(join(repo, 'math.mjs'), 'export const add = (a, b) => a - b; // FI
 writeFileSync(join(repo, 'math.test.mjs'), "import test from 'node:test';import assert from 'node:assert/strict';import { add } from './math.mjs';test('add',()=>assert.equal(add(2,3),5));test('add zero',()=>assert.equal(add(0,0),0));\n");
 sh(repo, 'add', '-A'); sh(repo, '-c', 'user.name=x', '-c', 'user.email=x@example.invalid', 'commit', '-qm', 'FICTIONAL init');
 const mainBefore = readFileSync(join(repo, 'math.mjs'), 'utf8');
-const agent = worktreeAgent({ repoDir: repo, worktreesRoot: wts, edit: d => writeFileSync(join(d, 'math.mjs'), 'export const add = (a, b) => a + b;\n') });
+const agent = worktreeAgent({ repoDir: repo, worktreesRoot: wts, editCmd: ['node', '-e', "require('fs').writeFileSync('math.mjs','export const add = (a, b) => a + b;\\n')"] });
 const U = n => `${String(n).repeat(8)}-${String(n).repeat(4)}-${String(n).repeat(4)}-${String(n).repeat(4)}-${String(n).repeat(12)}`, O = U(1);
 const out = [];
 for (const n of [4, 5]) {
@@ -26,5 +26,10 @@ for (const n of [4, 5]) {
 const wtDirs = [4, 5].map(n => join(wts, 'wt-' + U(n))); assert.ok(wtDirs.every(existsSync)); assert.notEqual(wtDirs[0], wtDirs[1]);
 assert.equal(readFileSync(join(repo, 'math.mjs'), 'utf8'), mainBefore, 'shared checkout untouched');
 assert.ok(sh(repo, 'branch', '--list', 'task/*').split('\n').filter(Boolean).length === 2);
+// Hostile edit step: tries to read the sibling task's worktree and the parent's repo; both must be invisible inside the sandbox.
+const sib = join(wts, 'wt-' + U(4), 'math.mjs'), hostile = `const fs=require('fs');let l='';for(const p of [${JSON.stringify(sib)},${JSON.stringify(join(repo, 'math.mjs'))}]){try{l+=fs.readFileSync(p,'utf8')}catch(e){l+='blocked:'+e.code+';'}}fs.writeFileSync('loot.txt',l);fs.writeFileSync('math.mjs','export const add = (a, b) => a + b;\\n')`;
+await db.rpc('mobile_task_open', { p_task: U(6), p_owner: O, p_workspace: U(2), p_session: U(3), p_agent: 'chief', p_review: 'none', p_brief: 'FICTIONAL hostile' }); await db.rpc('mobile_job_enqueue', { p_task: U(6), p_owner: O, p_input: 'FICTIONAL hostile' });
+const hr = await runOneJob({ db, worker: 'wh', answer: worktreeAgent({ repoDir: repo, worktreesRoot: wts, editCmd: ['node', '-e', hostile] }), ttlSeconds: 60 }); assert.equal(hr.recorded, true);
+const loot = readFileSync(join(wts, 'wt-' + U(6), 'loot.txt'), 'utf8'); assert.match(loot, /^blocked:ENOENT;blocked:ENOENT;$/, loot);
 const rows = await db.sql(`select state,result_summary,evidence::text from mobile_tasks order by id`);
-console.log(JSON.stringify({ realPostgres: true, realGitWorktrees: 2, realTestRuns: true, sharedCheckoutUntouched: true, taskRows: rows, agent: 'scripted stand-in, not a model', deployed: false }));
+console.log(JSON.stringify({ realPostgres: true, realGitWorktrees: 2, realTestRuns: true, sharedCheckoutUntouched: true, hostileEditCouldNotReadSiblingOrParent: true, untrustedCodeRunsInNamespaceSandbox: true, taskRows: rows, agent: 'scripted stand-in, not a model', deployed: false }));
