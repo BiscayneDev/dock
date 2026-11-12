@@ -48,7 +48,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
    elif u.path=='/fixture/seed-tasks':
     # FICTIONAL labels only. Drives the real ledger functions so the page shows real ledger rows.
     sess='99999999-9999-4999-8999-999999999999'
-    def mk(i,brief,review,path,ev="'[]'",waiting=None,handoff=None):
+    def mk(i,brief,review,path,ev="'[]'",waiting=None,handoff=None,summary=None):
      t=f'aaaaaaaa-0000-4000-8000-00000000000{i}'
      sql(f"select mobile_task_open('{t}','{o}','{w}','{sess}','chief','{review}',{lit(brief)})")
      for k,st in enumerate(path):
@@ -56,12 +56,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
       sql(f"select mobile_task_transition('{t}','{o}','{st}','{actor}',{ev if k==len(path)-1 else chr(39)+'[]'+chr(39)}::jsonb,{lit(waiting) if st=='waiting_on_you' else 'null'})")
      if handoff:
       sql(f"select mobile_task_attempt('{t}','{o}','turn',true)")
-      if handoff=='delivered':sql(f"select mobile_task_finish('{t}','{o}','turn','delivered','{'d'*64}')")
+      if handoff=='delivered':sql(f"select mobile_task_finish('{t}','{o}','turn','delivered','{'d'*64}',{lit(summary)})")
     mk(1,'FICTIONAL: Choose between two fictional landing page headlines','none',['delegated','running','waiting_on_you'],waiting='Pick headline A or B')
-    mk(2,'FICTIONAL: Review the fictional pricing table change','owner',['delegated','running','ready_for_review'],ev="'[\"fictional test log\"]'",handoff='delivered')
+    mk(2,'FICTIONAL: Review the fictional pricing table change','owner',['delegated','running','ready_for_review'],ev="'[\"Fictional check: 12 of 12 passed\"]'",handoff='delivered',summary='Fictional result: the pricing table now shows three plans.')
     mk(3,'FICTIONAL: Fix a fictional typo in a fictional README','none',['delegated','blocked'],handoff='uncertain')
     mk(4,'FICTIONAL: Draft fictional release notes','none',['delegated','running'])
-    mk(5,'FICTIONAL: Update a fictional changelog','none',['delegated','running','done'],ev="'[\"fictional signed receipt\"]'",handoff='delivered')
+    mk(5,'FICTIONAL: Update a fictional changelog','none',['delegated','running','done'],ev="'[\"Fictional check: changelog builds\"]'",handoff='delivered',summary='Fictional result: the changelog has the new entry.')
     result={'ok':True}
    elif u.path=='/fixture/model-state':result={'holds':int(sql("select count(*)from mobile_model_holds")),'settled':int(sql("select count(*)from mobile_model_holds where state='settled'")),'architectNotes':int(sql("select count(*)from memory_items where visibility='agent'and author_agent='architect'and memory_state='active'"))}
    elif u.path=='/fixture/beacon-state':result={'candidates':int(sql("select count(*)from memory_items where visibility='agent'and memory_state='proposed'")),'privateNotes':int(sql("select count(*)from memory_items where visibility='agent'and memory_state='active'")),'shared':int(sql("select count(*)from memory_items where visibility='business'"))}

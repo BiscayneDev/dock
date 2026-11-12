@@ -15,9 +15,14 @@ try {
     await page.setCookie({ name: 'sb-127-auth-token', value: 'base64-' + Buffer.from(JSON.stringify({ access_token: b64({ alg: 'HS256', typ: 'JWT' }) + '.' + b64({ sub: u, email: 'demo@example.com', aud: 'authenticated', role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 }) + '.fictional-signature', refresh_token: 'demo', token_type: 'bearer', expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: u, email: 'demo@example.com' } })).toString('base64url'), domain: '127.0.0.1', path: '/' });
     let text = ''; for (let i = 0; i < 60; i++) { try { await page.goto('http://127.0.0.1:3105/mobile/tasks', { waitUntil: 'domcontentloaded', timeout: 60000 }); text = await page.evaluate(() => document.body.innerText); if (text.includes('What needs you')) break; } catch { } await new Promise(r => setTimeout(r, 1500)); }
     await new Promise(r => setTimeout(r, 1000)); text = await page.evaluate(() => document.body.innerText);
-    await page.screenshot({ path: '/downloads/dock-tasks-390px-fictional.png', fullPage: true });
-    console.log(page.url()); console.log(text);
-    const low = text.toLowerCase(); assert.ok(['waiting on you', 'pick headline a or b', 'ready for review', 'outcome unknown (not retried)', 'closed on recorded proof', 'blocked'].every(x => low.includes(x)));
-    const w = await page.evaluate(() => [document.documentElement.scrollWidth, innerWidth]); assert.ok(w[0] <= w[1], 'no horizontal overflow ' + w);
+    await page.screenshot({ path: '/downloads/dock-tasks-390px-top-FICTIONAL-LOCAL.png' });
+    // scroll to the very bottom and check the last card clears the fixed nav
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight)); await new Promise(r => setTimeout(r, 500));
+    await page.screenshot({ path: '/downloads/dock-tasks-390px-bottom-FICTIONAL-LOCAL.png' });
+    const m = await page.evaluate(() => { const nav = [...document.querySelectorAll('*')].filter(e => getComputedStyle(e).position === 'fixed' && e.getBoundingClientRect().bottom >= innerHeight - 2 && e.getBoundingClientRect().height < 200).map(e => e.getBoundingClientRect().top)[0]; const cards = [...document.querySelectorAll('article')]; const last = cards.at(-1).getBoundingClientRect(); return { navTop: nav ?? null, lastBottom: last.bottom, w: [document.documentElement.scrollWidth, innerWidth] }; });
+    console.log(page.url()); console.log(text); console.log(JSON.stringify(m));
+    const low = text.toLowerCase(); assert.ok(['waiting on you', 'you decide: pick headline a or b', 'ready for you to check', 'we don\'t know if it was received', 'fictional result: the pricing table now shows three plans.', 'fictional check: 12 of 12 passed', 'done'].every(x => low.includes(x)));
+    for (const bad of ['proof 0', 'handoff delivered', 'review not required']) assert.ok(!low.includes(bad), bad);
+    assert.ok(m.w[0] <= m.w[1], 'no horizontal overflow'); if (m.navTop !== null) assert.ok(m.lastBottom <= m.navTop - 8, 'last card clear of fixed nav ' + JSON.stringify(m));
     console.log('UI_PASS');
 } catch (e) { console.error('FAIL', e.message, log.slice(-1200)); process.exitCode = 1; } finally { await browser?.close(); next.kill(); pg.kill(); }

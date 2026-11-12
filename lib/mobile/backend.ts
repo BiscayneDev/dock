@@ -8,6 +8,7 @@ import { loadRoster, maxBriefBudgetCents } from '@/lib/briefs-store';
 import { inferenceStream } from '@/lib/inference';
 import { mobileStore, type Principal } from './store';
 import { mobileConversationService } from '../../node/dock-node/src/mobile/service.mjs';
+import { taskLedger } from '../../node/dock-node/src/mobile/receipt-issuer.mjs';
 export async function mobileBackend(request: Request) {
     // Kill switch remains off until schema, graph and device grant are reviewed.
     if (process.env.DOCK_MOBILE_ENABLED !== 'true')
@@ -24,7 +25,8 @@ export async function mobileBackend(request: Request) {
         throw Error('Configured specialist absent from roster');
     const context = async (...args: Parameters<Awaited<ReturnType<typeof canonicalKnowledge>>>) => (await canonicalKnowledge())(...args);
     const store = mobileStore(principal);
-    const service = mobileConversationService({ store, context, recordTurn: async () => { }, // canonical turn memory is inserted atomically by mobile_complete
+    const tasks = process.env.DOCK_MOBILE_TASK_LEDGER === 'true' ? taskLedger({ db: adminClient(), principal }) : undefined; // default off; needs migration 0023
+    const service = mobileConversationService({ tasks, onTaskError: () => { }, store, context, recordTurn: async () => { }, // canonical turn memory is inserted atomically by mobile_complete
         answer: async ({ session, text, history, context, signal }: any) => {
             if (signal?.aborted)
                 throw Error('Cancelled');

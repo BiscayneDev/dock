@@ -11,6 +11,7 @@ create table public.mobile_tasks(
  state text not null default 'queued' check(state in('queued','delegated','running','blocked','waiting_on_you','ready_for_review','done','failed')),
  waiting_on text,
  evidence jsonb not null default '[]',
+ result_summary text check(result_summary is null or length(result_summary)<=500),
  created_at timestamptz not null default now(),
  updated_at timestamptz not null default now(),
  check(state<>'waiting_on_you' or waiting_on is not null)
@@ -63,16 +64,18 @@ begin
  get diagnostics n=row_count;return n=1;
 end $$;
 -- Backend-only finish. delivered needs a backend-computed reply digest.
-create or replace function public.mobile_task_finish(p_task uuid,p_owner uuid,p_key text,p_status text,p_digest text default null)returns boolean language plpgsql security definer set search_path=public as $$
+create or replace function public.mobile_task_finish(p_task uuid,p_owner uuid,p_key text,p_status text,p_digest text default null,p_summary text default null)returns boolean language plpgsql security definer set search_path=public as $$
 declare n int;
 begin
  if p_status not in('delivered','failed')or(p_status='delivered' and p_digest is null)then return false;end if;
  update public.mobile_task_handoffs h set status=p_status,reply_digest=p_digest from public.mobile_tasks t where h.task_id=p_task and h.key=p_key and t.id=h.task_id and t.owner_id=p_owner and h.status='uncertain';
- get diagnostics n=row_count;return n=1;
+ get diagnostics n=row_count;
+ if n=1 and p_status='delivered' and p_summary is not null then update public.mobile_tasks set result_summary=left(p_summary,500) where id=p_task and owner_id=p_owner;end if;
+ return n=1;
 end $$;
 alter table public.mobile_tasks enable row level security;
 alter table public.mobile_task_versions enable row level security;
 alter table public.mobile_task_handoffs enable row level security;
 revoke all on public.mobile_tasks,public.mobile_task_versions,public.mobile_task_handoffs from anon,authenticated;
-revoke all on function public.mobile_task_transition(uuid,uuid,text,text,jsonb,text),public.mobile_task_open(uuid,uuid,uuid,uuid,text,text,text),public.mobile_task_attempt(uuid,uuid,text,boolean),public.mobile_task_finish(uuid,uuid,text,text,text) from public,anon,authenticated;
+revoke all on function public.mobile_task_transition(uuid,uuid,text,text,jsonb,text),public.mobile_task_open(uuid,uuid,uuid,uuid,text,text,text),public.mobile_task_attempt(uuid,uuid,text,boolean),public.mobile_task_finish(uuid,uuid,text,text,text,text) from public,anon,authenticated;
 commit;

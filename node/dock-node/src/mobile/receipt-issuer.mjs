@@ -18,7 +18,7 @@ export function taskLedger({ db, principal }) {
     return {
         open: ({ id, sessionId, agentKey, review, brief }) => call('mobile_task_open', { p_task: id, p_owner: principal.ownerId, p_workspace: principal.workspaceId, p_session: sessionId, p_agent: agentKey, p_review: review, p_brief: brief }),
         claimAttempt: (id, key) => call('mobile_task_attempt', { p_task: id, p_owner: principal.ownerId, p_key: key, p_no_retry: true }),
-        finish: (id, key, status, digest) => call('mobile_task_finish', { p_task: id, p_owner: principal.ownerId, p_key: key, p_status: status, p_digest: digest ?? null }),
+        finish: (id, key, status, digest, summary) => call('mobile_task_finish', { p_task: id, p_owner: principal.ownerId, p_key: key, p_status: status, p_digest: digest ?? null, p_summary: summary ?? null }),
         transition: (id, next, actor, evidence = [], waiting = null) => call('mobile_task_transition', { p_task: id, p_owner: principal.ownerId, p_next: next, p_actor: actor, p_evidence: evidence, p_waiting: waiting })
     };
 }
