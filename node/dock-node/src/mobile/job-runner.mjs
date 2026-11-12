@@ -14,10 +14,17 @@ export async function runOneJob({ db, worker, secret, answer, repoContext = unde
     const fence = { p_task: job.task_id, p_worker: worker, p_secret: secret, p_epoch: job.epoch };
     if (await rpc('mobile_job_start', fence) !== true) return { ran: false, lost: 'start' };
     onEvent('started');
-    let lost = false; const cancel = new AbortController();
-    // A heartbeat the database refuses (lease lost, or the session's device/grant was revoked) cancels the running work locally.
-    // Latency is up to one heartbeat interval. It kills the sandbox; it cannot undo effects that already happened or a request already in flight.
-    const hb = setInterval(() => { rpc('mobile_job_heartbeat', { ...fence, p_ttl_seconds: ttlSeconds }).then(ok => { if (!ok) { lost = true; cancel.abort(); } }, () => { }); }, heartbeatMs);
+    let lost = false; const cancel = new AbortController(); let lastOk = Date.now();
+    const abort = () => { lost = true; cancel.abort(); };
+    // Heartbeat. A refusal (lease lost, or the session's device/grant was revoked) cancels the running work locally.
+    // LOSS OF DATABASE CONTACT is handled the same way: if no heartbeat has succeeded for 80% of the lease, the worker cancels itself
+    // BEFORE the database lease can expire, so a worker that cannot reach the database stops issuing effects (sandbox kill, proxy 403) instead of
+    // running to a distant wall-clock limit. Latency is bounded by one heartbeat interval. It kills the sandbox; it cannot undo effects that
+    // already happened or a request already in flight.
+    const hb = setInterval(() => {
+        rpc('mobile_job_heartbeat', { ...fence, p_ttl_seconds: ttlSeconds }).then(ok => { if (ok) lastOk = Date.now(); else abort(); }, () => { });
+        if (Date.now() - lastOk > ttlSeconds * 800) abort();
+    }, heartbeatMs);
     try {
         let text, evidence = [];
         // Scoped context. Identity comes from the fenced job in the database, never from task text. Recalled notes and repository
