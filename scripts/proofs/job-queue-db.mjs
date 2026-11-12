@@ -13,7 +13,7 @@ const known = new Set();
 export const db = {
     sql: async q => psql(q),
     rpc: async (fn, a) => {
-        if (a.p_worker && a.p_secret == null && !a.p_worker.startsWith('infra') && /^mobile_(job_(lease|start|heartbeat|finish)|worker_beat)$/.test(fn)) {
+        if (a.p_worker && a.p_secret == null && !a.p_worker.startsWith('infra') && /^mobile_(job_(lease|start|heartbeat|finish|recall|remember|remember_pending)|worker_beat)$/.test(fn)) {
             if (!known.has(a.p_worker)) { await rawRpc('mobile_worker_register', { p_worker: a.p_worker, p_owner: '11111111-1111-1111-1111-111111111111', p_workspace: '22222222-2222-2222-2222-222222222222', p_secret: secretFor(a.p_worker) }); known.add(a.p_worker); }
             a = { ...a, p_secret: secretFor(a.p_worker) };
         }
