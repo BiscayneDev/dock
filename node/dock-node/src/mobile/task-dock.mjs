@@ -7,7 +7,7 @@ import { verifyReceipt } from './receipt.mjs';
 // unless the caller passes a board over fileTaskStore (or a future server-side store).
 // Recovery lookups must be backend-authenticated and scoped: the receipt has to name the same
 // owner, session and request, and carry a digest the backend computed. The task cannot supply it.
-export function taskBackedDock({ dock, board = taskBoard(), agentId = 'dock', ownerId = undefined, workspaceId = undefined, receiptKey = undefined, status = undefined, health = undefined, ledger = undefined, now = () => Date.now() }) {
+export function taskBackedDock({ dock, board = taskBoard(), agentId = 'dock', repoKeys = undefined, ownerId = undefined, workspaceId = undefined, receiptKey = undefined, status = undefined, health = undefined, ledger = undefined, now = () => Date.now() }) {
     // Completion only counts as a backend-signed receipt (Ed25519 public key held here) for this exact scope.
     const scoped = (r, sessionId, requestId) => receiptKey && ownerId ? verifyReceipt(receiptKey, r, { ownerId, workspaceId, sessionId, requestId }, { now: now() }) : null;
     const proof = {};
@@ -21,7 +21,7 @@ export function taskBackedDock({ dock, board = taskBoard(), agentId = 'dock', ow
                 const head = `AGENT ${agentId}: ${r.state.replace(/_/g, ' ')}${r.lastContactAt ? ' (last contact ' + r.lastContactAt + ')' : ''}`;
                 return { text: head + '\n' + (items.length ? items.map(line).join('\n') : 'Nothing waiting on you.') }; }
             const id = requestId;
-            try { board.create({ id, brief: text.slice(0, 500), agentId, review: 'none' }); board.transition(id, 'delegated'); } catch (e) { if (e.message !== 'Task exists') throw e; }
+            try { board.create({ id, brief: text.slice(0, 500), agentId, review: 'none' }); board.transition(id, 'delegated'); if (repoKeys?.length) board.bindContext(id, { repoKeys, agentKey: agentId }); } catch (e) { if (e.message !== 'Task exists') throw e; }
             const h = board.enqueue(id, 'turn', text, { noRetry: true });
             let reply;
             // Durable mode: open the server-side task and claim the single attempt BEFORE sending. If the claim

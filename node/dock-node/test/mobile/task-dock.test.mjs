@@ -59,3 +59,20 @@ test('/tasks shows whether the agent is actually reachable, not just configured'
     assert.match((await mk({ configured: true, lastContactAt: '2026-01-01T00:09:00Z' }).turn({ requestId: 'a', text: '/tasks' })).text, /reachable/);
     assert.match((await mk({ configured: true, lastContactAt: '2026-01-01T00:09:00Z', lastTestOk: false }).turn({ requestId: 'a', text: '/tasks' })).text, /unreachable/);
 });
+import { probeAgent, reachability } from '../../src/mobile/taskboard.mjs';
+test('reachability comes from a real probe: ok, timeout and error are distinguished, config alone is not enough', async () => {
+    const t = Date.parse('2026-01-01T00:00:00Z');
+    assert.equal(reachability(await probeAgent({ ping: async () => 1, now: () => t }), t).state, 'reachable');
+    assert.equal(reachability(await probeAgent({ ping: () => new Promise(() => { }), timeoutMs: 20, now: () => t }), t).state, 'unreachable');
+    assert.equal(reachability(await probeAgent({ ping: async () => { throw Error('x'); }, now: () => t }), t).state, 'unreachable');
+    assert.equal(reachability(await probeAgent({ configured: false, ping: async () => 1 }), t).state, 'not_configured');
+    assert.equal(reachability({ configured: true }, t).state, 'configured_untested');
+    assert.equal(reachability(await probeAgent({ ping: async () => 1, now: () => t }), t + 10 * 60_000).state, 'stale');
+});
+test('each phone task gets its own worktree and task-scoped Beacon scope when repos are granted; no execution starts', async () => {
+    const turns = [];
+    const dock = taskBackedDock({ dock: { open: async () => ({ sessionId: 's1' }), turn: async x => (turns.push(x), { text: 'ok' }) }, repoKeys: ['fictional-repo'], agentId: 'chief' });
+    await dock.open({}); await dock.turn({ sessionId: 's1', requestId: 'aaaaaaaa-1111-4111-8111-111111111111', text: 'a' }); await dock.turn({ sessionId: 's1', requestId: 'bbbbbbbb-2222-4222-8222-222222222222', text: 'b' });
+    const a = dock.board.get('aaaaaaaa-1111-4111-8111-111111111111').context, b = dock.board.get('bbbbbbbb-2222-4222-8222-222222222222').context;
+    assert.notEqual(a.worktree, b.worktree); assert.equal(a.beaconScope.sharedWrites, 'owner-promotion-only'); assert.equal(a.beaconScope.taskId, 'aaaaaaaa-1111-4111-8111-111111111111'); assert.equal(turns.length, 2);
+});

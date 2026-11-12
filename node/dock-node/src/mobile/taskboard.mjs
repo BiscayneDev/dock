@@ -34,6 +34,18 @@ export function reachability(agent, now = Date.now(), maxAgeMs = 5 * 60_000) {
     const age = now - Date.parse(agent.lastContactAt);
     return { state: age <= maxAgeMs ? 'reachable' : 'stale', lastContactAt: agent.lastContactAt };
 }
+// Real check, not config. `ping` must be a cheap transport call (e.g. loading a session); it must never start a
+// model turn, spend, or write. Timeout or error means unreachable; success stamps lastContactAt.
+export async function probeAgent({ configured = true, ping, now = () => Date.now(), timeoutMs = 5000 }) {
+    if (!configured) return { configured: false };
+    let timer;
+    try {
+        await Promise.race([Promise.resolve().then(ping), new Promise((_, rej) => { timer = setTimeout(() => rej(Error('probe timeout')), timeoutMs); })]);
+        return { configured: true, lastContactAt: new Date(now()).toISOString(), lastTestOk: true };
+    }
+    catch { return { configured: true, lastContactAt: new Date(now()).toISOString(), lastTestOk: false }; }
+    finally { clearTimeout(timer); }
+}
 export function taskBoard({ store = memoryTaskStore(), now = () => Date.now(), maxAttempts = 3 } = {}) {
     const get = id => { const t = store.tasks.get(id); if (!t) throw Error('Unknown task'); return t; };
     const save = () => store.save?.();
