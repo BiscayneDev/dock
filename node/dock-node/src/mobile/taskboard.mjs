@@ -76,7 +76,7 @@ export function taskBoard({ store = memoryTaskStore(), now = () => Date.now(), m
             const o = store.outbox.get(k); if (!o) throw Error('Unknown handoff');
             if (o.status === 'delivered' || o.status === 'failed') return o;
             if (o.status === 'uncertain') {
-                const hit = await lookup(o.key);
+                const hit = lookup ? await lookup(o.key) : undefined;
                 if (hit === true) { o.status = 'delivered'; save(); return o; }
                 if (hit !== false) return o; // still cannot tell: do not resend
             }

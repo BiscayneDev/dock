@@ -22,11 +22,24 @@ test('uncertain turn: no replay, task shows as blocked, /tasks costs no model ca
 });
 test('same request id after a disconnect resolves by lookup, with no second model call', async () => {
     let calls = 0, done = false;
-    const dock = taskBackedDock({ dock: { turn: async () => { calls++; throw Error('disconnect'); } }, status: async () => ({ status: done ? 'complete' : 'pending' }) });
+    const D = 'a'.repeat(64);
+    const dock = taskBackedDock({ ownerId: 'o1', dock: { turn: async () => { calls++; throw Error('disconnect'); } }, status: async q => ({ status: done ? 'complete' : 'pending', ownerId: 'o1', sessionId: q.sessionId, requestId: q.requestId, replyDigest: D }) });
     await assert.rejects(dock.turn({ sessionId: 's', requestId: 'r1', text: 'x' }));
     await assert.rejects(dock.turn({ sessionId: 's', requestId: 'r1', text: 'x' }), /uncertain/); // still pending: stays put
     done = true;
     const r = await dock.turn({ sessionId: 's', requestId: 'r1', text: 'x' });
     assert.match(r.text, /already completed/); assert.equal(calls, 1);
     assert.equal(dock.board.get('r1').state, 'done'); assert.deepEqual(dock.board.inbox(), []);
+});
+test('recovery receipt for another owner, session or request, or without a backend digest, is ignored', async () => {
+    for (const bad of [{ ownerId: 'other' }, { sessionId: 'other' }, { requestId: 'other' }, { replyDigest: 'self-claimed' }, { replyDigest: undefined }]) {
+        let calls = 0; const dock = taskBackedDock({ ownerId: 'o1', dock: { turn: async () => { calls++; throw Error('x'); } }, status: async q => ({ status: 'complete', ownerId: 'o1', sessionId: q.sessionId, requestId: q.requestId, replyDigest: 'b'.repeat(64), ...bad }) });
+        await assert.rejects(dock.turn({ sessionId: 's', requestId: 'r', text: 'x' }));
+        await assert.rejects(dock.turn({ sessionId: 's', requestId: 'r', text: 'x' }), /uncertain/);
+        assert.equal(dock.board.get('r').state, 'blocked'); assert.equal(calls, 1);
+    }
+});
+test('without an owner binding no lookup is trusted', async () => {
+    const dock = taskBackedDock({ dock: { turn: async () => { throw Error('x'); } }, status: async () => ({ status: 'complete' }) });
+    await assert.rejects(dock.turn({ sessionId: 's', requestId: 'r', text: 'x' })); await assert.rejects(dock.turn({ sessionId: 's', requestId: 'r', text: 'x' }), /uncertain/);
 });

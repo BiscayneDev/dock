@@ -2,7 +2,13 @@
 // Turns spend model budget, so handoffs are noRetry: one attempt, then lookup by request id.
 // Task state changes here are bookkeeping; they approve nothing and start nothing.
 import { taskBoard } from './taskboard.mjs';
-export function taskBackedDock({ dock, board = taskBoard(), agentId = 'dock', status = undefined }) {
+// Durability: the default board is in memory. A turn is NOT tracked across a server restart
+// unless the caller passes a board over fileTaskStore (or a future server-side store).
+// Recovery lookups must be backend-authenticated and scoped: the receipt has to name the same
+// owner, session and request, and carry a digest the backend computed. The task cannot supply it.
+export function taskBackedDock({ dock, board = taskBoard(), agentId = 'dock', ownerId = undefined, status = undefined }) {
+    const scoped = (r, sessionId, requestId) => r && r.ownerId === ownerId && r.sessionId === sessionId && r.requestId === requestId ? r : null;
+    const proof = {};
     const line = t => `${t.state === 'waiting_on_you' ? 'WAITING ON YOU' : t.state.replace(/_/g, ' ').toUpperCase()}: ${t.id.slice(0, 8)}${t.waitingOn ? ' - ' + t.waitingOn : ''}`;
     return {
         board,
@@ -16,12 +22,12 @@ export function taskBackedDock({ dock, board = taskBoard(), agentId = 'dock', st
             let reply;
             await board.deliver(h.key, {
                 send: async () => { reply = await dock.turn({ sessionId, requestId, text, signal }); },
-                lookup: status ? async () => { const s = await status({ sessionId, requestId }); return s?.status === 'complete' ? true : s?.status === 'failed' ? false : undefined; } : undefined
+                lookup: status && ownerId ? async () => { const r = scoped(await status({ ownerId, sessionId, requestId }), sessionId, requestId); if (r?.status === 'complete' && /^[a-f0-9]{64}$/.test(r.replyDigest ?? '')) { proof[id] = r.replyDigest; return true; } return r?.status === 'failed' ? false : undefined; } : undefined
             });
             if (h.status === 'delivered') {
                 const t = board.get(id); if (t.state === 'blocked') board.transition(id, 'delegated', { actor: 'system' });
                 if (t.state === 'delegated') board.transition(id, 'running');
-                board.transition(id, 'done', { actor: 'agent', evidence: ['dock reply recorded for request ' + requestId] });
+                board.transition(id, 'done', { actor: 'agent', evidence: [`backend receipt ${reply ? 'reply' : 'digest'} for request ${requestId}${proof[id] ? ' ' + proof[id] : ''}`] });
                 if (reply) return reply;
             }
             if (h.status === 'delivered') return { text: 'Dock already completed this request. Open the session to read the reply.' };
