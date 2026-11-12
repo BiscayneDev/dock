@@ -8,6 +8,7 @@ begin;
 create table public.mobile_task_jobs(
  task_id uuid primary key references public.mobile_tasks(id),
  owner_id uuid not null,
+ workspace_id uuid,
  input text not null check(length(input) between 1 and 32000),
  state text not null default 'queued' check(state in('queued','leased','started','done','failed','uncertain')),
  epoch int not null default 0,
@@ -16,7 +17,18 @@ create table public.mobile_task_jobs(
  context jsonb not null default '{}',
  updated_at timestamptz not null default now()
 );
-create table public.mobile_workers(worker text primary key,last_seen timestamptz not null default now());
+-- A worker is registered for ONE owner+workspace scope (both null = shared infrastructure worker). Liveness for an
+-- owner counts only workers registered for that exact scope; an infrastructure worker never makes it look assigned.
+create table public.mobile_workers(worker text primary key,owner_id uuid,workspace_id uuid,last_seen timestamptz not null default now(),check((owner_id is null)=(workspace_id is null)));
+-- Result delivery: exactly one conversation message per task, bound to owner, workspace, session, task and the lease epoch
+-- that finished it. Append-only: nothing here updates or replaces an existing message.
+create table public.mobile_task_deliveries(
+ task_id uuid primary key references public.mobile_tasks(id),
+ owner_id uuid not null,workspace_id uuid not null,session_id uuid not null,epoch int not null,
+ message_id uuid not null,created_at timestamptz not null default now()
+);
+alter table public.mobile_task_deliveries enable row level security;
+revoke all on public.mobile_task_deliveries from anon,authenticated;
 alter table public.mobile_workers enable row level security;
 revoke all on public.mobile_workers from anon,authenticated;
 alter table public.mobile_task_jobs enable row level security;
@@ -25,20 +37,20 @@ create or replace function public.mobile_job_enqueue(p_task uuid,p_owner uuid,p_
 declare n int;
 begin
  if not exists(select 1 from public.mobile_tasks where id=p_task and owner_id=p_owner)then return false;end if;
- insert into public.mobile_task_jobs(task_id,owner_id,input,context)values(p_task,p_owner,p_input,coalesce(p_context,'{}'))on conflict do nothing;
+ insert into public.mobile_task_jobs(task_id,owner_id,workspace_id,input,context)select p_task,p_owner,t.workspace_id,p_input,coalesce(p_context,'{}') from public.mobile_tasks t where t.id=p_task and t.owner_id=p_owner on conflict do nothing;
  get diagnostics n=row_count;
  if n=1 then perform public.mobile_task_transition(p_task,p_owner,'delegated','system');end if;
  return n=1;
 end $$;
 -- Lease the next job. Reaps lost STARTED jobs to 'uncertain' first (never re-leased, never replayed).
-create or replace function public.mobile_job_lease(p_worker text,p_ttl_seconds int)returns jsonb language plpgsql security definer set search_path=public as $$
+create or replace function public.mobile_job_lease(p_worker text,p_ttl_seconds int,p_owner uuid default null,p_workspace uuid default null)returns jsonb language plpgsql security definer set search_path=public as $$
 declare j public.mobile_task_jobs;r record;
 begin
- if p_ttl_seconds<1 or p_ttl_seconds>600 then return null;end if;
+ if p_ttl_seconds<1 or p_ttl_seconds>600 or p_owner is null or p_workspace is null then return null;end if; -- a worker must be scoped to one owner+workspace; there is no unscoped leasing
  for r in update public.mobile_task_jobs set state='uncertain',updated_at=now() where state='started' and lease_expires_at<now() returning task_id,owner_id loop
   perform public.mobile_task_transition(r.task_id,r.owner_id,'blocked','system');
  end loop;
- select * into j from public.mobile_task_jobs where state='queued' or(state='leased' and lease_expires_at<now())order by updated_at limit 1 for update skip locked;
+ select * into j from public.mobile_task_jobs where (state='queued' or(state='leased' and lease_expires_at<now()))and owner_id=p_owner and workspace_id=p_workspace order by updated_at limit 1 for update skip locked;
  if not found then return null;end if;
  update public.mobile_task_jobs set state='leased',epoch=epoch+1,worker=p_worker,lease_expires_at=now()+make_interval(secs=>p_ttl_seconds),updated_at=now()where task_id=j.task_id returning * into j;
  return jsonb_build_object('task_id',j.task_id,'owner_id',j.owner_id,'epoch',j.epoch,'input',j.input,'context',j.context);
@@ -63,7 +75,7 @@ begin
 end $$;
 -- Fenced finish: a result from an expired, reaped or superseded worker is rejected and writes nothing.
 create or replace function public.mobile_job_finish(p_task uuid,p_worker text,p_epoch int,p_status text,p_digest text default null,p_summary text default null,p_evidence jsonb default '[]')returns boolean language plpgsql security definer set search_path=public as $$
-declare j public.mobile_task_jobs;ok boolean;
+declare j public.mobile_task_jobs;ok boolean;conv uuid;mid uuid;sess uuid;ws uuid;
 begin
  if p_status not in('delivered','failed')then return false;end if;
  select * into j from public.mobile_task_jobs where task_id=p_task and state='started' and worker=p_worker and epoch=p_epoch and lease_expires_at>now()for update;
@@ -71,6 +83,15 @@ begin
  ok:=public.mobile_task_finish(p_task,j.owner_id,'turn',p_status,p_digest,p_summary);
  if not ok then return false;end if;
  update public.mobile_task_jobs set state=case when p_status='delivered' then 'done' else 'failed' end,updated_at=now()where task_id=p_task;
+ -- Same transaction as the fenced finish: if the message cannot be written, the whole finish rolls back.
+ if p_status='delivered' and p_summary is not null and to_regclass('public.mobile_sessions') is not null and to_regclass('public.messages') is not null then
+  select t.session_id,t.workspace_id into sess,ws from public.mobile_tasks t where t.id=p_task and t.owner_id=j.owner_id;
+  execute 'select conversation_id from public.mobile_sessions where id=$1 and owner_id=$2 and workspace_id=$3' into conv using sess,j.owner_id,ws;
+  if conv is not null then
+   execute 'insert into public.messages(conversation_id,role,content,agent,meta)values($1,''agent'',$2,(select agent_key from public.mobile_tasks where id=$3),jsonb_build_object(''mobileTaskId'',$3,''executionEpoch'',$4,''source'',''queued-worker''))returning id' into mid using conv,left(p_summary,500),p_task,p_epoch;
+   insert into public.mobile_task_deliveries(task_id,owner_id,workspace_id,session_id,epoch,message_id)values(p_task,j.owner_id,ws,sess,p_epoch,mid);
+  end if;
+ end if;
  perform public.mobile_task_transition(p_task,j.owner_id,case when p_status='delivered' then 'done' else 'failed' end,'agent',case when p_status='delivered' then case when jsonb_array_length(coalesce(p_evidence,'[]'))>0 then p_evidence else jsonb_build_array('worker recorded completed turn') end else '[]'::jsonb end);
  return true;
 end $$;
@@ -81,12 +102,13 @@ create or replace function public.mobile_job_status(p_task uuid,p_owner uuid,p_s
   'summary',case when j.state='done' then t.result_summary end,'evidence',case when j.state='done' then t.evidence end)
  from public.mobile_task_jobs j join public.mobile_tasks t on t.id=j.task_id where j.task_id=p_task and t.owner_id=p_owner and j.owner_id=p_owner and t.session_id=p_session;
 $$;
-create or replace function public.mobile_worker_beat(p_worker text)returns boolean language plpgsql security definer set search_path=public as $$
+create or replace function public.mobile_worker_beat(p_worker text,p_owner uuid default null,p_workspace uuid default null)returns boolean language plpgsql security definer set search_path=public as $$
 begin
  if p_worker is null or length(p_worker) not between 1 and 80 then return false;end if;
- insert into public.mobile_workers(worker,last_seen)values(p_worker,now())on conflict(worker)do update set last_seen=now();return true;
+ insert into public.mobile_workers(worker,owner_id,workspace_id,last_seen)values(p_worker,p_owner,p_workspace,now())on conflict(worker)do update set last_seen=now() where mobile_workers.owner_id is not distinct from p_owner and mobile_workers.workspace_id is not distinct from p_workspace;
+ if not found then return false;end if;return true;
 end $$;
-create or replace function public.mobile_worker_last_seen()returns timestamptz language sql stable security definer set search_path=public as $$select max(last_seen)from public.mobile_workers$$;
-revoke all on function public.mobile_job_status(uuid,uuid,uuid),public.mobile_worker_beat(text),public.mobile_worker_last_seen() from public,anon,authenticated;
-revoke all on function public.mobile_job_enqueue(uuid,uuid,text,jsonb),public.mobile_job_lease(text,int),public.mobile_job_start(uuid,text,int),public.mobile_job_heartbeat(uuid,text,int,int),public.mobile_job_finish(uuid,text,int,text,text,text,jsonb) from public,anon,authenticated;
+create or replace function public.mobile_worker_last_seen(p_owner uuid,p_workspace uuid)returns timestamptz language sql stable security definer set search_path=public as $$select max(last_seen)from public.mobile_workers where owner_id=p_owner and workspace_id=p_workspace$$;
+revoke all on function public.mobile_job_status(uuid,uuid,uuid),public.mobile_worker_beat(text,uuid,uuid),public.mobile_worker_last_seen(uuid,uuid) from public,anon,authenticated;
+revoke all on function public.mobile_job_enqueue(uuid,uuid,text,jsonb),public.mobile_job_lease(text,int,uuid,uuid),public.mobile_job_start(uuid,text,int),public.mobile_job_heartbeat(uuid,text,int,int),public.mobile_job_finish(uuid,text,int,text,text,text,jsonb) from public,anon,authenticated;
 commit;

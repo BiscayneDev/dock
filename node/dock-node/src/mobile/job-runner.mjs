@@ -3,10 +3,10 @@ import { createHash } from 'node:crypto';
 // Order is fixed: lease -> durable start claim (fenced) -> answer -> fenced finish. Nothing is replayed:
 // a lost worker's started job is never re-leased by the database. Heartbeats only extend a lease; they
 // do not make a late result acceptable once the lease has expired.
-export async function runOneJob({ db, worker, answer, ttlSeconds = 30, heartbeatMs = 10000, onEvent = () => { } }) {
+export async function runOneJob({ db, worker, scope = {}, answer, ttlSeconds = 30, heartbeatMs = 10000, onEvent = () => { } }) {
     const rpc = async (fn, a) => { const r = await db.rpc(fn, a); if (r.error) throw Error(r.error.message); return r.data; };
-    await rpc('mobile_worker_beat', { p_worker: worker }).catch(() => { }); // liveness only; says nothing about readiness to execute
-    const job = await rpc('mobile_job_lease', { p_worker: worker, p_ttl_seconds: ttlSeconds });
+    await rpc('mobile_worker_beat', { p_worker: worker, ...(scope.ownerId ? { p_owner: scope.ownerId, p_workspace: scope.workspaceId } : {}) }).catch(() => { }); // liveness only; says nothing about readiness to execute
+    const job = await rpc('mobile_job_lease', { p_worker: worker, p_ttl_seconds: ttlSeconds, ...(scope.ownerId ? { p_owner: scope.ownerId, p_workspace: scope.workspaceId } : {}) });
     if (!job) return { ran: false };
     const fence = { p_task: job.task_id, p_worker: worker, p_epoch: job.epoch };
     if (await rpc('mobile_job_start', fence) !== true) return { ran: false, lost: 'start' };

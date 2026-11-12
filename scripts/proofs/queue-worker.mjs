@@ -7,5 +7,5 @@ const rpc = async (fn, a) => { const r = await fetch('http://127.0.0.1:4597/rest
 const [mode, worker] = process.argv.slice(2);
 const agent = mode === 'hang' ? async () => { console.log('IN_AGENT'); return new Promise(() => { }); }
     : worktreeAgent({ repoDir: process.env.FIX_REPO, worktreesRoot: process.env.FIX_WTS, editCmd: ['node', '-e', "require('fs').writeFileSync('math.mjs','export const add = (a, b) => a + b;\\n')"] });
-const r = await runOneJob({ db: { rpc }, worker, ttlSeconds: 2, heartbeatMs: 100000, answer: agent });
+const r = await runOneJob({ db: { rpc }, worker, scope: { ownerId: '44444444-4444-4444-8444-444444444444', workspaceId: '33333333-3333-4333-8333-333333333333' }, ttlSeconds: 2, heartbeatMs: 100000, answer: agent });
 console.log('WORKER_DONE ' + JSON.stringify(r)); process.exit(0);

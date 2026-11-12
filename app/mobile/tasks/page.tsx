@@ -11,9 +11,9 @@ export default async function Tasks() {
     const db = adminClient();
     const { data: tasks } = await db.from('mobile_tasks').select('id,agent_key,state,waiting_on,review_policy,evidence,result_summary,updated_at').eq('owner_id', ctx.userId).eq('workspace_id', ctx.workspaceId).order('updated_at', { ascending: false }).limit(100);
     // Worker liveness only (a worker checked in recently). Not proof that it can execute.
-    const { data: beat } = await db.from('mobile_workers').select('last_seen').order('last_seen', { ascending: false }).limit(1);
+    const { data: beat } = await db.from('mobile_workers').select('last_seen').eq('owner_id', ctx.userId).eq('workspace_id', ctx.workspaceId).order('last_seen', { ascending: false }).limit(1);
     const seen = beat?.[0]?.last_seen ? Math.max(0, Math.round((Date.now() - Date.parse(beat[0].last_seen)) / 1000)) : null;
-    const workerLine = seen === null ? 'No worker has checked in yet.' : seen <= 300 ? `A worker checked in ${seen < 90 ? seen + 's' : Math.round(seen / 60) + ' min'} ago.` : `Last worker check-in was ${Math.round(seen / 60)} min ago. Tasks may wait.`;
+    const workerLine = seen === null ? 'No worker assigned to your tasks has checked in yet.' : seen <= 300 ? `Your worker checked in ${seen < 90 ? seen + 's' : Math.round(seen / 60) + ' min'} ago.` : `Your worker's last check-in was ${Math.round(seen / 60)} min ago. Tasks may wait.`;
     const ids = (tasks ?? []).map((t: any) => t.id);
     const { data: versions } = ids.length ? await db.from('mobile_task_versions').select('task_id,v,brief').in('task_id', ids) : { data: [] as any[] };
     const { data: handoffs } = ids.length ? await db.from('mobile_task_handoffs').select('task_id,status').in('task_id', ids) : { data: [] as any[] };

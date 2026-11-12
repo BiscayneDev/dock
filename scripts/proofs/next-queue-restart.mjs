@@ -39,6 +39,12 @@ try {
     startNext();
     const [t1] = await rest('mobile_tasks?id=eq.' + T1), [t2] = await rest('mobile_tasks?id=eq.' + T2), [j1] = await rest('mobile_task_jobs?task_id=eq.' + T1), [j2] = await rest('mobile_task_jobs?task_id=eq.' + T2);
     assert.equal(j1.state, 'uncertain'); assert.equal(t1.state, 'blocked'); assert.equal(j2.state, 'done'); assert.equal(t2.state, 'done'); assert.match(t2.result_summary, /tests pass/);
+    // Result continuation: exactly one conversation message for T2, bound to owner/workspace/session/task/epoch; none for the uncertain T1.
+    const [dl] = await rest('mobile_task_deliveries?task_id=eq.' + T2); assert.ok(dl); assert.equal(dl.session_id, session.sessionId); assert.equal(dl.owner_id, '44444444-4444-4444-8444-444444444444'); assert.equal(dl.epoch, 1);
+    assert.equal((await rest('mobile_task_deliveries?task_id=eq.' + T1)).length, 0);
+    const msgs = (await rest('messages?role=eq.agent')).filter(m => m.meta?.mobileTaskId === T2); assert.equal(msgs.length, 1); assert.equal(msgs[0].id, dl.message_id); assert.match(msgs[0].content, /tests pass/);
+    assert.equal((await fetch('http://127.0.0.1:4597/rest/v1/rpc/mobile_job_finish', { method: 'POST', body: JSON.stringify({ p_task: T2, p_worker: 'worker-b', p_epoch: 1, p_status: 'delivered', p_digest: 'a'.repeat(64), p_summary: 'DUPLICATE' }) }).then(r => r.json())), false);
+    assert.equal((await rest('messages?role=eq.agent')).filter(m => m.meta?.mobileTaskId === T2).length, 1, 'repeat finish adds no second message');
     browser = await pp.launch({ executablePath: '/usr/bin/google-chrome', headless: true, args: ['--no-sandbox'], defaultViewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true } });
     const page = await browser.newPage(); const u = '44444444-4444-4444-8444-444444444444', b64 = x => Buffer.from(JSON.stringify(x)).toString('base64url');
     await page.setCookie({ name: 'sb-127-auth-token', value: 'base64-' + Buffer.from(JSON.stringify({ access_token: b64({ alg: 'HS256', typ: 'JWT' }) + '.' + b64({ sub: u, email: 'demo@example.com', aud: 'authenticated', role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 }) + '.fictional-signature', refresh_token: 'demo', token_type: 'bearer', expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: u, email: 'demo@example.com' } })).toString('base64url'), domain: '127.0.0.1', path: '/' });
@@ -51,5 +57,5 @@ try {
     console.log(text); console.log(JSON.stringify(m));
     const low = text.toLowerCase(); for (const w of ['worker checked in', 'fixed. all 2 tests pass', 'stopped before reporting back', 'not run again']) assert.ok(low.includes(w), 'missing: ' + w);
     assert.ok(m.w[0] <= m.w[1]); if (m.navTop !== null) assert.ok(m.lastBottom <= m.navTop - 8, JSON.stringify(m));
-    console.log(JSON.stringify({ authenticatedNextEnqueue: true, noInferenceServerExists: true, duplicateEnqueueIdempotent: true, workerKilledMidRun: 'uncertain/blocked, not replayed', nextKilledBeforeWorkerRan: true, freshWorkerProcessFinished: true, ownerPageAfterRestart: 'shows both', deployed: false }));
+    console.log(JSON.stringify({ authenticatedNextEnqueue: true, noInferenceServerExists: true, duplicateEnqueueIdempotent: true, workerKilledMidRun: 'uncertain/blocked, not replayed', nextKilledBeforeWorkerRan: true, freshWorkerProcessFinished: true, resultDeliveredOnceToConversation: true, duplicateFinishAddsNothing: true, ownerPageAfterRestart: 'shows both', deployed: false }));
 } catch (e) { console.error('FAIL', e.message, log.slice(-800)); process.exitCode = 1; } finally { await browser?.close(); next?.kill(); pg.kill(); }
