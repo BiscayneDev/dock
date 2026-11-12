@@ -49,7 +49,7 @@ try {
     await page.screenshot({ path: '/downloads/dock-queue-390px-bottom-FICTIONAL-LOCAL.png' });
     const m = await page.evaluate(() => { const nav = [...document.querySelectorAll('*')].filter(e => getComputedStyle(e).position === 'fixed' && e.getBoundingClientRect().bottom >= innerHeight - 2 && e.getBoundingClientRect().height < 200).map(e => e.getBoundingClientRect().top)[0]; const cards = [...document.querySelectorAll('article')]; const last = cards.at(-1).getBoundingClientRect(); return { navTop: nav ?? null, lastBottom: last.bottom, w: [document.documentElement.scrollWidth, innerWidth] }; });
     console.log(text); console.log(JSON.stringify(m));
-    const low = text.toLowerCase(); for (const w of ['fixed. all 2 tests pass', 'stopped before reporting back', 'not run again']) assert.ok(low.includes(w), 'missing: ' + w);
+    const low = text.toLowerCase(); for (const w of ['worker checked in', 'fixed. all 2 tests pass', 'stopped before reporting back', 'not run again']) assert.ok(low.includes(w), 'missing: ' + w);
     assert.ok(m.w[0] <= m.w[1]); if (m.navTop !== null) assert.ok(m.lastBottom <= m.navTop - 8, JSON.stringify(m));
     console.log(JSON.stringify({ authenticatedNextEnqueue: true, noInferenceServerExists: true, duplicateEnqueueIdempotent: true, workerKilledMidRun: 'uncertain/blocked, not replayed', nextKilledBeforeWorkerRan: true, freshWorkerProcessFinished: true, ownerPageAfterRestart: 'shows both', deployed: false }));
 } catch (e) { console.error('FAIL', e.message, log.slice(-800)); process.exitCode = 1; } finally { await browser?.close(); next?.kill(); pg.kill(); }

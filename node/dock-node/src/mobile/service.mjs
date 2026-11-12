@@ -10,6 +10,14 @@ export function mobileConversationService({ store, context, answer, recordTurn, 
     const hash = x => createHash('sha256').update(JSON.stringify(x)).digest('hex');
     async function get(principal, id) { const s = await store.session(id); if (!s || s.deviceId !== principal.deviceId || s.ownerId !== principal.ownerId || s.workspaceId !== principal.workspaceId)
         throw Error('Session not owned'); return s; }
+    // Queue mode: the stored ack is only the first answer. Reads the task's own status (owner + session scoped,
+    // pure read) so a reconnect says queued / working / result and never repeats "Queued" after completion.
+    const queuedView = async (s, requestId, ack) => {
+        let st = null; try { st = await tasks.jobStatus(requestId, s.id); } catch (e) { onTaskError(e); }
+        if (!st) return ack;
+        const text = { queued: 'Queued. No worker has picked it up yet.', working: 'Working on it.', done: st.summary, failed: 'It did not finish. Nothing was retried automatically.', uncertain: 'It started, then stopped before reporting back. It was not run again.' }[st.status] ?? ack.text;
+        return { ...ack, text, queued: st.status === 'queued' || st.status === 'working', taskStatus: st.status, evidence: st.status === 'done' ? st.evidence : undefined };
+    };
     return {
         async open(principal, requestId) { return store.open(principal, requestId); },
         async load(principal, id) { const s = await get(principal, id); return { sessionId: s.id, messages: await store.messages(s) }; },
@@ -19,9 +27,11 @@ export function mobileConversationService({ store, context, answer, recordTurn, 
                 throw Error('Invalid turn');
             const fingerprint = hash({ sessionId, text }), receipt = await store.claim(s, requestId, fingerprint);
             if (receipt.status === 'complete')
-                return receipt.result;
-            if (queue && tasks && receipt.status !== 'claimed')
-                return { text: 'Already queued. Check your tasks for the result.', queued: true, sessionId: s.id, requestId, proposals: [] };
+                return queue && tasks ? await queuedView(s, requestId, receipt.result) : receipt.result;
+            if (receipt.status !== 'claimed' && queue && tasks) {
+                const v = await queuedView(s, requestId, { text: 'Queued.', queued: true, sessionId: s.id, requestId, proposals: [] }); // crash between enqueue and ack
+                if (v.taskStatus) return v;
+            }
             if (receipt.status !== 'claimed')
                 throw Error('Turn pending or conflicted; read status, do not replay inference');
             if (tasks && !queue) {
@@ -41,7 +51,7 @@ export function mobileConversationService({ store, context, answer, recordTurn, 
             }
             if (queue && tasks) {
                 // Durable queue mode: nothing is sent to a model here. A separate lease-fenced worker runs the job.
-                try { await tasks.open({ id: requestId, sessionId, agentKey: s.agentId, review: 'none', brief: text.slice(0, 500) }); if (await tasks.enqueue(requestId, text) !== true) throw Error('not queued'); }
+                try { await tasks.open({ id: requestId, sessionId, agentKey: s.agentId, review: 'none', brief: text.slice(0, 500) }); if (await tasks.enqueue(requestId, text, { repoKeys: s.repoKeys ?? [], worktree: 'wt-' + requestId.toLowerCase(), beaconScope: { agentKey: s.agentId, taskId: requestId, sharedWrites: 'owner-promotion-only' } }) !== true) throw Error('not queued'); }
                 catch (e) { onTaskError(e); await store.fail(s, requestId, fingerprint).catch(() => { }); throw Error('Task not queued; nothing was started'); }
                 const ack = { text: 'Queued. The result will appear in your tasks.', queued: true, sessionId: s.id, requestId, proposals: [] };
                 // Close the turn-store claim with the acknowledgement so the session is not blocked and a retry returns it.

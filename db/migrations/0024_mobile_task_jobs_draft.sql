@@ -13,15 +13,19 @@ create table public.mobile_task_jobs(
  epoch int not null default 0,
  worker text,
  lease_expires_at timestamptz,
+ context jsonb not null default '{}',
  updated_at timestamptz not null default now()
 );
+create table public.mobile_workers(worker text primary key,last_seen timestamptz not null default now());
+alter table public.mobile_workers enable row level security;
+revoke all on public.mobile_workers from anon,authenticated;
 alter table public.mobile_task_jobs enable row level security;
 revoke all on public.mobile_task_jobs from anon,authenticated;
-create or replace function public.mobile_job_enqueue(p_task uuid,p_owner uuid,p_input text)returns boolean language plpgsql security definer set search_path=public as $$
+create or replace function public.mobile_job_enqueue(p_task uuid,p_owner uuid,p_input text,p_context jsonb default '{}')returns boolean language plpgsql security definer set search_path=public as $$
 declare n int;
 begin
  if not exists(select 1 from public.mobile_tasks where id=p_task and owner_id=p_owner)then return false;end if;
- insert into public.mobile_task_jobs(task_id,owner_id,input)values(p_task,p_owner,p_input)on conflict do nothing;
+ insert into public.mobile_task_jobs(task_id,owner_id,input,context)values(p_task,p_owner,p_input,coalesce(p_context,'{}'))on conflict do nothing;
  get diagnostics n=row_count;
  if n=1 then perform public.mobile_task_transition(p_task,p_owner,'delegated','system');end if;
  return n=1;
@@ -37,7 +41,7 @@ begin
  select * into j from public.mobile_task_jobs where state='queued' or(state='leased' and lease_expires_at<now())order by updated_at limit 1 for update skip locked;
  if not found then return null;end if;
  update public.mobile_task_jobs set state='leased',epoch=epoch+1,worker=p_worker,lease_expires_at=now()+make_interval(secs=>p_ttl_seconds),updated_at=now()where task_id=j.task_id returning * into j;
- return jsonb_build_object('task_id',j.task_id,'owner_id',j.owner_id,'epoch',j.epoch,'input',j.input);
+ return jsonb_build_object('task_id',j.task_id,'owner_id',j.owner_id,'epoch',j.epoch,'input',j.input,'context',j.context);
 end $$;
 -- Start = the durable pre-send claim. True only for the current unexpired lease holder and only once per task.
 create or replace function public.mobile_job_start(p_task uuid,p_worker text,p_epoch int)returns boolean language plpgsql security definer set search_path=public as $$
@@ -70,5 +74,19 @@ begin
  perform public.mobile_task_transition(p_task,j.owner_id,case when p_status='delivered' then 'done' else 'failed' end,'agent',case when p_status='delivered' then case when jsonb_array_length(coalesce(p_evidence,'[]'))>0 then p_evidence else jsonb_build_array('worker recorded completed turn') end else '[]'::jsonb end);
  return true;
 end $$;
-revoke all on function public.mobile_job_enqueue(uuid,uuid,text),public.mobile_job_lease(text,int),public.mobile_job_start(uuid,text,int),public.mobile_job_heartbeat(uuid,text,int,int),public.mobile_job_finish(uuid,text,int,text,text,text,jsonb) from public,anon,authenticated;
+-- Read-only status/result for ONE task, only for its owner and its own session. Pure read: repeated
+-- delivery returns the same result and writes nothing, so a result is never duplicated or applied twice.
+create or replace function public.mobile_job_status(p_task uuid,p_owner uuid,p_session uuid)returns jsonb language sql stable security definer set search_path=public as $$
+ select jsonb_build_object('status',case j.state when 'queued' then 'queued' when 'leased' then 'queued' when 'started' then 'working' when 'done' then 'done' when 'failed' then 'failed' else 'uncertain' end,
+  'summary',case when j.state='done' then t.result_summary end,'evidence',case when j.state='done' then t.evidence end)
+ from public.mobile_task_jobs j join public.mobile_tasks t on t.id=j.task_id where j.task_id=p_task and t.owner_id=p_owner and j.owner_id=p_owner and t.session_id=p_session;
+$$;
+create or replace function public.mobile_worker_beat(p_worker text)returns boolean language plpgsql security definer set search_path=public as $$
+begin
+ if p_worker is null or length(p_worker) not between 1 and 80 then return false;end if;
+ insert into public.mobile_workers(worker,last_seen)values(p_worker,now())on conflict(worker)do update set last_seen=now();return true;
+end $$;
+create or replace function public.mobile_worker_last_seen()returns timestamptz language sql stable security definer set search_path=public as $$select max(last_seen)from public.mobile_workers$$;
+revoke all on function public.mobile_job_status(uuid,uuid,uuid),public.mobile_worker_beat(text),public.mobile_worker_last_seen() from public,anon,authenticated;
+revoke all on function public.mobile_job_enqueue(uuid,uuid,text,jsonb),public.mobile_job_lease(text,int),public.mobile_job_start(uuid,text,int),public.mobile_job_heartbeat(uuid,text,int,int),public.mobile_job_finish(uuid,text,int,text,text,text,jsonb) from public,anon,authenticated;
 commit;
