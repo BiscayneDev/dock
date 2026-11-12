@@ -12,7 +12,8 @@ interface ChatMessage {
 function toChatMessage(message: ConversationMessage): ChatMessage {
   return {
     id: message.id,
-    role: message.role === "assistant" ? "assistant" : "user",
+    // Worker-delivered results are stored with role "agent"; they must not render as the user's own message.
+    role: message.role === "user" ? "user" : "assistant",
     text: message.text,
     agent: message.agent,
     timestamp: message.timestamp,

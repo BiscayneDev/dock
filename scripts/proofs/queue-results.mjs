@@ -19,7 +19,7 @@ for (const [i, id] of T.slice(0, 3).entries()) assert.equal((await turn(id, 'FIC
 assert.match((await turn(T[1], 'FICTIONAL job 2')).text, /No worker has picked it up/);
 const delay = { 1: 600, 2: 100, 3: 300 }; let ran = [];
 const agent = async ({ input, context }) => { assert.equal(context.beaconScope.sharedWrites, 'owner-promotion-only'); assert.equal(context.repoKeys[0], 'fictional-repo'); const n = +input.slice(-1); await new Promise(r => setTimeout(r, delay[n])); ran.push(n); return { text: 'Result for job ' + n, evidence: ['Evidence for job ' + n] }; };
-const runs = await Promise.all(['wa', 'wb', 'wc'].map(w => runOneJob({ db, worker: w, scope: { ownerId: P.ownerId, workspaceId: P.workspaceId }, answer: agent, ttlSeconds: 30 }))); assert.ok(runs.every(r => r.recorded));
+const runs = await Promise.all(['wa', 'wb', 'wc'].map(w => runOneJob({ db, worker: w, answer: agent, ttlSeconds: 30 }))); assert.ok(runs.every(r => r.recorded));
 assert.equal(ran.length, 3); assert.notDeepEqual(ran, [1, 2, 3], 'jobs finished out of lease order');
 for (const [i, id] of T.slice(0, 3).entries()) { const v = await turn(id, 'FICTIONAL job ' + (i + 1)); assert.equal(v.taskStatus, 'done'); assert.equal(v.text, 'Result for job ' + (i + 1)); assert.deepEqual(v.evidence, ['Evidence for job ' + (i + 1)]); }
 // a newer turn is not overwritten by older completions; repeated delivery is a pure read

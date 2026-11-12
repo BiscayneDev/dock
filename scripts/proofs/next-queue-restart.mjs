@@ -16,7 +16,10 @@ const env = { ...process.env, DOCK_PUBLIC_ORIGIN: 'http://127.0.0.1:3107', NEXT_
 const pg = spawn('python3', ['scripts/proofs/postgres-http-fixture.py'], { env }); pg.stdout.on('data', x => log += x); pg.stderr.on('data', x => log += x);
 let next; const startNext = () => { next = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev', '-p', '3107'], { env }); next.stdout.on('data', x => log += x); next.stderr.on('data', x => log += x); };
 const rest = p => fetch('http://127.0.0.1:4597/rest/v1/' + p).then(r => r.json());
-const worker = (mode, name) => new Promise(res => { const c = spawn(process.execPath, ['scripts/proofs/queue-worker.mjs', mode, name], { env }); let out = ''; c.stdout.on('data', d => { out += d; if (mode === 'hang' && out.includes('IN_AGENT')) res({ c, out }); if (out.includes('WORKER_DONE')) res({ c, out }); }); c.stderr.on('data', d => log += d); });
+const OWN = '44444444-4444-4444-8444-444444444444', WSP = '33333333-3333-4333-8333-333333333333', secretOf = n => ('fictional-secret-' + n).padEnd(40, 'x');
+const rpc = async (fn, a) => { const r = await fetch('http://127.0.0.1:4597/rest/v1/rpc/' + fn, { method: 'POST', body: JSON.stringify(a) }); const j = await r.json(); return r.ok ? { data: j } : { error: { message: j.message } }; };
+const register = n => rpc('mobile_worker_register', { p_worker: n, p_owner: OWN, p_workspace: WSP, p_secret: secretOf(n) });
+const worker = async (mode, name) => { assert.equal((await register(name)).data, true); return new Promise(res => { const c = spawn(process.execPath, ['scripts/proofs/queue-worker.mjs', mode, name], { env: { ...env, WORKER_SECRET: secretOf(name) } }); let out = ''; c.stdout.on('data', d => { out += d; if (mode === 'hang' && out.includes('IN_AGENT')) res({ c, out }); if (out.includes('WORKER_DONE')) res({ c, out }); }); c.stderr.on('data', d => log += d); }); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let browser;
 try {
@@ -43,8 +46,23 @@ try {
     const [dl] = await rest('mobile_task_deliveries?task_id=eq.' + T2); assert.ok(dl); assert.equal(dl.session_id, session.sessionId); assert.equal(dl.owner_id, '44444444-4444-4444-8444-444444444444'); assert.equal(dl.epoch, 1);
     assert.equal((await rest('mobile_task_deliveries?task_id=eq.' + T1)).length, 0);
     const msgs = (await rest('messages?role=eq.agent')).filter(m => m.meta?.mobileTaskId === T2); assert.equal(msgs.length, 1); assert.equal(msgs[0].id, dl.message_id); assert.match(msgs[0].content, /tests pass/);
-    assert.equal((await fetch('http://127.0.0.1:4597/rest/v1/rpc/mobile_job_finish', { method: 'POST', body: JSON.stringify({ p_task: T2, p_worker: 'worker-b', p_epoch: 1, p_status: 'delivered', p_digest: 'a'.repeat(64), p_summary: 'DUPLICATE' }) }).then(r => r.json())), false);
+    assert.equal((await fetch('http://127.0.0.1:4597/rest/v1/rpc/mobile_job_finish', { method: 'POST', body: JSON.stringify({ p_task: T2, p_worker: 'worker-b', p_secret: secretOf('worker-b'), p_epoch: 1, p_status: 'delivered', p_digest: 'a'.repeat(64), p_summary: 'DUPLICATE' }) }).then(r => r.json())), false);
     assert.equal((await rest('messages?role=eq.agent')).filter(m => m.meta?.mobileTaskId === T2).length, 1, 'repeat finish adds no second message');
+    // Concurrent finishes against the real messages table/indexes and transaction path.
+    const { runOneJob } = await import('../../node/dock-node/src/mobile/job-runner.mjs');
+    const N = 8, ids = Array.from({ length: N }, () => crypto.randomUUID());
+    for (const id of ids) assert.equal((await c.turn({ sessionId: session.sessionId, requestId: id, text: 'FICTIONAL concurrent job' })).queued, true);
+    const names = ids.map((_, i) => 'cw' + i); for (const n of names) await register(n);
+    const done = await Promise.all(names.map(n => runOneJob({ db: { rpc }, worker: n, secret: secretOf(n), ttlSeconds: 60, answer: async ({ taskId }) => { await sleep(300); return { text: 'Concurrent result ' + taskId.slice(0, 8), evidence: ['fictional'] }; } })));
+    assert.equal(done.filter(r => r.recorded).length, N);
+    const all = (await rest('messages?role=eq.agent')).filter(m => ids.includes(m.meta?.mobileTaskId)); assert.equal(all.length, N); assert.equal(new Set(all.map(m => m.meta.mobileTaskId)).size, N);
+    assert.equal(new Set((await rest('mobile_task_deliveries')).filter(d => ids.includes(d.task_id)).map(d => d.message_id)).size, N);
+    // one started job, 6 racing finishes with the same fence: exactly one wins, exactly one message
+    const R = crypto.randomUUID(); await c.turn({ sessionId: session.sessionId, requestId: R, text: 'FICTIONAL race job' }); await register('racer');
+    const lr = (await rpc('mobile_job_lease', { p_worker: 'racer', p_secret: secretOf('racer'), p_ttl_seconds: 60 })).data; assert.equal(lr.task_id, R);
+    assert.equal((await rpc('mobile_job_start', { p_task: R, p_worker: 'racer', p_secret: secretOf('racer'), p_epoch: lr.epoch })).data, true);
+    const race = await Promise.all(Array.from({ length: 6 }, () => rpc('mobile_job_finish', { p_task: R, p_worker: 'racer', p_secret: secretOf('racer'), p_epoch: lr.epoch, p_status: 'delivered', p_digest: 'e'.repeat(64), p_summary: 'RACE RESULT', p_evidence: '["fictional"]' })));
+    assert.equal(race.filter(x => x.data === true).length, 1, JSON.stringify(race)); assert.equal((await rest('messages?role=eq.agent')).filter(m => m.meta?.mobileTaskId === R).length, 1);
     browser = await pp.launch({ executablePath: '/usr/bin/google-chrome', headless: true, args: ['--no-sandbox'], defaultViewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true } });
     const page = await browser.newPage(); const u = '44444444-4444-4444-8444-444444444444', b64 = x => Buffer.from(JSON.stringify(x)).toString('base64url');
     await page.setCookie({ name: 'sb-127-auth-token', value: 'base64-' + Buffer.from(JSON.stringify({ access_token: b64({ alg: 'HS256', typ: 'JWT' }) + '.' + b64({ sub: u, email: 'demo@example.com', aud: 'authenticated', role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 }) + '.fictional-signature', refresh_token: 'demo', token_type: 'bearer', expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: u, email: 'demo@example.com' } })).toString('base64url'), domain: '127.0.0.1', path: '/' });
@@ -57,5 +75,5 @@ try {
     console.log(text); console.log(JSON.stringify(m));
     const low = text.toLowerCase(); for (const w of ['worker checked in', 'fixed. all 2 tests pass', 'stopped before reporting back', 'not run again']) assert.ok(low.includes(w), 'missing: ' + w);
     assert.ok(m.w[0] <= m.w[1]); if (m.navTop !== null) assert.ok(m.lastBottom <= m.navTop - 8, JSON.stringify(m));
-    console.log(JSON.stringify({ authenticatedNextEnqueue: true, noInferenceServerExists: true, duplicateEnqueueIdempotent: true, workerKilledMidRun: 'uncertain/blocked, not replayed', nextKilledBeforeWorkerRan: true, freshWorkerProcessFinished: true, resultDeliveredOnceToConversation: true, duplicateFinishAddsNothing: true, ownerPageAfterRestart: 'shows both', deployed: false }));
+    console.log(JSON.stringify({ authenticatedNextEnqueue: true, noInferenceServerExists: true, duplicateEnqueueIdempotent: true, workerKilledMidRun: 'uncertain/blocked, not replayed', nextKilledBeforeWorkerRan: true, freshWorkerProcessFinished: true, resultDeliveredOnceToConversation: true, duplicateFinishAddsNothing: true, concurrentFinishes: '8 parallel workers: 8 messages; 6 racing finishes of one job: 1 message', workerAuth: 'registered with secret', ownerPageAfterRestart: 'shows both', deployed: false }));
 } catch (e) { console.error('FAIL', e.message, log.slice(-800)); process.exitCode = 1; } finally { await browser?.close(); next?.kill(); pg.kill(); }
