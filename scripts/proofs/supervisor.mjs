@@ -19,9 +19,11 @@ assert.throws(() => assertWorkerConfig({ enforcement: 'local-rlimit-only' }), /a
 await assert.rejects(superviseWorker({ db, worker: 'x', answer: () => 'x', enforcement: 'local-rlimit-only' }), /allowWeakLocal/);
 // A. a supervised worker drains the queue, then a graceful SIGTERM mid-job finishes the job in hand before exit
 const A = [U(4), U(5), U(6)]; for (const [i, id] of A.entries()) await mk(id, 'a' + i);
-const w1 = start('slow', 'sup1'); assert.ok(await until(async () => (await Promise.all(A.map(state))).filter(s => s === 'done|done').length >= 1));
-const inFlight = await until(async () => (await Promise.all(A.map(state))).some(s => s.startsWith('running') || s.startsWith('started')), 5000); w1.kill('SIGTERM');
-await new Promise(r => w1.on('exit', r)); assert.match(w1.out, /EXIT \{"stopped":true/); const sA = await Promise.all(A.map(state)); assert.ok(!sA.some(s => /^(leased|started|running)/.test(s)), 'graceful stop left a job in flight: ' + sA);
+const w1 = start('slow', 'sup1'); const lastJob = () => w1.out.split('\n').filter(l => l.startsWith('JOB ')).pop();
+// Deterministic mid-job timing: the answer function holds each job for 1.2s and logs 'JOB x' first. Send SIGTERM the moment the
+// SECOND job has begun (so one is already done and one is provably in hand), then require that very job to finish.
+assert.ok(await until(() => w1.out.includes('JOB a1'))); const inHand = (await Promise.all(A.map(state))).filter(s => /^(leased|started|running)/.test(s)).length; assert.equal(inHand, 1, 'expected exactly one job in hand at SIGTERM: ' + inHand); w1.kill('SIGTERM');
+await new Promise(r => w1.on('exit', r)); assert.match(w1.out, /EXIT \{"stopped":true,"jobs":2\}/); assert.equal((await state(A[1])), 'done|done', 'the job in hand at SIGTERM must finish and be recorded'); const sA = await Promise.all(A.map(state)); assert.ok(!sA.some(s => /^(leased|started|running)/.test(s)), 'graceful stop left a job in flight: ' + sA);
 // B. crash: a started job is lost by SIGKILL. A restarted worker finishes the OTHER queued job and never re-runs the lost one.
 const P = U(7), Q = U(8); await mk(P, 'POISON'); await mk(Q, 'after');
 const w2 = start('hang-on-poison', 'sup2'); await until(() => w2.out.includes('IN_JOB')); w2.kill('SIGKILL'); await new Promise(r => w2.on('exit', r));

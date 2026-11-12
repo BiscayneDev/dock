@@ -386,15 +386,15 @@ export function Composer({
           </button>
         </div>
       </div>
-      <div className="flex items-center justify-between gap-3 px-3 pb-1 pt-2">
-        <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 pb-1 pt-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
           {showQuickActions &&
             QUICK_ACTIONS.map((q) => (
               <button
                 key={q.label}
                 type="button"
                 onClick={() => onChange(q.prompt + value)}
-                className="flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] hover:bg-white/5"
+                className="flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[12px] hover:bg-white/5"
                 style={{ color: "var(--ink-3)" }}
               >
                 <Sparkles size={10} /> {q.label}
