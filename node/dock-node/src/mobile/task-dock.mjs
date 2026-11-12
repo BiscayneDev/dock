@@ -1,12 +1,12 @@
 // Wraps the Dock client used by the ACP bridge so every phone turn is a tracked task.
 // Turns spend model budget, so handoffs are noRetry: one attempt, then lookup by request id.
 // Task state changes here are bookkeeping; they approve nothing and start nothing.
-import { taskBoard } from './taskboard.mjs';
+import { taskBoard, reachability } from './taskboard.mjs';
 // Durability: the default board is in memory. A turn is NOT tracked across a server restart
 // unless the caller passes a board over fileTaskStore (or a future server-side store).
 // Recovery lookups must be backend-authenticated and scoped: the receipt has to name the same
 // owner, session and request, and carry a digest the backend computed. The task cannot supply it.
-export function taskBackedDock({ dock, board = taskBoard(), agentId = 'dock', ownerId = undefined, status = undefined }) {
+export function taskBackedDock({ dock, board = taskBoard(), agentId = 'dock', ownerId = undefined, status = undefined, health = undefined, now = () => Date.now() }) {
     const scoped = (r, sessionId, requestId) => r && r.ownerId === ownerId && r.sessionId === sessionId && r.requestId === requestId ? r : null;
     const proof = {};
     const line = t => `${t.state === 'waiting_on_you' ? 'WAITING ON YOU' : t.state.replace(/_/g, ' ').toUpperCase()}: ${t.id.slice(0, 8)}${t.waitingOn ? ' - ' + t.waitingOn : ''}`;
@@ -15,7 +15,9 @@ export function taskBackedDock({ dock, board = taskBoard(), agentId = 'dock', ow
         open: x => dock.open(x),
         load: id => dock.load(id),
         async turn({ sessionId, requestId, text, signal }) {
-            if (text.trim() === '/tasks') { const items = board.inbox(); return { text: items.length ? items.map(line).join('\n') : 'Nothing waiting on you.' }; }
+            if (text.trim() === '/tasks') { const items = board.inbox(); const r = health ? reachability(await health(), now()) : { state: 'not_checked' };
+                const head = `AGENT ${agentId}: ${r.state.replace(/_/g, ' ')}${r.lastContactAt ? ' (last contact ' + r.lastContactAt + ')' : ''}`;
+                return { text: head + '\n' + (items.length ? items.map(line).join('\n') : 'Nothing waiting on you.') }; }
             const id = requestId;
             try { board.create({ id, brief: text.slice(0, 500), agentId, review: 'none' }); board.transition(id, 'delegated'); } catch (e) { if (e.message !== 'Task exists') throw e; }
             const h = board.enqueue(id, 'turn', text, { noRetry: true });

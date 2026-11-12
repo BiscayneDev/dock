@@ -43,3 +43,9 @@ test('without an owner binding no lookup is trusted', async () => {
     const dock = taskBackedDock({ dock: { turn: async () => { throw Error('x'); } }, status: async () => ({ status: 'complete' }) });
     await assert.rejects(dock.turn({ sessionId: 's', requestId: 'r', text: 'x' })); await assert.rejects(dock.turn({ sessionId: 's', requestId: 'r', text: 'x' }), /uncertain/);
 });
+test('/tasks shows whether the agent is actually reachable, not just configured', async () => {
+    const at = Date.parse('2026-01-01T00:10:00Z'); const mk = h => taskBackedDock({ dock: {}, health: async () => h, now: () => at });
+    assert.match((await mk({ configured: true }).turn({ requestId: 'a', text: '/tasks' })).text, /configured untested/);
+    assert.match((await mk({ configured: true, lastContactAt: '2026-01-01T00:09:00Z' }).turn({ requestId: 'a', text: '/tasks' })).text, /reachable/);
+    assert.match((await mk({ configured: true, lastContactAt: '2026-01-01T00:09:00Z', lastTestOk: false }).turn({ requestId: 'a', text: '/tasks' })).text, /unreachable/);
+});
