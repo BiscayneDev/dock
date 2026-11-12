@@ -106,13 +106,19 @@ const post = () => new Promise(res => { const rq = (await_http()).request({ sock
 function await_http() { return httpMod; }
 assert.equal(await post(), 200); ac.abort(); assert.equal(await post(), 403); assert.equal(upstream, 1); px.close(sock.dir);
 
-// 7e. Loss of database contact: a heartbeat request that STALLS (never answers) cannot keep the worker running. The deadline is a timer on the worker,
-// not a response from the database: with no successful heartbeat for 80% of the lease the sandbox is killed and the proxy refuses new calls.
+// 7e. Loss of database contact: a heartbeat request that STALLS (never answers) cannot keep the worker running. The deadline is a timer in the worker,
+// not a response from the database. Measured against the lease deadline the DATABASE actually holds (lease_expires_at after the last accepted heartbeat),
+// with a margin: both the abort and the last effect the sandbox managed to produce must come well BEFORE that deadline.
 await q(`update devices set revoked_at=null where id='${D1}'`); const nb3 = (await notes()).length; const t10 = await turn('FICTIONAL database goes away');
-let killed2 = null, t1s = 0; const wt2 = mkdtempSync(join(tmpdir(), 'dock-lease-'));
-const stall = (fn, a) => fn === 'mobile_job_heartbeat' ? new Promise(() => { }) : undefined; // never resolves, never rejects
-const long2 = async ({ signal }) => { t1s = Date.now(); hook = stall; const r = await runLimited({ worktree: wt2, cmd: ['sh', '-c', 'sleep 25; echo effect > /work/after-lease-loss.txt'], enforcement: 'local-rlimit-only', limits: { wallMs: 40000 }, signal }); killed2 = r.killedBy; throw Error('cancelled'); };
-const r10 = await runOneJob({ db, worker: 'wm1', answer: long2, repoContext, ttlSeconds: 3, heartbeatMs: 200 }); hook = null; const took2 = Date.now() - t1s;
-assert.equal(killed2, 'cancelled'); assert.ok(took2 >= 2000 && took2 < 6000, 'cancelled by the worker deadline (0.8 x 3s lease), not by the 25s sleep or 40s wall clock: ' + took2); assert.ok(!existsSync(join(wt2, 'after-lease-loss.txt')));
+let killed2 = null, abortedAt = 0, deadline = 0; const wt2 = mkdtempSync(join(tmpdir(), 'dock-lease-'));
+const stall = (fn) => fn === 'mobile_job_heartbeat' ? new Promise(() => { }) : undefined; // never resolves, never rejects
+const long2 = async ({ signal }) => { signal.addEventListener('abort', () => { abortedAt = Date.now(); }); await new Promise(r => setTimeout(r, 1500)); hook = stall; setTimeout(async () => { deadline = Number(await q(`select (extract(epoch from lease_expires_at)*1000)::bigint from mobile_task_jobs where task_id='${t10}'`)); }, 1200);
+  const r = await runLimited({ worktree: wt2, cmd: ['sh', '-c', 'while :; do date +%s%3N >> /work/effects.log; sleep 0.1; done'], enforcement: 'local-rlimit-only', limits: { wallMs: 60000 }, signal }); killed2 = r.killedBy; throw Error('cancelled'); };
+const r10 = await runOneJob({ db, worker: 'wm1', answer: long2, repoContext, ttlSeconds: 10, heartbeatMs: 500 }); hook = null; const killedAt = Date.now();
+const effLog = (await import('node:fs')).readFileSync(join(wt2, 'effects.log'), 'utf8').trim().split('\n').map(Number), lastEffect = effLog.at(-1);
+assert.equal(killed2, 'cancelled'); assert.ok(deadline > 0, 'read the held lease deadline');
+const m = { abortMarginMs: deadline - abortedAt, lastEffectMarginMs: deadline - lastEffect, killedMarginMs: deadline - killedAt };
+assert.ok(m.abortMarginMs >= 2000, 'abort at least 2s before the held lease deadline: ' + JSON.stringify(m)); assert.ok(m.lastEffectMarginMs >= 1500, 'last sandbox effect at least 1.5s before the deadline: ' + JSON.stringify(m)); assert.ok(m.killedMarginMs >= 1500, JSON.stringify(m));
 assert.notEqual(await q(`select state from mobile_tasks where id='${t10}'`), 'done'); assert.equal(await cnt(`select count(*) from messages where meta->>'mobileTaskId'='${t10}'`), 0); assert.equal((await notes()).length, nb3);
-console.log(JSON.stringify({ realQueue: true, fullMigrationChain0001to0025: true, realPgvector: vec, realBeacon0020Functions: true, fictionalMemoryAndSnapshot: true, noModelRan: true, recallOnlySameOwnerWorkspace: true, repoKeysFromServerSession: true, recalledTextIsLabelledData: true, noteWrittenInFinishTransaction: true, noteOnceUnderRaceRestartAndNoteFailure: true, unattestedFailedUncertainWriteNothing: true, crossOwnerRejected: true, emptyUnavailableErrorDeniedDistinct: true, revokedBeforeStartNeverExecutes: true, revokedMidRunDeliversAndRemembersNothing: true, revocationKillsRunningSandboxWithinSeconds: true, proxyRefusesNewCallsAfterCancel: true, stalledHeartbeatCancelsByWorkerTimer: true, contextUsedByPlanner: 'not proven: no real planner' }, null, 1));
+console.error('lease-loss margins (ms before the held lease deadline):', JSON.stringify(m));
+console.log(JSON.stringify({ realQueue: true, fullMigrationChain0001to0025: true, realPgvector: vec, realBeacon0020Functions: true, fictionalMemoryAndSnapshot: true, noModelRan: true, recallOnlySameOwnerWorkspace: true, repoKeysFromServerSession: true, recalledTextIsLabelledData: true, noteWrittenInFinishTransaction: true, noteOnceUnderRaceRestartAndNoteFailure: true, unattestedFailedUncertainWriteNothing: true, crossOwnerRejected: true, emptyUnavailableErrorDeniedDistinct: true, revokedBeforeStartNeverExecutes: true, revokedMidRunDeliversAndRemembersNothing: true, revocationKillsRunningSandboxWithinSeconds: true, proxyRefusesNewCallsAfterCancel: true, stalledHeartbeatCancelsBeforeHeldLeaseDeadline: true, contextUsedByPlanner: 'not proven: no real planner' }, null, 1));

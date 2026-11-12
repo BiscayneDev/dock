@@ -14,18 +14,18 @@ export async function runOneJob({ db, worker, secret, answer, repoContext = unde
     const fence = { p_task: job.task_id, p_worker: worker, p_secret: secret, p_epoch: job.epoch };
     if (await rpc('mobile_job_start', fence) !== true) return { ran: false, lost: 'start' };
     onEvent('started');
-    let lost = false; const cancel = new AbortController(); let lastOk = Date.now(), hbBusy = false;
+    let lost = false; const cancel = new AbortController(); let leaseBase = Date.now(), hbBusy = false;
     const abort = () => { lost = true; cancel.abort(); };
-    // Heartbeat. A refusal (lease lost, or the session's device/grant was revoked) cancels the running work locally.
-    // LOSS OF DATABASE CONTACT is handled the same way: if no heartbeat has succeeded for 80% of the lease, the worker cancels itself
-    // BEFORE the database lease can expire, so a worker that cannot reach the database stops issuing effects (sandbox kill, proxy 403) instead of
-    // running to a distant wall-clock limit. Latency is bounded by one heartbeat interval. It kills the sandbox; it cannot undo effects that
-    // already happened or a request already in flight.
+    // Heartbeat: one request in flight at a time. A refusal (lease lost, or the device/grant was revoked) cancels the running work.
+    // The lease deadline the database holds is at least (time the request was SENT + ttl), so leaseBase is stamped at send time on success: conservative.
     const hb = setInterval(() => {
-        // One request in flight at a time. A stalled request cannot hold the deadline open: the check below runs on this timer, not on the request.
-        if (!hbBusy) { hbBusy = true; rpc('mobile_job_heartbeat', { ...fence, p_ttl_seconds: ttlSeconds }).then(ok => { if (ok) lastOk = Date.now(); else abort(); }, () => { }).finally(() => { hbBusy = false; }); }
-        if (Date.now() - lastOk > ttlSeconds * 800) abort();
+        if (hbBusy) return; hbBusy = true; const sent = Date.now();
+        rpc('mobile_job_heartbeat', { ...fence, p_ttl_seconds: ttlSeconds }).then(ok => { if (ok) leaseBase = sent; else abort(); }, () => { }).finally(() => { hbBusy = false; });
     }, heartbeatMs);
+    // LOSS OF DATABASE CONTACT: a SEPARATE, finer timer (not tied to any request or to the heartbeat tick) cancels once 70% of the lease has passed since
+    // the last request known to have extended it. A stalled request cannot hold it open. It lives in THIS process: if this process is frozen it cannot fire
+    // (see the independent wall-clock `timeout` wrapper in limits.mjs). Cancellation kills the sandbox; it cannot undo effects already issued.
+    const dog = setInterval(() => { if (Date.now() - leaseBase > ttlSeconds * 700) abort(); }, Math.min(250, Math.max(20, ttlSeconds * 50)));
     try {
         let text, evidence = [];
         // Scoped context. Identity comes from the fenced job in the database, never from task text. Recalled notes and repository
@@ -51,7 +51,7 @@ export async function runOneJob({ db, worker, secret, answer, repoContext = unde
         if (ok === true && text != null) remembered = await rpc('mobile_job_remember', { p_task: job.task_id, p_worker: worker, p_secret: secret }).catch(() => false) === true; // success only, one note per task
         return { ran: true, recorded: ok === true, lost, remembered };
     }
-    finally { clearInterval(hb); }
+    finally { clearInterval(hb); clearInterval(dog); }
 }
 
 // Worker-fleet liveness for the task page. Reachability only: a worker checked in recently. It is NOT proof that

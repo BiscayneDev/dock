@@ -58,6 +58,9 @@ export async function runLimited({ worktree, cmd, env, socketDir, limits = {}, e
         // trusted shell joins the cgroup first; if the join fails nothing is exec'd
         argv0 = 'sh'; argv = ['-c', 'echo $$ > "$0/cgroup.procs" && exec "$@"', cg.path, 'prlimit', ...argv];
     }
+    // Independent wall-clock enforcement: coreutils `timeout` is its own process, so a worker whose event loop is frozen (SIGSTOP, hang) still has its sandbox
+    // SIGKILLed at wallMs + 1s. It is a WALL-CLOCK bound from sandbox start, not a lease bound.
+    argv = ['-s', 'KILL', String(Math.ceil(L.wallMs / 1000) + 1), argv0, ...argv]; argv0 = 'timeout';
     const child = spawn(argv0, argv, { env: { PATH: '/usr/bin:/bin' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     let out = '', err = '', killedBy = null, peak = 0; const kill = why => { if (killedBy) return; killedBy = why; cg?.killAll(); try { process.kill(-child.pid, 'SIGKILL'); } catch { } };
     child.stdout.on('data', d => { if ((out += d).length > 2e6) kill('output'); }); child.stderr.on('data', d => { if ((err += d).length > 2e6) kill('output'); });
