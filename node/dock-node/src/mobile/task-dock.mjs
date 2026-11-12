@@ -2,12 +2,14 @@
 // Turns spend model budget, so handoffs are noRetry: one attempt, then lookup by request id.
 // Task state changes here are bookkeeping; they approve nothing and start nothing.
 import { taskBoard, reachability } from './taskboard.mjs';
+import { verifyReceipt } from './receipt.mjs';
 // Durability: the default board is in memory. A turn is NOT tracked across a server restart
 // unless the caller passes a board over fileTaskStore (or a future server-side store).
 // Recovery lookups must be backend-authenticated and scoped: the receipt has to name the same
 // owner, session and request, and carry a digest the backend computed. The task cannot supply it.
-export function taskBackedDock({ dock, board = taskBoard(), agentId = 'dock', ownerId = undefined, status = undefined, health = undefined, now = () => Date.now() }) {
-    const scoped = (r, sessionId, requestId) => r && r.ownerId === ownerId && r.sessionId === sessionId && r.requestId === requestId ? r : null;
+export function taskBackedDock({ dock, board = taskBoard(), agentId = 'dock', ownerId = undefined, workspaceId = undefined, receiptKey = undefined, status = undefined, health = undefined, now = () => Date.now() }) {
+    // Completion only counts as a backend-signed receipt (Ed25519 public key held here) for this exact scope.
+    const scoped = (r, sessionId, requestId) => receiptKey && ownerId ? verifyReceipt(receiptKey, r, { ownerId, workspaceId, sessionId, requestId }, { now: now() }) : null;
     const proof = {};
     const line = t => `${t.state === 'waiting_on_you' ? 'WAITING ON YOU' : t.state.replace(/_/g, ' ').toUpperCase()}: ${t.id.slice(0, 8)}${t.waitingOn ? ' - ' + t.waitingOn : ''}`;
     return {
@@ -24,7 +26,7 @@ export function taskBackedDock({ dock, board = taskBoard(), agentId = 'dock', ow
             let reply;
             await board.deliver(h.key, {
                 send: async () => { reply = await dock.turn({ sessionId, requestId, text, signal }); },
-                lookup: status && ownerId ? async () => { const r = scoped(await status({ ownerId, sessionId, requestId }), sessionId, requestId); if (r?.status === 'complete' && /^[a-f0-9]{64}$/.test(r.replyDigest ?? '')) { proof[id] = r.replyDigest; return true; } return r?.status === 'failed' ? false : undefined; } : undefined
+                lookup: status && ownerId && receiptKey ? async () => { const r = scoped(await status({ ownerId, sessionId, requestId }), sessionId, requestId); if (r?.status === 'complete') { proof[id] = r.replyDigest; return true; } return r?.status === 'failed' ? false : undefined; } : undefined
             });
             if (h.status === 'delivered') {
                 const t = board.get(id); if (t.state === 'blocked') board.transition(id, 'delegated', { actor: 'system' });

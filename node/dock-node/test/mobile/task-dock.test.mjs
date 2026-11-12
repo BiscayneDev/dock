@@ -20,28 +20,38 @@ test('uncertain turn: no replay, task shows as blocked, /tasks costs no model ca
     await prompt(acp, '/tasks'); assert.equal(calls, 1);
     assert.match(out.at(-1).params.update.content.text, /BLOCKED/);
 });
-test('same request id after a disconnect resolves by lookup, with no second model call', async () => {
-    let calls = 0, done = false;
-    const D = 'a'.repeat(64);
-    const dock = taskBackedDock({ ownerId: 'o1', dock: { turn: async () => { calls++; throw Error('disconnect'); } }, status: async q => ({ status: done ? 'complete' : 'pending', ownerId: 'o1', sessionId: q.sessionId, requestId: q.requestId, replyDigest: D }) });
+import { generateKeyPairSync } from 'node:crypto';
+import { signReceipt, replyDigest } from '../../src/mobile/receipt.mjs';
+const keys = generateKeyPairSync('ed25519'), other = generateKeyPairSync('ed25519');
+const NOW = Date.parse('2026-01-01T00:00:00Z'), iso = new Date(NOW).toISOString();
+const scope = { ownerId: 'o1', workspaceId: 'w1' };
+const mkRecover = (statusFn) => { let calls = 0; const dock = taskBackedDock({ ...scope, receiptKey: keys.publicKey, now: () => NOW, dock: { turn: async () => { calls++; throw Error('disconnect'); } }, status: statusFn }); return { dock, calls: () => calls }; };
+const good = (q, over = {}, key = keys.privateKey) => signReceipt(key, { ...scope, sessionId: q.sessionId, requestId: q.requestId, status: 'complete', replyDigest: replyDigest('fictional'), issuedAt: iso, ...over });
+test('same request id after a disconnect resolves by signed receipt, with no second model call', async () => {
+    let done = false; const { dock, calls } = mkRecover(async q => done ? good(q) : { status: 'pending' });
     await assert.rejects(dock.turn({ sessionId: 's', requestId: 'r1', text: 'x' }));
-    await assert.rejects(dock.turn({ sessionId: 's', requestId: 'r1', text: 'x' }), /uncertain/); // still pending: stays put
+    await assert.rejects(dock.turn({ sessionId: 's', requestId: 'r1', text: 'x' }), /uncertain/);
     done = true;
-    const r = await dock.turn({ sessionId: 's', requestId: 'r1', text: 'x' });
-    assert.match(r.text, /already completed/); assert.equal(calls, 1);
-    assert.equal(dock.board.get('r1').state, 'done'); assert.deepEqual(dock.board.inbox(), []);
+    assert.match((await dock.turn({ sessionId: 's', requestId: 'r1', text: 'x' })).text, /already completed/);
+    assert.equal(calls(), 1); assert.equal(dock.board.get('r1').state, 'done'); assert.deepEqual(dock.board.inbox(), []);
 });
-test('recovery receipt for another owner, session or request, or without a backend digest, is ignored', async () => {
-    for (const bad of [{ ownerId: 'other' }, { sessionId: 'other' }, { requestId: 'other' }, { replyDigest: 'self-claimed' }, { replyDigest: undefined }]) {
-        let calls = 0; const dock = taskBackedDock({ ownerId: 'o1', dock: { turn: async () => { calls++; throw Error('x'); } }, status: async q => ({ status: 'complete', ownerId: 'o1', sessionId: q.sessionId, requestId: q.requestId, replyDigest: 'b'.repeat(64), ...bad }) });
+test('forged, tampered, unsigned, wrong-scope, stale or future receipts are ignored', async () => {
+    const cases = [q => good(q, {}, other.privateKey), q => ({ ...good(q), replyDigest: 'c'.repeat(64) }), q => ({ ...good(q), sig: undefined }),
+        q => good(q, { ownerId: 'other' }), q => good(q, { workspaceId: 'other' }), q => good(q, { sessionId: 'other' }), q => good(q, { requestId: 'other' }),
+        q => good(q, { issuedAt: new Date(NOW - 2 * 86400_000).toISOString() }), q => good(q, { issuedAt: new Date(NOW + 3600_000).toISOString() }),
+        q => good(q, { replyDigest: 'self-claimed' }), q => ({ status: 'complete', ownerId: 'o1', workspaceId: 'w1', sessionId: q.sessionId, requestId: q.requestId, replyDigest: 'b'.repeat(64) })];
+    for (const c of cases) {
+        const { dock, calls } = mkRecover(async q => c(q));
         await assert.rejects(dock.turn({ sessionId: 's', requestId: 'r', text: 'x' }));
         await assert.rejects(dock.turn({ sessionId: 's', requestId: 'r', text: 'x' }), /uncertain/);
-        assert.equal(dock.board.get('r').state, 'blocked'); assert.equal(calls, 1);
+        assert.equal(dock.board.get('r').state, 'blocked'); assert.equal(calls(), 1);
     }
 });
-test('without an owner binding no lookup is trusted', async () => {
-    const dock = taskBackedDock({ dock: { turn: async () => { throw Error('x'); } }, status: async () => ({ status: 'complete' }) });
-    await assert.rejects(dock.turn({ sessionId: 's', requestId: 'r', text: 'x' })); await assert.rejects(dock.turn({ sessionId: 's', requestId: 'r', text: 'x' }), /uncertain/);
+test('without owner binding or a receipt public key no lookup is trusted', async () => {
+    for (const extra of [{ receiptKey: keys.publicKey }, { ownerId: 'o1' }]) {
+        const dock = taskBackedDock({ ...extra, dock: { turn: async () => { throw Error('x'); } }, status: async q => good(q) });
+        await assert.rejects(dock.turn({ sessionId: 's', requestId: 'r', text: 'x' })); await assert.rejects(dock.turn({ sessionId: 's', requestId: 'r', text: 'x' }), /uncertain/);
+    }
 });
 test('/tasks shows whether the agent is actually reachable, not just configured', async () => {
     const at = Date.parse('2026-01-01T00:10:00Z'); const mk = h => taskBackedDock({ dock: {}, health: async () => h, now: () => at });
