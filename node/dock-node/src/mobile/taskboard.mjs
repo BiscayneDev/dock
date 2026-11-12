@@ -39,6 +39,7 @@ export function taskBoard({ store = memoryTaskStore(), now = () => Date.now(), m
     const save = () => store.save?.();
     const log = (t, actor, kind, detail) => t.events.push({ at: new Date(now()).toISOString(), actor, kind, ...detail });
     return {
+        get,
         create({ id, brief, agentId, review = 'owner' }) {
             if (!['owner', 'none'].includes(review)) throw Error('Unknown review policy');
             if (!id || !brief || !agentId) throw Error('id, brief and accountable agent required');

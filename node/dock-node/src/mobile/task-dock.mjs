@@ -1,0 +1,32 @@
+// Wraps the Dock client used by the ACP bridge so every phone turn is a tracked task.
+// Turns spend model budget, so handoffs are noRetry: one attempt, then lookup by request id.
+// Task state changes here are bookkeeping; they approve nothing and start nothing.
+import { taskBoard } from './taskboard.mjs';
+export function taskBackedDock({ dock, board = taskBoard(), agentId = 'dock', status = undefined }) {
+    const line = t => `${t.state === 'waiting_on_you' ? 'WAITING ON YOU' : t.state.replace(/_/g, ' ').toUpperCase()}: ${t.id.slice(0, 8)}${t.waitingOn ? ' - ' + t.waitingOn : ''}`;
+    return {
+        board,
+        open: x => dock.open(x),
+        load: id => dock.load(id),
+        async turn({ sessionId, requestId, text, signal }) {
+            if (text.trim() === '/tasks') { const items = board.inbox(); return { text: items.length ? items.map(line).join('\n') : 'Nothing waiting on you.' }; }
+            const id = requestId;
+            try { board.create({ id, brief: text.slice(0, 500), agentId, review: 'none' }); board.transition(id, 'delegated'); } catch (e) { if (e.message !== 'Task exists') throw e; }
+            const h = board.enqueue(id, 'turn', text, { noRetry: true });
+            let reply;
+            await board.deliver(h.key, {
+                send: async () => { reply = await dock.turn({ sessionId, requestId, text, signal }); },
+                lookup: status ? async () => { const s = await status({ sessionId, requestId }); return s?.status === 'complete' ? true : s?.status === 'failed' ? false : undefined; } : undefined
+            });
+            if (h.status === 'delivered') {
+                const t = board.get(id); if (t.state === 'blocked') board.transition(id, 'delegated', { actor: 'system' });
+                if (t.state === 'delegated') board.transition(id, 'running');
+                board.transition(id, 'done', { actor: 'agent', evidence: ['dock reply recorded for request ' + requestId] });
+                if (reply) return reply;
+            }
+            if (h.status === 'delivered') return { text: 'Dock already completed this request. Open the session to read the reply.' };
+            if (h.status === 'uncertain' || h.status === 'failed') { try { board.transition(id, h.status === 'failed' ? 'failed' : 'blocked', { actor: 'system' }); } catch { } }
+            throw Error(h.status === 'uncertain' ? 'Dock turn status uncertain; not replaying' : 'Dock turn failed; not retried');
+        }
+    };
+}
