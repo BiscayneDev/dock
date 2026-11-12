@@ -73,6 +73,13 @@ try {
     await page.screenshot({ path: '/downloads/dock-queue-390px-bottom-FICTIONAL-LOCAL.png' });
     const m = await page.evaluate(() => { const nav = [...document.querySelectorAll('*')].filter(e => getComputedStyle(e).position === 'fixed' && e.getBoundingClientRect().bottom >= innerHeight - 2 && e.getBoundingClientRect().height < 200).map(e => e.getBoundingClientRect().top)[0]; const cards = [...document.querySelectorAll('article')]; const last = cards.at(-1).getBoundingClientRect(); return { navTop: nav ?? null, lastBottom: last.bottom, w: [document.documentElement.scrollWidth, innerWidth] }; });
     console.log(text); console.log(JSON.stringify(m));
+    // The chat screen the user actually opens (/assistant) must show the delivered worker result from the same conversation.
+    const convRow = (await rest('mobile_sessions?id=eq.' + session.sessionId))[0]; const convId = convRow?.conversation_id; console.log('session conversation', convId, (await rest('conversations?id=eq.' + convId)).length);
+    let chat = ''; for (let i = 0; i < 12; i++) { try { await page.goto('http://127.0.0.1:3107/assistant?id=' + convId, { waitUntil: 'domcontentloaded', timeout: 60000 }); await sleep(2500); chat = await page.evaluate(() => document.body.innerText); if (chat.includes('Fixed. All 2 tests pass')) break; } catch { } await sleep(1500); }
+    await page.screenshot({ path: '/downloads/dock-chat-390px-top-FICTIONAL-LOCAL.png' });
+    console.log('CHAT TEXT:', chat.slice(0, 900)); assert.ok(chat.includes('Fixed. All 2 tests pass'), 'chat screen does not show the worker result');
+    await page.evaluate(() => { for (const e of [document.scrollingElement, ...document.querySelectorAll('*')]) if (e && e.scrollHeight > e.clientHeight + 40) e.scrollTop = e.scrollHeight; }); await sleep(600);
+    await page.screenshot({ path: '/downloads/dock-chat-390px-bottom-FICTIONAL-LOCAL.png' });
     const low = text.toLowerCase(); for (const w of ['worker checked in', 'fixed. all 2 tests pass', 'stopped before reporting back', 'not run again']) assert.ok(low.includes(w), 'missing: ' + w);
     assert.ok(m.w[0] <= m.w[1]); if (m.navTop !== null) assert.ok(m.lastBottom <= m.navTop - 8, JSON.stringify(m));
     console.log(JSON.stringify({ authenticatedNextEnqueue: true, noInferenceServerExists: true, duplicateEnqueueIdempotent: true, workerKilledMidRun: 'uncertain/blocked, not replayed', nextKilledBeforeWorkerRan: true, freshWorkerProcessFinished: true, resultDeliveredOnceToConversation: true, duplicateFinishAddsNothing: true, concurrentFinishes: '8 parallel workers: 8 messages; 6 racing finishes of one job: 1 message', workerAuth: 'registered with secret', ownerPageAfterRestart: 'shows both', deployed: false }));
