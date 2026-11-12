@@ -34,8 +34,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
     digest=hashlib.sha256('fictional-execution-capability-secret'.encode()).hexdigest()
     cap=sql(f"select mobile_capability_issue('{e}','{digest}',now()+interval '4 minutes')")
     result={'token':'dockexec.'+cap+'.fictional-execution-capability-secret'}
+   elif u.path=='/fixture/complete-turn':
+    # Fictional: completes a pending turn through the real SQL functions, as the service does after inference.
+    sid,rid,fp=body['sessionId'],body['requestId'],body['fingerprint']
+    assert len(sid)==36 and len(rid)==36 and fp.isalnum()
+    sql(f"select mobile_claim({lit(sid)},'{d}','{o}','{w}',{lit(rid)},{lit(fp)})")
+    sql(f"select mobile_complete({lit(sid)},'{d}','{o}','{w}',{lit(rid)},{lit(fp)},'fictional user','fictional reply text',jsonb_build_object('text','fictional reply text'))")
+    result={'ok':True}
+   elif u.path=='/fixture/second-device':
+    o2='55555555-5555-4555-8555-555555555555';w2='77777777-7777-4777-8777-777777777777';d2='88888888-8888-4888-8888-888888888888';h2=hashlib.sha256((salt+':other-secret').encode()).hexdigest()
+    sql(f"insert into users values('{o2}');insert into workspaces values('{w2}','{o2}');insert into devices values('{d2}','{o2}','{w2}','Other','{salt}','{h2}',null,now(),now(),'mobile');insert into agents values('chief','Chief','chief_of_staff','{w2}');insert into mobile_grants(device_id,owner_id,workspace_id,agent_key,repo_keys,inference_enabled)values('{d2}','{o2}','{w2}','chief',array['dock'],true)")
+    result={'ok':True}
    elif u.path=='/fixture/model-state':result={'holds':int(sql("select count(*)from mobile_model_holds")),'settled':int(sql("select count(*)from mobile_model_holds where state='settled'")),'architectNotes':int(sql("select count(*)from memory_items where visibility='agent'and author_agent='architect'and memory_state='active'"))}
    elif u.path=='/fixture/beacon-state':result={'candidates':int(sql("select count(*)from memory_items where visibility='agent'and memory_state='proposed'")),'privateNotes':int(sql("select count(*)from memory_items where visibility='agent'and memory_state='active'")),'shared':int(sql("select count(*)from memory_items where visibility='business'"))}
+   elif u.path=='/fixture/execution-result':
+    # Fictional controller: records the result bound to the execution's own instance and run.
+    e=body['executionId'];assert len(e)==36
+    row=json.loads(sql(f"select row_to_json(x) from(select instance_id,run_id from mobile_executions where id='{e}')x"))
+    sql(f"select mobile_execution_result('{e}',{lit(row['instance_id'])},{lit(row['run_id'])},'fictional worker output',true)")
+    result={'ok':True}
    elif u.path=='/fixture/prepare-execution':
     session=body['sessionId'];assert isinstance(session,str)and len(session)==36
     proposal=sql(f"insert into mobile_task_proposals(session_id,request_id,ordinal,owner_id,workspace_id,proposal,status,approved_digest)values({lit(session)},gen_random_uuid(),0,'{o}','{w}','{{}}','approved','fictional-proof')returning id")

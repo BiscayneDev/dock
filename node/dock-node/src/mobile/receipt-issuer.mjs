@@ -22,3 +22,14 @@ export function taskLedger({ db, principal }) {
         transition: (id, next, actor, evidence = [], waiting = null) => call('mobile_task_transition', { p_task: id, p_owner: principal.ownerId, p_next: next, p_actor: actor, p_evidence: evidence, p_waiting: waiting })
     };
 }
+// Execution receipts. The only writer of result_recorded_at is the controller-side
+// mobile_execution_result function, which binds execution + instance + run before recording.
+// The issuer signs only a recorded result that belongs to this owner/workspace, and binds the
+// receipt to the execution id, instance and run, so a result for another run cannot be substituted.
+export async function issueExecutionReceipt({ principal, executionId, readExecution, privateKey, now = () => Date.now() }) {
+    if (!privateKey) throw Error('Receipt signing not configured');
+    const e = await readExecution(executionId);
+    if (!e || e.ownerId !== principal.ownerId || e.workspaceId !== principal.workspaceId) return { status: 'unknown' };
+    if (!e.resultRecordedAt || typeof e.result !== 'string' || !e.instanceId || !e.runId) return { status: 'pending' };
+    return signReceipt(privateKey, { ownerId: e.ownerId, workspaceId: e.workspaceId, sessionId: e.sessionId, requestId: executionId, executionId, status: e.success ? 'complete' : 'failed', replyDigest: e.success ? replyDigest(e.result) : null, issuedAt: new Date(now()).toISOString(), instanceId: e.instanceId, runId: e.runId });
+}

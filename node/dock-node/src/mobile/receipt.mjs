@@ -2,7 +2,7 @@
 // bridge and any task/agent hold only the public key, so neither can fabricate completion.
 // A 64-hex digest alone proves nothing: only a valid signature over the exact scope counts.
 import { sign, verify, createHash } from 'node:crypto';
-const canon = r => JSON.stringify([r.v, r.ownerId, r.workspaceId, r.sessionId, r.requestId, r.executionId ?? null, r.status, r.replyDigest ?? null, r.issuedAt]);
+const canon = r => JSON.stringify([r.v, r.ownerId, r.workspaceId, r.sessionId, r.requestId, r.executionId ?? null, r.status, r.replyDigest ?? null, r.issuedAt, r.instanceId ?? null, r.runId ?? null]);
 export const replyDigest = text => createHash('sha256').update(text).digest('hex');
 export function signReceipt(privateKey, r) { const body = { v: 1, ...r }; return { ...body, sig: sign(null, Buffer.from(canon(body)), privateKey).toString('base64') }; }
 export function verifyReceipt(publicKey, receipt, expected, { now = Date.now(), maxAgeMs = 24 * 3600_000 } = {}) {

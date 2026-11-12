@@ -23,7 +23,8 @@ const BETA_PATHS = ["/onboarding", "/assistant", "/api/onboarding", "/api/worksp
 // Exact paths only: /api/devices (list, create) and DELETE /api/devices/[id] stay behind the session gate.
 const DEVICE_BEARER_PATTERNS = [
   /^\/api\/mobile\/sessions$/,
-  /^\/api\/mobile\/sessions\/[a-f0-9-]{36}(?:\/turns(?:\/[a-f0-9-]{36})?|\/notices(?:\/[a-f0-9-]{36})?)?$/i,
+  /^\/api\/mobile\/executions\/[a-f0-9-]{36}\/receipt$/i,
+  /^\/api\/mobile\/sessions\/[a-f0-9-]{36}(?:\/turns(?:\/[a-f0-9-]{36}(?:\/receipt)?)?|\/notices(?:\/[a-f0-9-]{36})?)?$/i,
   /^\/api\/devices\/(heartbeat|claim|infer|pair)$/,
   /^\/api\/runs\/[^/]+\/(events|complete)$/,
 ]

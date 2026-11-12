@@ -75,5 +75,7 @@ export function dockMobileClient({ url, token, fetchImpl = fetch }) {
         throw Error('HTTPS Dock endpoint required');
     async function call(path, body, signal) { const r = await fetchImpl(new URL(path, base), { method: body ? 'POST' : 'GET', headers: { authorization: `Bearer ${token}`, ...body ? { 'content-type': 'application/json' } : {} }, body: body ? JSON.stringify(body) : undefined, redirect: 'error', signal: signal ? AbortSignal.any([signal,AbortSignal.timeout(120000)]) : AbortSignal.timeout(120000) }); if (!r.ok)
         throw Error(`Dock request refused (${r.status})`); return r.json(); }
-    return { open: x => call('/api/mobile/sessions', x), load: id => call(`/api/mobile/sessions/${encodeURIComponent(id)}`), turn: ({ signal, ...x }) => call(`/api/mobile/sessions/${encodeURIComponent(x.sessionId)}/turns`, x, signal) };
+    return { open: x => call('/api/mobile/sessions', x), load: id => call(`/api/mobile/sessions/${encodeURIComponent(id)}`), executionReceipt: id => call(`/api/mobile/executions/${encodeURIComponent(id)}/receipt`),
+        receipt: ({ sessionId, requestId }) => call(`/api/mobile/sessions/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(requestId)}/receipt`),
+        turn: ({ signal, ...x }) => call(`/api/mobile/sessions/${encodeURIComponent(x.sessionId)}/turns`, x, signal) };
 }
