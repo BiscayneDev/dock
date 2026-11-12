@@ -2,13 +2,14 @@ import { execFileSync } from 'node:child_process';
 import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { runLimited, checkEnforcement } from './limits.mjs';
+import { scopedFiles } from './scoped-files.mjs';
 // SCRIPTED STAND-IN, not a model. It proves the execution shape: one real git worktree + branch per task,
 // a change made only inside that worktree, inside a namespace sandbox, the repo's own tests run before and after, and diff/test evidence
 // returned. The shared checkout is never touched. `editCmd` (run sandboxed, cwd = the worktree) is the only thing a real agent replaces.
 const git = (cwd, ...a) => execFileSync('git', a, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 // Untrusted code (the edit and the repo's tests) only ever runs inside the sandbox, mounted on its own worktree.
 const testsWith = (enforcement, limits) => async cwd => { const r = await runLimited({ worktree: cwd, cmd: ['node', '--test'], enforcement, limits }); return { ok: r.ok, out: r.stdout, enforcement: r.enforcement }; };
-export function worktreeAgent({ repoDir, worktreesRoot, editCmd, modelProxyFactory = undefined, enforcement = 'aggregate-required', limits = {} }) {
+export function worktreeAgent({ repoDir, worktreesRoot, editCmd, fileSteps = undefined, modelProxyFactory = undefined, enforcement = 'aggregate-required', limits = {} }) {
     const tests = testsWith(enforcement, limits);
     return async ({ taskId, ownerId }) => {
         const gate = checkEnforcement(enforcement); if (!gate.ok) throw Error('Refused before running anything: ' + gate.reason);
@@ -19,13 +20,16 @@ export function worktreeAgent({ repoDir, worktreesRoot, editCmd, modelProxyFacto
         // Optional model channel: a trusted proxy (identity from the server-side job, never from the task) reached only
         // through a unix socket mounted into the sandbox. Only the edit step gets it; the tests never do.
         const proxy = modelProxyFactory?.({ ownerId, jobId: taskId }), chan = proxy ? await proxy.listen() : undefined;
-        let ed; try { ed = await runLimited({ worktree: dir, cmd: editCmd, socketDir: chan?.dir, enforcement, limits }); } finally { if (proxy) proxy.close(chan.dir); }
+        // Simple edits as data, not a shell: [{op:'write', path, text}]. They run through scoped-files (each op inside the namespace sandbox under
+        // the same limit layer), so a task cannot run arbitrary commands in this step. Tests still run as a sandboxed command.
+        if (fileSteps) { const f = scopedFiles({ worktree: dir, enforcement, limits }); for (const st of fileSteps) { if (st.op === 'write') await f.write(st.path, st.text); else if (st.op === 'read') await f.read(st.path); else if (st.op === 'list') await f.list(st.path); else throw Error('Unknown file step'); } }
+        let ed = fileSteps ? { ok: true } : undefined; if (!fileSteps) try { ed = await runLimited({ worktree: dir, cmd: editCmd, socketDir: chan?.dir, enforcement, limits }); } finally { if (proxy) proxy.close(chan.dir); }
         if (!ed.ok) throw Error('Edit step failed inside the sandbox');
         git(dir, 'add', '-A'); git(dir, '-c', 'user.name=dock-agent', '-c', 'user.email=agent@example.invalid', 'commit', '-qm', 'FICTIONAL scripted change');
         const after = await tests(dir), stat = git(dir, 'diff', '--shortstat', 'HEAD~1', 'HEAD').trim();
         const pass = s => (s.out.match(/# pass (\d+)/) || [])[1] ?? '?', fail = s => (s.out.match(/# fail (\d+)/) || [])[1] ?? '?';
         if (!after.ok) throw Error('Tests still failing after the change');
         const files = (stat.match(/(\d+) files? changed/) || [])[1] ?? '?';
-        return { text: `Fixed. All ${pass(after)} tests pass.`, evidence: [`Tests: ${fail(before)} failing before, ${fail(after)} failing after (${pass(after)} passing).`, `Changed ${files} file${files === '1' ? '' : 's'}: ${stat.replace(/^\s*\d+ files? changed, /, '')}`, ...(proxy ? [`Asked the model router ${proxy.calls()} time${proxy.calls() === 1 ? '' : 's'} (an attempt count, not a cost).`] : []), `Kept on its own branch (${branch.slice(0, 13)}...), apart from the shared code.`] };
+        return { text: `Fixed. All ${pass(after)} tests pass.`, evidence: [`Tests: ${fail(before)} failing before, ${fail(after)} failing after (${pass(after)} passing).`, `Changed ${files} file${files === '1' ? '' : 's'}: ${stat.replace(/^\s*\d+ files? changed, /, '')}`, ...(fileSteps ? [`Edited through scoped file tools (${fileSteps.filter(x => x.op === 'write').length} write${fileSteps.filter(x => x.op === 'write').length === 1 ? '' : 's'}, no free-form command).`] : []), ...(proxy ? [`Asked the model router ${proxy.calls()} time${proxy.calls() === 1 ? '' : 's'} (an attempt count, not a cost).`] : []), `Kept on its own branch (${branch.slice(0, 13)}...), apart from the shared code.`] };
     };
 }
