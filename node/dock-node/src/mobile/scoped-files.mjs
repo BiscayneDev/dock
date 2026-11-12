@@ -21,8 +21,8 @@ if (op === 'read' || op === 'list') { const real = fs.realpathSync(target); if (
 else if (op === 'write') { const data = Buffer.from(process.env.DATA_B64 || '', 'base64'); if (data.length > MAX) bad('content too large');
   const fd = fs.openSync(path.join(parentReal, path.basename(target)), fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_NOFOLLOW, 0o644); fs.writeSync(fd, data); fs.closeSync(fd); process.stdout.write('ok'); }
 else bad('unknown operation');`;
-export function scopedFiles({ worktree, enforcement, limits = {}, maxBytes = 1_000_000, detect }) {
-    const run = (op, rel, env = {}) => String(rel).includes('\0') ? Promise.resolve({ ok: false, stderr: 'path not allowed' }) : runLimited({ worktree, cmd: ['node', '-e', HELPER, op, String(rel)], env: { MAXB: maxBytes, ...env }, enforcement, detect, limits: { wallMs: 10000, cpuSeconds: 5, memoryBytes: 2 * 1024 ** 3, ...limits } });
+export function scopedFiles({ worktree, enforcement, limits = {}, maxBytes = 1_000_000, detect, signal = undefined }) {
+    const run = (op, rel, env = {}) => String(rel).includes('\0') ? Promise.resolve({ ok: false, stderr: 'path not allowed' }) : runLimited({ worktree, cmd: ['node', '-e', HELPER, op, String(rel)], env: { MAXB: maxBytes, ...env }, enforcement, detect, signal, limits: { wallMs: 10000, cpuSeconds: 5, memoryBytes: 2 * 1024 ** 3, ...limits } });
     const res = r => { if (!r.ok) throw Error(r.refused ? r.stderr : ((r.stderr.match(/ENOENT|ELOOP|EACCES|ENOTDIR|path not allowed|path leaves the workspace|file too large|content too large|not a file|unknown operation/) || ['failed'])[0])); return r.stdout; };
     return {
         read: async rel => res(await run('read', rel)),

@@ -15,12 +15,26 @@ export function assertWorkerConfig({ enforcement = 'aggregate-required', allowWe
     }
     throw Error('unknown enforcement: ' + enforcement);
 }
-export async function superviseWorker({ db, worker, secret, answer, pollMs = 1000, maxBackoffMs = 15000, ttlSeconds = 30, signal, enforcement, allowWeakLocal, onEvent = () => { } }) {
+// Repository-knowledge adapter. A deployed worker must be given a real one by its trusted starter. With none, jobs run with the repo
+// context reported as 'unavailable' (never replaced by invented data). Fixtures exist only for local proof: they need the explicit
+// flag AND are refused under NODE_ENV=production, so a deployed config can never silently serve fictional repo context.
+export function resolveRepoContext({ repoContext = undefined, localProofFixture = undefined, allowLocalProofFixtures = false, env = process.env }) {
+    if (localProofFixture) {
+        if (!allowLocalProofFixtures) throw Error('a local proof fixture needs allowLocalProofFixtures:true set by the trusted starter');
+        if (env.NODE_ENV === 'production') throw Error('local proof fixtures are refused when NODE_ENV=production');
+        if (repoContext) throw Error('give either a real repoContext adapter or a local proof fixture, not both');
+        return localProofFixture;
+    }
+    if (repoContext !== undefined && typeof repoContext !== 'function') throw Error('repoContext must be a function');
+    return repoContext;
+}
+export async function superviseWorker({ db, worker, secret, answer, repoContext = undefined, localProofFixture = undefined, allowLocalProofFixtures = false, pollMs = 1000, maxBackoffMs = 15000, ttlSeconds = 30, signal, enforcement, allowWeakLocal, onEvent = () => { } }) {
     assertWorkerConfig({ enforcement, allowWeakLocal }); // fail closed before the first lease
+    const repo = resolveRepoContext({ repoContext, localProofFixture, allowLocalProofFixtures });
     let backoff = pollMs, jobs = 0; const sleep = ms => new Promise(r => { const t = setTimeout(r, ms); signal?.addEventListener('abort', () => { clearTimeout(t); r(); }, { once: true }); });
     while (!signal?.aborted) {
         try {
-            const r = await runOneJob({ db, worker, secret, answer, ttlSeconds, onEvent });
+            const r = await runOneJob({ db, worker, secret, answer, repoContext: repo, ttlSeconds, onEvent });
             if (r.ran) { jobs++; backoff = pollMs; onEvent('job-finished'); continue; }
             backoff = pollMs; await sleep(pollMs);
         } catch (e) { onEvent('error:' + String(e.message).slice(0, 80)); await sleep(backoff); backoff = Math.min(backoff * 2, maxBackoffMs); }

@@ -46,7 +46,7 @@ export function createJobCgroup({ base, name, memoryMax, pidsMax, cpuMax = '1000
     };
 }
 // Runs cmd inside the namespace sandbox under the given limits. Returns { ok, status, stdout, stderr, killedBy?, enforcement, peakDiskBytes }.
-export async function runLimited({ worktree, cmd, env, socketDir, limits = {}, enforcement = 'aggregate-required', detect, cgroupName = 'dock-job-' + process.pid + '-' + Date.now() }) {
+export async function runLimited({ worktree, cmd, env, socketDir, limits = {}, enforcement = 'aggregate-required', detect, signal = undefined, cgroupName = 'dock-job-' + process.pid + '-' + Date.now() }) {
     const gate = checkEnforcement(enforcement, { detect });
     if (!gate.ok) return { ok: false, refused: true, status: null, stdout: '', stderr: gate.reason, enforcement: 'refused' };
     const L = { ...DEFAULT_LIMITS, ...limits };
@@ -61,6 +61,8 @@ export async function runLimited({ worktree, cmd, env, socketDir, limits = {}, e
     const child = spawn(argv0, argv, { env: { PATH: '/usr/bin:/bin' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     let out = '', err = '', killedBy = null, peak = 0; const kill = why => { if (killedBy) return; killedBy = why; cg?.killAll(); try { process.kill(-child.pid, 'SIGKILL'); } catch { } };
     child.stdout.on('data', d => { if ((out += d).length > 2e6) kill('output'); }); child.stderr.on('data', d => { if ((err += d).length > 2e6) kill('output'); });
+    // Cancellation (e.g. the job's grant was revoked): SIGKILL of the whole namespace, same path as the wall-clock kill.
+    if (signal) { if (signal.aborted) kill('cancelled'); else signal.addEventListener('abort', () => kill('cancelled'), { once: true }); }
     const wall = setTimeout(() => kill('wall-clock'), L.wallMs), poll = setInterval(() => { peak = Math.max(peak, dirBytes(worktree)); if (peak > L.diskBytes) kill('disk-ceiling (detected by polling)'); }, L.pollMs);
     const status = await new Promise(res => { child.on('close', c => res(c)); child.on('error', () => res(null)); });
     clearTimeout(wall); clearInterval(poll); peak = Math.max(peak, dirBytes(worktree));

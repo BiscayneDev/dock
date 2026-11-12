@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { resolveRepoContext } from '../../src/mobile/supervisor.mjs';
+const fx = async () => ({ version: 'fictional', nodes: [] });
+test('no adapter stays undefined, so the job reports repo context unavailable', () => assert.equal(resolveRepoContext({}), undefined));
+test('a real adapter passes through', () => assert.equal(resolveRepoContext({ repoContext: fx }), fx));
+test('a fixture needs the explicit local flag', () => assert.throws(() => resolveRepoContext({ localProofFixture: fx }), /allowLocalProofFixtures/));
+test('a fixture works with the explicit flag outside production', () => assert.equal(resolveRepoContext({ localProofFixture: fx, allowLocalProofFixtures: true, env: {} }), fx));
+test('a fixture is refused in production even with the flag', () => assert.throws(() => resolveRepoContext({ localProofFixture: fx, allowLocalProofFixtures: true, env: { NODE_ENV: 'production' } }), /production/));
+test('fixture and real adapter together are refused', () => assert.throws(() => resolveRepoContext({ repoContext: fx, localProofFixture: fx, allowLocalProofFixtures: true, env: {} }), /not both/));
+test('a non-function adapter is refused', () => assert.throws(() => resolveRepoContext({ repoContext: 'x' }), /function/));
