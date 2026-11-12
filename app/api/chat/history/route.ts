@@ -9,11 +9,14 @@ interface ChatMessage {
   timestamp: number
 }
 
+// Known roles only. "agent" (worker results) renders as the assistant, like the main chat UI does.
+// An unknown role is dropped instead of being guessed as either side.
+const roleFor = (role: string): "user" | "assistant" | null => (role === "user" ? "user" : role === "assistant" || role === "agent" ? "assistant" : null)
+
 function toChatMessage(message: ConversationMessage): ChatMessage {
   return {
     id: message.id,
-    // Worker-delivered results are stored with role "agent"; they must not render as the user's own message.
-    role: message.role === "user" ? "user" : "assistant",
+    role: roleFor(message.role) ?? "assistant",
     text: message.text,
     agent: message.agent,
     timestamp: message.timestamp,
@@ -22,7 +25,7 @@ function toChatMessage(message: ConversationMessage): ChatMessage {
 
 export async function GET() {
   const conversation = await getDefaultConversation()
-  return NextResponse.json(conversation.messages.map(toChatMessage))
+  return NextResponse.json(conversation.messages.filter((m) => roleFor(m.role) !== null).map(toChatMessage))
 }
 
 export async function POST(request: Request) {
@@ -32,13 +35,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "messages array required" }, { status: 400 })
     }
 
-    const normalized: ConversationMessage[] = body.messages.map((message) => ({
+    // A client list may replace user/assistant history as before, but it can neither write nor erase server-delivered
+    // "agent" results: those are kept whenever the client's (possibly stale) list does not contain them.
+    const existing = await getDefaultConversation()
+    const sent = new Set(body.messages.map((m) => m.id))
+    const keptAgent = existing.messages.filter((m) => m.role === "agent" && !sent.has(m.id))
+    const normalized: ConversationMessage[] = [...body.messages.filter((m) => m.role === "user" || m.role === "assistant").map((message) => ({
       id: message.id,
       role: message.role,
       text: message.text,
       agent: message.agent,
       timestamp: message.timestamp,
-    }))
+    })), ...keptAgent]
 
     const conversation = await replaceDefaultConversationMessages(normalized)
     return NextResponse.json({ ok: true, count: conversation.messages.length })

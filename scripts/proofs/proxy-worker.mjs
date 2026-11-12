@@ -1,0 +1,31 @@
+// REAL: Postgres queue, lease-fenced runner, real git worktree, bubblewrap sandbox, model proxy over a unix socket.
+// FICTIONAL: repo, tasks, and the upstream (a local stub standing in for the authorized router; no real model, no key, no cost).
+import http from 'node:http';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import assert from 'node:assert/strict';
+import { runOneJob } from '../../node/dock-node/src/mobile/job-runner.mjs';
+import { worktreeAgent } from '../../node/dock-node/src/mobile/worktree-agent.mjs';
+import { createModelProxy } from '../../node/dock-node/src/mobile/model-proxy.mjs';
+import { db } from './job-queue-db.mjs';
+const sh = (cwd, ...a) => execFileSync('git', a, { cwd, encoding: 'utf8' });
+const root = mkdtempSync(join(tmpdir(), 'fictional-repo-')), repo = join(root, 'main'), wts = join(root, 'wts'); mkdirSync(repo); mkdirSync(wts); sh(repo, 'init', '-q', '-b', 'main');
+writeFileSync(join(repo, 'math.mjs'), 'export const add = (a, b) => a - b;\n'); writeFileSync(join(repo, 'math.test.mjs'), "import test from 'node:test';import assert from 'node:assert/strict';import { add } from './math.mjs';test('add',()=>assert.equal(add(2,3),5));test('add zero',()=>assert.equal(add(0,0),0));\n");
+sh(repo, 'add', '-A'); sh(repo, '-c', 'user.name=x', '-c', 'user.email=x@example.invalid', 'commit', '-qm', 'init');
+const seen = [], KEY = 'CANARY_FICTIONAL_PROVIDER_KEY_2';
+const up = http.createServer(async (q, s) => { let t = ''; for await (const c of q) t += c; seen.push({ auth: q.headers.authorization, owner: q.headers['x-dock-owner'], job: q.headers['x-dock-job'], body: JSON.parse(t) }); s.setHeader('content-type', 'application/json'); s.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'export const add = (a, b) => a + b;\n' } }] })); });
+await new Promise(r => up.listen(0, '127.0.0.1', r));
+const U = n => `${String(n).repeat(8)}-${String(n).repeat(4)}-${String(n).repeat(4)}-${String(n).repeat(4)}-${String(n).repeat(12)}`, O = U(1), T = U(4);
+await db.rpc('mobile_task_open', { p_task: T, p_owner: O, p_workspace: U(2), p_session: U(3), p_agent: 'chief', p_review: 'none', p_brief: 'FICTIONAL: fix add via the model router' });
+await db.rpc('mobile_job_enqueue', { p_task: T, p_owner: O, p_input: 'FICTIONAL: fix add' });
+const edit = `const http=require('http'),fs=require('fs');const body=JSON.stringify({model:'task-chosen-model',max_tokens:100,messages:[{role:'user',content:'Fix add so it adds. File: '+fs.readFileSync('math.mjs','utf8')}]});
+const r=http.request({socketPath:'/run/model/model.sock',path:'/v1/chat/completions',method:'POST',headers:{'content-type':'application/json'}},s=>{let d='';s.on('data',x=>d+=x);s.on('end',()=>{fs.writeFileSync('math.mjs',JSON.parse(d).choices[0].message.content)})});r.end(body)`;
+const agent = worktreeAgent({ repoDir: repo, worktreesRoot: wts, editCmd: ['node', '-e', edit], modelProxyFactory: identity => createModelProxy({ upstream: `http://127.0.0.1:${up.address().port}`, apiKey: KEY, identity, maxCalls: 2 }) });
+const r = await runOneJob({ db, worker: 'w1', answer: agent, ttlSeconds: 60 }); assert.equal(r.recorded, true, JSON.stringify(r));
+const row = await db.sql(`select state||'|'||coalesce(result_summary,'')||'|'||evidence::text from mobile_tasks where id='${T}'`); assert.match(row, /^done\|Fixed\. All 2 tests pass\./); assert.match(row, /Asked the model router 1 time \(an attempt count, not a cost\)/);
+assert.equal(seen.length, 1); assert.equal(seen[0].body.model, 'auto'); assert.equal(seen[0].auth, 'Bearer ' + KEY); assert.equal(seen[0].owner, O); assert.equal(seen[0].job, T);
+const wtDir = join(wts, 'wt-' + T); for (const f of readdirSync(wtDir)) if (!f.startsWith('.')) assert.ok(!readFileSync(join(wtDir, f), 'utf8').includes('CANARY'), 'provider key never reaches the worktree');
+console.log(JSON.stringify({ realPostgres: true, sandboxedWorkerCalledModelViaProxy: true, taskDone: true, upstreamSaw: { model: 'auto', ownerFromServerSideJob: true, taskNamedModelIgnored: true }, keyInWorktree: false, upstream: 'fictional stub, no real model', deployed: false }));
+up.close();

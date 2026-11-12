@@ -1,4 +1,5 @@
-import { spawnSync } from 'node:child_process';
+import { spawnSync, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 // Local isolation boundary for untrusted task code (agent edits, test runs). Linux user+mount+pid+net+ipc+uts
 // namespaces via bubblewrap: the process sees only system binaries (read-only), an empty /tmp, and ITS OWN worktree
 // (read-write) mounted at /work. No parent home, no sibling worktrees, no parent env, no network, no parent pids.
@@ -14,4 +15,9 @@ export function sandboxArgs({ worktree, cmd, env = {}, socketDir = undefined }) 
 export function runSandboxed({ worktree, cmd, env, socketDir, timeoutMs = 60000 }) {
     const r = spawnSync('bwrap', sandboxArgs({ worktree, cmd, env, socketDir }), { encoding: 'utf8', timeout: timeoutMs, env: { PATH: '/usr/bin:/bin' } }); // parent env is not passed even to bwrap
     return { ok: r.status === 0, status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+}
+// Async variant: required when the trusted proxy runs in this same process (a sync spawn would block its event loop).
+export async function runSandboxedAsync({ worktree, cmd, env, socketDir, timeoutMs = 60000 }) {
+    try { const r = await promisify(execFile)('bwrap', sandboxArgs({ worktree, cmd, env, socketDir }), { timeout: timeoutMs, env: { PATH: '/usr/bin:/bin' }, maxBuffer: 4_000_000 }); return { ok: true, status: 0, stdout: r.stdout, stderr: r.stderr }; }
+    catch (e) { return { ok: false, status: e.code ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? String(e.message) }; }
 }
