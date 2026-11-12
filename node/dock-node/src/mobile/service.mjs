@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 // Mobile session/role binding comes from paired device DB rows, never prompt.
 // tasks: optional server-side task ledger (default off). The server is the trusted writer here: it
 // records the task after its own durable turn completion, so no client or task supplies completion.
-// Ledger failures never change the turn result; they are reported through onTaskError.
+// Flag-on: the claim is authoritative (fail closed before the model), the turn is not cancelled by client
+// disconnect, and the recorded result is recoverable by the same request id. Display transitions are best-effort.
 export function mobileConversationService({ store, context, answer, recordTurn, planSpecialist = undefined, tasks = /** @type {any} */ (undefined), onTaskError = () => { } }) {
     const track = async fn => { if (!tasks) return; try { await fn(); } catch (e) { onTaskError(e); } };
     const hash = x => createHash('sha256').update(JSON.stringify(x)).digest('hex');
@@ -21,11 +22,25 @@ export function mobileConversationService({ store, context, answer, recordTurn, 
                 return receipt.result;
             if (receipt.status !== 'claimed')
                 throw Error('Turn pending or conflicted; read status, do not replay inference');
-            await track(async () => { await tasks.open({ id: requestId, sessionId, agentKey: s.agentId, review: 'none', brief: text.slice(0, 500) }); await tasks.transition(requestId, 'delegated', 'system'); await tasks.claimAttempt(requestId, 'turn'); await tasks.transition(requestId, 'running', 'agent'); });
+            if (tasks) {
+                // Flag-on: the durable claim is authoritative and fails closed BEFORE any model dispatch.
+                // Only display transitions below are best-effort.
+                try {
+                    await tasks.open({ id: requestId, sessionId, agentKey: s.agentId, review: 'none', brief: text.slice(0, 500) });
+                    if (await tasks.claimAttempt(requestId, 'turn') !== true)
+                        throw Error('Task attempt already claimed');
+                }
+                catch (e) {
+                    onTaskError(e);
+                    await store.fail(s, requestId, fingerprint).catch(() => { });
+                    throw Error('Task claim not recorded; nothing was sent to the model');
+                }
+                await track(async () => { await tasks.transition(requestId, 'delegated', 'system'); await tasks.transition(requestId, 'running', 'agent'); });
+            }
             try {
                 const shared = await context({ ...principal, projectId: s.projectId, repoKeys: s.repoKeys, agentId: s.agentId }, text);
                 const history = await store.messages(s);
-                const answerResult = await answer({ principal, session: s, text, history, context: shared, signal, planSpecialist: planSpecialist ? request => planSpecialist({ principal, session: s, request }) : undefined });
+                const answerResult = await answer({ principal, session: s, text, history, context: shared, signal: tasks ? undefined : signal, planSpecialist: planSpecialist ? request => planSpecialist({ principal, session: s, request }) : undefined });
                 const result = typeof answerResult === 'string' ? answerResult : answerResult?.text;
                 const proposals = typeof answerResult === 'string' ? [] : answerResult?.proposals ?? [];
                 if (!Array.isArray(proposals) || proposals.length > 4)

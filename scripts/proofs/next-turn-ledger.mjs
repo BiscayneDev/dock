@@ -26,12 +26,12 @@ try {
     assert.ok(session?.sessionId, 'session ' + nlog.slice(-500));
     const req = { sessionId: session.sessionId, requestId: crypto.randomUUID(), text: 'FICTIONAL: summarize the fictional readme' };
     await assert.rejects(c.turn({ ...req, signal: AbortSignal.timeout(1500) }));       // phone drops mid-turn
-    await new Promise(r => setTimeout(r, 7000));                                         // server finishes without the client
-    const during = await rest('mobile_tasks?id=eq.' + req.requestId);
-    let status = 0; try { await c.turn(req); } catch (e) { status = /409/.test(e.message) ? 409 : e.message; }
-    const [t] = during, [h] = await rest('mobile_task_handoffs?task_id=eq.' + req.requestId);
-    assert.equal(status, 409, 'same-id retry must be refused, not replayed'); assert.equal(modelCalls, 1, 'no second model call');
-    assert.equal(t.state, 'failed'); assert.equal(h.attempts, 1);
-    console.log(JSON.stringify({ realNextTurnPath: true, realLocalPostgresLedger: true, clientDisconnectMidTurn: true, taskState: t.state, handoffAttempts: h.attempts, handoffStatus: h.status, sameIdRetry: 'refused 409', modelCalls, stubbed: ['model (local SSE)', 'Supabase service', 'Agent37', 'T3 pixels'], deployed: false }));
+    await new Promise(r => setTimeout(r, 6000));                                         // server finishes without the client
+    const [mid] = await rest('mobile_tasks?id=eq.' + req.requestId);
+    const reply = await c.turn(req);                                                      // retry, same request id: recorded result
+    assert.match(reply.text, /FICTIONAL_REPLY/); assert.equal(modelCalls, 1, 'retry must not call the model again');
+    const [t] = await rest('mobile_tasks?id=eq.' + req.requestId), [h] = await rest('mobile_task_handoffs?task_id=eq.' + req.requestId);
+    assert.equal(mid?.state, 'done'); assert.equal(t.state, 'done'); assert.equal(h.status, 'delivered'); assert.equal(h.attempts, 1); assert.match(t.result_summary, /FICTIONAL_REPLY/);
+    console.log(JSON.stringify({ realNextTurnPath: true, realLocalPostgresLedger: true, clientDisconnectMidTurn: true, taskDoneBeforeRetry: mid.state, retryReturnedRecordedResult: true, handoff: h.status + ':' + h.attempts, modelCalls, stubbed: ['model (local SSE)', 'Supabase service', 'Agent37', 'T3 pixels'], deployed: false }));
 } catch (e) { console.error('FAIL', e.message, '\nNEXT:', nlog.slice(-1500), '\nPG:', log.slice(-400)); process.exitCode = 1; }
 finally { next.kill(); pg.kill(); ai.close(); }
