@@ -67,3 +67,11 @@ test('state changes carry no authority; payment-style handoffs never auto-retry'
     assert.equal(n, 1); assert.equal(o.status, 'failed'); assert.equal(b.inbox()[0].state, 'blocked');
     assert.equal(typeof b.approve, 'undefined'); assert.equal(typeof b.spend, 'undefined');
 });
+test('each task gets its own worktree and task-scoped private memory; context binds once', () => {
+    const b = taskBoard(); b.create({ id: 'A1', brief: 'x', agentId: 'a' }); b.create({ id: 'B2', brief: 'x', agentId: 'b' });
+    const a = b.bindContext('A1', { repoKeys: ['dock'], agentKey: 'coder' }), c = b.bindContext('B2', { repoKeys: ['dock'], agentKey: 'coder' });
+    assert.notEqual(a.worktree, c.worktree); assert.equal(a.beaconScope.taskId, 'A1'); assert.equal(a.beaconScope.sharedWrites, 'owner-promotion-only');
+    assert.throws(() => b.bindContext('A1', { repoKeys: ['dock'], agentKey: 'x' }), /already bound/);
+    assert.throws(() => b.bindContext('B2', { repoKeys: [], agentKey: 'x' }));
+    b.create({ id: 'bad', brief: 'x', agentId: 'a' }); assert.throws(() => b.bindContext('bad', { repoKeys: ['../etc'], agentKey: 'x' }), /Repo keys/);
+});

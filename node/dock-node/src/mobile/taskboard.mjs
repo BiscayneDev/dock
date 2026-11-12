@@ -40,6 +40,18 @@ export function taskBoard({ store = memoryTaskStore(), now = () => Date.now(), m
     const log = (t, actor, kind, detail) => t.events.push({ at: new Date(now()).toISOString(), actor, kind, ...detail });
     return {
         get,
+        // Execution context for a coding task. Each task gets its own worktree key, derived from the task id,
+        // so sibling agents never share a checkout. Private Beacon notes are scoped to agent+task; shared
+        // memory only changes through owner promotion, never through a task. Binding runs nothing.
+        bindContext(id, { repoKeys, agentKey }) {
+            const t = get(id);
+            if (!Array.isArray(repoKeys) || !repoKeys.length || repoKeys.some(r => !/^[a-z0-9][a-z0-9._-]*$/i.test(r))) throw Error('Repo keys required');
+            if (t.context) throw Error('Context already bound');
+            const worktree = 'wt-' + t.id.replace(/[^a-z0-9-]/gi, '').toLowerCase();
+            for (const o of store.tasks.values()) if (o.id !== id && o.context?.worktree === worktree && !['done', 'failed'].includes(o.state)) throw Error('Worktree already in use by another task');
+            t.context = { repoKeys: [...repoKeys], worktree, beaconScope: { agentKey, taskId: t.id, sharedWrites: 'owner-promotion-only' } };
+            log(t, 'system', 'context', {}); save(); return t.context;
+        },
         create({ id, brief, agentId, review = 'owner' }) {
             if (!['owner', 'none'].includes(review)) throw Error('Unknown review policy');
             if (!id || !brief || !agentId) throw Error('id, brief and accountable agent required');
