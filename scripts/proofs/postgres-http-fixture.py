@@ -10,7 +10,7 @@ def lit(x):return 'null'if x is None else"'"+str(x).replace("'","''")+"'"
 sql("create role anon;create role authenticated;create role service_role; create table users(id uuid primary key);create table workspaces(id uuid primary key,owner_id uuid);create table projects(id uuid primary key,workspace_id uuid);create table devices(id uuid primary key,owner_id uuid,workspace_id uuid,name text,token_salt text,token_hash text,revoked_at timestamptz,last_seen_at timestamptz,created_at timestamptz);create table conversations(id uuid primary key default gen_random_uuid(),workspace_id uuid,owner_id uuid,project_id uuid,title text,agent text,preview text,created_at timestamptz default now(),updated_at timestamptz);create table messages(id uuid primary key default gen_random_uuid(),conversation_id uuid,role text,content text,agent text,meta jsonb,created_at timestamptz default now());create table agents(runtime_agent text,display_name text,kind text,workspace_id uuid);create table memory_items(id uuid primary key default gen_random_uuid(),owner_id uuid,workspace_id uuid,project_id uuid,scope text,type text,content text,conversation_id uuid,embedding_model text,created_at timestamptz default now());")
 if __import__('os').environ.get('PROOF_BEACON')=='true':sql("create schema auth;create function auth.uid()returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$")
 sql(open('db/migrations/0012_mobile_foundations.sql').read())
-sql(open('db/migrations/0013_mobile_execution_draft.sql').read());sql(open('db/migrations/0014_mobile_execution_protocol_draft.sql').read());sql(open('db/migrations/0015_mobile_model_holds_draft.sql').read())
+sql(open('db/migrations/0013_mobile_execution_draft.sql').read());sql(open('db/migrations/0014_mobile_execution_protocol_draft.sql').read());sql(open('db/migrations/0015_mobile_model_holds_draft.sql').read());sql(open('db/migrations/0023_mobile_tasks_draft.sql').read())
 o='44444444-4444-4444-8444-444444444444';w='33333333-3333-4333-8333-333333333333';d='66666666-6666-4666-8666-666666666666';salt='fictional-salt-only';secret='fictional-device-secret';h=hashlib.sha256((salt+':'+secret).encode()).hexdigest()
 sql(f"insert into users values('{o}');insert into workspaces values('{w}','{o}');insert into devices values('{d}','{o}','{w}','Fictional T3','{salt}','{h}',null,now(),now(),'mobile');insert into agents values('chief','Chief','chief_of_staff','{w}'),('architect','Architect','agent','{w}');insert into mobile_grants(device_id,owner_id,workspace_id,agent_key,repo_keys,inference_enabled)values('{d}','{o}','{w}','chief',array['dock','shipyard-inference'],true);insert into memory_items(owner_id,workspace_id,scope,type,content)values('{o}','{w}','fact','preference','Canonical shared Shipyard memory verified fixture.')")
 if __import__('os').environ.get('PROOF_BEACON')=='true':
@@ -45,6 +45,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
     o2='55555555-5555-4555-8555-555555555555';w2='77777777-7777-4777-8777-777777777777';d2='88888888-8888-4888-8888-888888888888';h2=hashlib.sha256((salt+':other-secret').encode()).hexdigest()
     sql(f"insert into users values('{o2}');insert into workspaces values('{w2}','{o2}');insert into devices values('{d2}','{o2}','{w2}','Other','{salt}','{h2}',null,now(),now(),'mobile');insert into agents values('chief','Chief','chief_of_staff','{w2}');insert into mobile_grants(device_id,owner_id,workspace_id,agent_key,repo_keys,inference_enabled)values('{d2}','{o2}','{w2}','chief',array['dock'],true)")
     result={'ok':True}
+   elif u.path=='/fixture/seed-tasks':
+    # FICTIONAL labels only. Drives the real ledger functions so the page shows real ledger rows.
+    sess='99999999-9999-4999-8999-999999999999'
+    def mk(i,brief,review,path,ev="'[]'",waiting=None,handoff=None):
+     t=f'aaaaaaaa-0000-4000-8000-00000000000{i}'
+     sql(f"select mobile_task_open('{t}','{o}','{w}','{sess}','chief','{review}',{lit(brief)})")
+     for k,st in enumerate(path):
+      actor='owner' if st=='done' and review=='owner' else 'agent'
+      sql(f"select mobile_task_transition('{t}','{o}','{st}','{actor}',{ev if k==len(path)-1 else chr(39)+'[]'+chr(39)}::jsonb,{lit(waiting) if st=='waiting_on_you' else 'null'})")
+     if handoff:
+      sql(f"select mobile_task_attempt('{t}','{o}','turn',true)")
+      if handoff=='delivered':sql(f"select mobile_task_finish('{t}','{o}','turn','delivered','{'d'*64}')")
+    mk(1,'FICTIONAL: Choose between two fictional landing page headlines','none',['delegated','running','waiting_on_you'],waiting='Pick headline A or B')
+    mk(2,'FICTIONAL: Review the fictional pricing table change','owner',['delegated','running','ready_for_review'],ev="'[\"fictional test log\"]'",handoff='delivered')
+    mk(3,'FICTIONAL: Fix a fictional typo in a fictional README','none',['delegated','blocked'],handoff='uncertain')
+    mk(4,'FICTIONAL: Draft fictional release notes','none',['delegated','running'])
+    mk(5,'FICTIONAL: Update a fictional changelog','none',['delegated','running','done'],ev="'[\"fictional signed receipt\"]'",handoff='delivered')
+    result={'ok':True}
    elif u.path=='/fixture/model-state':result={'holds':int(sql("select count(*)from mobile_model_holds")),'settled':int(sql("select count(*)from mobile_model_holds where state='settled'")),'architectNotes':int(sql("select count(*)from memory_items where visibility='agent'and author_agent='architect'and memory_state='active'"))}
    elif u.path=='/fixture/beacon-state':result={'candidates':int(sql("select count(*)from memory_items where visibility='agent'and memory_state='proposed'")),'privateNotes':int(sql("select count(*)from memory_items where visibility='agent'and memory_state='active'")),'shared':int(sql("select count(*)from memory_items where visibility='business'"))}
    elif u.path=='/fixture/execution-result':
@@ -61,7 +79,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
    elif u.path.startswith('/rest/v1/rpc/'):
     name=u.path.split('/')[-1];assert name in ['mobile_open','mobile_claim','mobile_complete','mobile_execution_result','beacon_mobile_recall','beacon_mobile_note','beacon_mobile_distill','beacon_promote','beacon_execution_recall','beacon_execution_memory','mobile_capability_reserve','mobile_model_settle'];args=','.join(k+'=>'+lit(json.dumps(v)if isinstance(v,(dict,list))else v)for k,v in body.items());r=sql("select coalesce(json_agg(r),'[]'::json)from "+name+' ('+args+')r')if name in['beacon_mobile_recall','beacon_execution_recall']else sql('select '+name+'('+args+')');result=True if r=='t'else False if r=='f'else r if name in['beacon_mobile_note','beacon_mobile_distill','beacon_promote','mobile_capability_reserve']else json.loads(r)if r else None
    elif u.path.startswith('/rest/v1/'):
-    table=u.path.split('/')[-1];assert table in ['workspaces','devices','agents','mobile_grants','mobile_sessions','mobile_turns','mobile_notices','mobile_task_proposals','mobile_executions','mobile_execution_events','mobile_execution_capabilities','mobile_model_holds','memory_items','messages','conversations']
+    table=u.path.split('/')[-1];assert table in ['mobile_tasks','mobile_task_versions','mobile_task_handoffs','workspaces','devices','agents','mobile_grants','mobile_sessions','mobile_turns','mobile_notices','mobile_task_proposals','mobile_executions','mobile_execution_events','mobile_execution_capabilities','mobile_model_holds','memory_items','messages','conversations']
     clauses=[]
     for k,vs in qs.items():
      if k in['select','order','limit','offset']:continue
