@@ -14,12 +14,13 @@ sh(repo, 'add', '-A'); sh(repo, '-c', 'user.name=x', '-c', 'user.email=x@example
 let log = '';
 const env = { ...process.env, DOCK_PUBLIC_ORIGIN: 'http://127.0.0.1:3107', NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:4597', NEXT_PUBLIC_SUPABASE_ANON_KEY: 'fictional', SUPABASE_SERVICE_ROLE_KEY: 'fictional', DOCK_OWNER_EMAIL: 'demo@example.com', DOCK_MOBILE_ENABLED: 'true', DOCK_MOBILE_TASK_LEDGER: 'true', DOCK_MOBILE_TASK_QUEUE: 'true', FIX_REPO: repo, FIX_WTS: wts };
 const pg = spawn('python3', ['scripts/proofs/postgres-http-fixture.py'], { env }); pg.stdout.on('data', x => log += x); pg.stderr.on('data', x => log += x);
-let next; const startNext = () => { next = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev', '-p', '3107'], { env }); next.stdout.on('data', x => log += x); next.stderr.on('data', x => log += x); };
+const killNext = () => { try { if (next?.pid) process.kill(-next.pid, 'SIGKILL'); } catch { } };
+let next; const startNext = () => { next = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev', '-p', '3107'], { env, detached: true }); next.stdout.on('data', x => log += x); next.stderr.on('data', x => log += x); };
 const rest = p => fetch('http://127.0.0.1:4597/rest/v1/' + p).then(r => r.json());
 const OWN = '44444444-4444-4444-8444-444444444444', WSP = '33333333-3333-4333-8333-333333333333', secretOf = n => ('fictional-secret-' + n).padEnd(40, 'x');
 const rpc = async (fn, a) => { const r = await fetch('http://127.0.0.1:4597/rest/v1/rpc/' + fn, { method: 'POST', body: JSON.stringify(a) }); const j = await r.json(); return r.ok ? { data: j } : { error: { message: j.message } }; };
 const register = n => rpc('mobile_worker_register', { p_worker: n, p_owner: OWN, p_workspace: WSP, p_secret: secretOf(n) });
-const worker = async (mode, name) => { assert.equal((await register(name)).data, true); return new Promise(res => { const c = spawn(process.execPath, ['scripts/proofs/queue-worker.mjs', mode, name], { env: { ...env, WORKER_SECRET: secretOf(name) } }); let out = ''; c.stdout.on('data', d => { out += d; if (mode === 'hang' && out.includes('IN_AGENT')) res({ c, out }); if (out.includes('WORKER_DONE')) res({ c, out }); }); c.stderr.on('data', d => log += d); }); };
+const worker = async (mode, name) => { assert.equal((await register(name)).data, true); return new Promise(res => { const c = spawn(process.execPath, ['scripts/proofs/queue-worker.mjs', mode, name], { env: { ...env, WORKER_SECRET: secretOf(name) } }); let out = ''; c.stdout.on('data', d => { out += d; if (mode === 'hang' && out.includes('IN_AGENT')) res({ c, out }); if (out.includes('WORKER_DONE')) res({ c, out }); }); let err = ''; c.stderr.on('data', d => { log += d; err += d; }); c.on('close', code => res({ c, out: out + ' WORKER_EXIT ' + code + ' ' + err.slice(-1500) })); }); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let browser;
 try {
@@ -37,9 +38,9 @@ try {
     const A = await worker('hang', 'worker-a'); A.c.kill('SIGKILL'); await sleep(2500);
     const r2 = await c.turn({ sessionId: session.sessionId, requestId: T2, text: 'FICTIONAL: fix the add function in the demo repo' }); assert.equal(r2.queued, true);
     // Next dies before any worker touches T2; a fresh worker process runs it while Next is down
-    next.kill('SIGKILL'); await sleep(500);
+    killNext(); await sleep(500);
     const B = await worker('run', 'worker-b'); if (!/recorded/.test(B.out)) console.error('JOBS', JSON.stringify(await rest('mobile_task_jobs')), T1, T2); assert.match(B.out, /"recorded":true/);
-    startNext();
+    startNext(); for (let i = 0; i < 150; i++) { try { await fetch('http://127.0.0.1:3107/api/mobile/sessions', { method: 'POST', signal: AbortSignal.timeout(5000) }); break; } catch { await sleep(1000); } } // restarted Next must be listening (the old harness only killed its parent and relied on a lingering server)
     const [t1] = await rest('mobile_tasks?id=eq.' + T1), [t2] = await rest('mobile_tasks?id=eq.' + T2), [j1] = await rest('mobile_task_jobs?task_id=eq.' + T1), [j2] = await rest('mobile_task_jobs?task_id=eq.' + T2);
     assert.equal(j1.state, 'uncertain'); assert.equal(t1.state, 'blocked'); assert.equal(j2.state, 'done'); assert.equal(t2.state, 'done'); assert.match(t2.result_summary, /tests pass/);
     // Result continuation: exactly one conversation message for T2, bound to owner/workspace/session/task/epoch; none for the uncertain T1.
@@ -76,4 +77,4 @@ try {
     const low = text.toLowerCase(); for (const w of ['worker checked in', 'fixed. all 2 tests pass', 'stopped before reporting back', 'not run again']) assert.ok(low.includes(w), 'missing: ' + w);
     assert.ok(m.w[0] <= m.w[1]); if (m.navTop !== null) assert.ok(m.lastBottom <= m.navTop - 8, JSON.stringify(m));
     console.log(JSON.stringify({ authenticatedNextEnqueue: true, noInferenceServerExists: true, duplicateEnqueueIdempotent: true, workerKilledMidRun: 'uncertain/blocked, not replayed', nextKilledBeforeWorkerRan: true, freshWorkerProcessFinished: true, resultDeliveredOnceToConversation: true, duplicateFinishAddsNothing: true, concurrentFinishes: '8 parallel workers: 8 messages; 6 racing finishes of one job: 1 message', workerAuth: 'registered with secret', ownerPageAfterRestart: 'shows both', deployed: false }));
-} catch (e) { console.error('FAIL', e.message, log.slice(-800)); process.exitCode = 1; } finally { await browser?.close(); next?.kill(); pg.kill(); }
+} catch (e) { console.error('FAIL', e.stack, log.slice(-800)); process.exitCode = 1; } finally { await browser?.close(); killNext(); pg.kill('SIGKILL'); process.exit(process.exitCode ?? 0); }
