@@ -48,24 +48,32 @@ function useCommands(): CommandItem[] {
   }, [])
 
   return [
-    // Navigation
-    { id: "nav-chief", label: "Ask your chief of staff", description: "Chief of staff, default in Assistant", icon: Sparkles, category: "navigation", keywords: ["chief", "staff", "ask", "chat", "⌘k"], action: go("/assistant") },
-    { id: "nav-dashboard", label: "Dashboard", description: "Command center overview", icon: LayoutDashboard, category: "navigation", keywords: ["home", "overview", "briefing"], action: go("/dashboard") },
-    { id: "nav-conversations", label: "Conversations", description: "Unified run and transcript inbox", icon: PanelRightOpen, category: "navigation", keywords: ["inbox", "transcript", "runs", "timeline"], action: go("/conversations") },
-    { id: "nav-alerts", label: "Alerts", description: "Canonical failed-run inbox", icon: Bell, category: "navigation", keywords: ["incidents", "failures", "attention"], action: go("/alerts") },
-    { id: "nav-chat", label: "Chat", description: "Talk to your agents", icon: MessageSquare, category: "navigation", keywords: ["message", "talk", "agent"], action: go("/assistant") },
-    { id: "nav-tasks", label: "Tasks", description: "Kanban board", icon: CheckSquare, category: "navigation", keywords: ["kanban", "board", "todo"], action: go("/tasks") },
+    // Surfaces
+    { id: "nav-inbox", label: "Inbox", description: "Approvals, questions and blockers waiting on you", icon: Bell, category: "navigation", keywords: ["inbox", "approvals", "decisions", "alerts"], action: go("/inbox") },
+    { id: "nav-work", label: "Work", description: "Today's brief, board, runs, projects, intel", icon: LayoutDashboard, category: "navigation", keywords: ["work", "brief", "home", "overview", "dashboard", "command deck"], action: go("/work") },
     { id: "nav-agents", label: "Agents", description: "Agent team management", icon: Users, category: "navigation", keywords: ["team", "scout", "builder", "baron"], action: go("/agents") },
-    { id: "nav-skills", label: "Agent Skills", description: "Installed skills list", icon: SlidersHorizontal, category: "navigation", keywords: ["openclaw", "abilities"], action: go("/agents/skills") },
+    { id: "nav-knowledge", label: "Knowledge", description: "Memory, skills, research docs", icon: Brain, category: "navigation", keywords: ["knowledge", "memory", "skills", "docs", "notes"], action: go("/knowledge") },
+    { id: "nav-settings", label: "Settings", description: "Configuration, billing, connections", icon: Settings, category: "navigation", keywords: ["config", "setup", "preferences", "billing"], action: go("/settings") },
+
+    // Work rails
+    { id: "nav-tasks", label: "Missions", description: "Kanban board", icon: CheckSquare, category: "navigation", keywords: ["kanban", "board", "todo", "missions"], action: go("/tasks") },
+    { id: "nav-activity", label: "Runs & activity", description: "Canonical event timeline", icon: Activity, category: "navigation", keywords: ["runs", "log", "history", "feed", "trace"], action: go("/activity") },
     { id: "nav-projects", label: "Projects", description: "GitHub repos + CI status", icon: Folder, category: "navigation", keywords: ["github", "repos", "ci", "pr"], action: go("/projects") },
-    { id: "nav-calendar", label: "Calendar", description: "Google Calendar events", icon: Calendar, category: "navigation", keywords: ["events", "schedule", "meetings"], action: go("/calendar") },
+    { id: "nav-treasury", label: "Treasury", description: "Wallets and balances", icon: Building2, category: "navigation", keywords: ["wallet", "balance", "money", "treasury"], action: go("/treasury") },
     { id: "nav-intel", label: "Intel", description: "Scout research reports", icon: Zap, category: "navigation", keywords: ["research", "scout", "market"], action: go("/intel") },
+    { id: "nav-calendar", label: "Calendar", description: "Google Calendar events", icon: Calendar, category: "navigation", keywords: ["events", "schedule", "meetings"], action: go("/calendar") },
+    { id: "nav-company", label: "Company", description: "Org chart, budgets, goals", icon: Sparkles, category: "navigation", keywords: ["org", "budget", "goals", "company"], action: go("/company") },
+    { id: "nav-costs", label: "Costs", description: "Token usage + spend", icon: TrendingUp, category: "navigation", keywords: ["budget", "tokens", "spend", "money", "cost"], action: go("/costs") },
+
+    // Conversations and archives
+    { id: "nav-conversations", label: "Conversations", description: "Unified run and transcript inbox", icon: PanelRightOpen, category: "navigation", keywords: ["inbox", "transcript", "threads", "timeline"], action: go("/conversations") },
+    { id: "nav-messages", label: "Messages", description: "Agent messages and delegations", icon: MessageSquare, category: "navigation", keywords: ["message", "delegation", "handoff"], action: go("/messages") },
+    { id: "nav-alerts", label: "Alerts", description: "Canonical failed-run inbox", icon: Bell, category: "navigation", keywords: ["incidents", "failures", "attention"], action: go("/alerts") },
+    { id: "nav-chat", label: "Chat", description: "Talk to your agents", icon: MessageSquare, category: "navigation", keywords: ["message", "talk", "agent", "assistant"], action: go("/assistant") },
+    { id: "nav-skills", label: "Agent Skills", description: "Installed skills list", icon: SlidersHorizontal, category: "navigation", keywords: ["openclaw", "abilities"], action: go("/agents/skills") },
     { id: "nav-docs", label: "Docs", description: "Documentation", icon: FileText, category: "navigation", keywords: ["documentation", "help"], action: go("/docs") },
     { id: "nav-memory", label: "Memory", description: "Agent memory browser", icon: Brain, category: "navigation", keywords: ["notes", "context"], action: go("/memory") },
-    { id: "nav-activity", label: "Activity", description: "Activity feed", icon: Activity, category: "navigation", keywords: ["log", "history", "feed"], action: go("/activity") },
-    { id: "nav-costs", label: "Costs", description: "Token usage + spend", icon: TrendingUp, category: "navigation", keywords: ["budget", "tokens", "spend", "money"], action: go("/costs") },
-    { id: "nav-company", label: "Company", description: "Org chart, budgets, goals", icon: Building2, category: "navigation", keywords: ["org", "budget", "goals"], action: go("/company") },
-    { id: "nav-settings", label: "Settings", description: "Configuration", icon: Settings, category: "navigation", keywords: ["config", "setup", "preferences"], action: go("/settings") },
+    { id: "nav-schedules", label: "Schedules", description: "Scheduled jobs", icon: Calendar, category: "navigation", keywords: ["cron", "schedule", "jobs"], action: go("/schedules") },
 
     // Actions
     { id: "act-new-task", label: "New Task", description: "Create a task on the Kanban board", icon: Plus, category: "action", keywords: ["create", "add", "task"], action: go("/tasks") },

@@ -4,26 +4,36 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-const WORKSPACE = [
-  { href: "/assistant", label: "Assistant" },
-  { href: "/dashboard", label: "Command Deck" },
-  { href: "/tasks", label: "Missions" },
-  { href: "/agents", label: "Agents" },
-  { href: "/intel", label: "Intel" },
-  { href: "/settings", label: "Settings" },
-];
+// ── Five surfaces (2026-11-24 IA consolidation) ────────────────────────────────
+// Inbox and Work are the daily surfaces; Agents, Knowledge and Settings hold the rest.
+// Legacy pages (/dashboard, /tasks, /treasury, …) stay live as redirects and deep links —
+// nothing a user bookmarked is allowed to 404.
 
-const RAILS = [
-  { href: "/treasury", label: "Treasury" },
-  { href: "/projects", label: "Projects" },
-];
+const SURFACES = [
+  { href: "/inbox", label: "Inbox", home: "/inbox" },
+  { href: "/work", label: "Work", home: "/work" },
+  { href: "/agents", label: "Agents", home: "/agents" },
+  { href: "/knowledge", label: "Knowledge", home: "/knowledge" },
+  { href: "/settings", label: "Settings", home: "/settings" },
+] as const;
 
+// Legacy pages each surface absorbed. They stay live (redirect or deep link) and count as
+// part of their surface for nav highlighting only.
+const LEGACY_PREFIXES: Record<(typeof SURFACES)[number]["href"], string[]> = {
+  "/inbox": ["/alerts", "/activity"],
+  "/work": ["/dashboard", "/tasks", "/treasury", "/projects", "/intel", "/calendar", "/company"],
+  "/agents": ["/skills", "/memory", "/schedules"],
+  "/knowledge": [],
+  "/settings": ["/costs"],
+};
+
+// Bottom nav drops Knowledge (it is reachable from Work and Settings in one click).
 const MOBILE_NAV = [
-  { href: "/dashboard", label: "Deck" },
-  { href: "/tasks", label: "Missions" },
+  { href: "/inbox", label: "Inbox" },
+  { href: "/work", label: "Work" },
   { href: "/agents", label: "Agents" },
-  { href: "/treasury", label: "Rails" },
-];
+  { href: "/settings", label: "Settings" },
+] as const;
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -39,8 +49,9 @@ export function Sidebar() {
       .catch(() => null);
   }, []);
 
-  const isActive = (href: string) =>
-    pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+  // A surface is active on its own route and on the legacy pages it absorbed.
+  const isActive = (href: (typeof SURFACES)[number]["href"]) =>
+    pathname === href || LEGACY_PREFIXES[href].some((p) => pathname.startsWith(p));
 
   return (
     <>
@@ -55,7 +66,7 @@ export function Sidebar() {
         }}
       >
         {/* Brand */}
-        <Link href="/dashboard" className="mb-5 flex items-center gap-2.5 px-2 py-1">
+        <Link href="/work" className="mb-5 flex items-center gap-2.5 px-2 py-1">
           <span
             className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] text-[14px]"
             style={{
@@ -88,19 +99,9 @@ export function Sidebar() {
             className="px-2.5 pb-1.5 pt-3 text-[9.5px] uppercase tracking-[0.18em]"
             style={{ color: "var(--ink-3)" }}
           >
-            Workspace
+            Surfaces
           </p>
-          {WORKSPACE.map(({ href, label }) => (
-            <RailItem key={href} href={href} label={label} active={isActive(href)} />
-          ))}
-
-          <p
-            className="px-2.5 pb-1.5 pt-5 text-[9.5px] uppercase tracking-[0.18em]"
-            style={{ color: "var(--ink-3)" }}
-          >
-            Rails
-          </p>
-          {RAILS.map(({ href, label }) => (
+          {SURFACES.map(({ href, label }) => (
             <RailItem key={href} href={href} label={label} active={isActive(href)} />
           ))}
         </nav>

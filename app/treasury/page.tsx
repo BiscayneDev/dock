@@ -333,8 +333,8 @@ export default function TreasuryPage() {
 
       {/* Back link */}
       <div className="pt-2">
-        <Link href="/dashboard" className="text-[12px] transition-colors" style={{ color: "var(--ink-3)" }}>
-          ← Dashboard
+        <Link href="/work" className="text-[12px] transition-colors" style={{ color: "var(--ink-3)" }}>
+          ← Work
         </Link>
       </div>
     </div>

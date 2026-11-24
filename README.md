@@ -7,20 +7,20 @@
 
 ### The open-source operating system for AI agent teams.
 
-Drag a task → your agents execute → the board reflects reality.
+Five surfaces, one brief: decisions land in the **Inbox**, the work lives in **Work**, the crew is managed in **Agents**, memory and skills live in **Knowledge**, and plumbing sits in **Settings**.
 
-[Get Started](#-quickstart) · [Features](#-features) · [Demo](https://dock.vercel.app) · [Roadmap](#-roadmap)
+[Get Started](#-quickstart) · [Surfaces](#-surfaces) · [Features](#-features) · [Roadmap](#-roadmap)
 
-<br />
+<br>
 
 <img src="https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=nextdotjs" />
 <img src="https://img.shields.io/badge/TypeScript-strict-3178c6?style=flat-square&logo=typescript&logoColor=white" />
-<img src="https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react&logoColor=white" />
+<img src="https://img.shields.io/badge/React-19-61dafb?style=flat-square" />
 <img src="https://img.shields.io/badge/license-MIT-22c55e?style=flat-square" />
 
 </div>
 
-<br />
+<br>
 
 ## The Problem
 
@@ -28,63 +28,70 @@ You're running a company with AI agents — research, engineering, deals, treasu
 
 | Without Dock | With Dock |
 |:---|:---|
-| Scattered agent outputs across Telegram, Slack, email | One dashboard, all agents, all activity |
+| Scattered agent outputs across Telegram, Slack, email | One inbox queue, all decisions, all activity |
 | No idea what your agents are working on | Kanban board that updates in real time |
 | Manually kicking off agent tasks | Drag to "In Progress" → agent activates |
 | No cost visibility until the bill arrives | Per-agent budgets with approval gates |
 | Copy-pasting context between tools | Agents share memory, goals, and workspace |
 
-<br />
+<br>
+
+## 🗺 Surfaces
+
+The IA collapsed ~24 top-level pages into five. Routes never got deleted — bookmarks and deep links keep working; only navigation changed.
+
+| Surface | Route | What it holds |
+|:---|:---|:---|
+| **Inbox** | `/inbox` | Everything waiting on a human: approvals, questions, blockers, alerts |
+| **Work** | `/work` | Today's brief, Missions board, runs, projects health, intel, calendar, company goals |
+| **Agents** | `/agents` | Roster, skills, per-agent knowledge and budgets |
+| **Knowledge** | `/knowledge` | Memory, skills library, research docs |
+| **Settings** | `/settings` | Devices, connectors, billing, schedules, notifications |
+
+Mobile bottom nav carries four: Inbox, Work, Agents, Settings. The "Launch a venture" button stays in the rail.
+
+Out of the nav but not deleted: `/conversations`, `/messages`, `/alerts`, `/activity`, `/costs`, `/treasury`, `/projects`, `/intel`, `/calendar`, `/docs`, `/memory`, `/schedules`, `/shipwright`, `/setup`, `/onboarding`. Every one is reachable in at most two clicks from Work or Settings, from the ⌘P command palette, or by its old URL.
+
+<br>
 
 ## ✨ Features
 
-### 🗂 Kanban Task Board
+### 🗂 Missions Board
 Drag a task to "In Progress" and your agent picks it up. When it's done, the task moves to "Done" automatically. Budget checks and approval gates built in.
 
 ### 🤖 Agent Team Management
-Five specialized agents out of the box — Chief of Staff, Scout (research), Builder (engineering), Deal Flow (partnerships), Baron (treasury). Add your own with custom roles, skills, and accent colors.
+A named Chief of Staff plus specialist agents (research, engineering, partnerships, treasury). Add your own with custom roles, skills, and accent colors. The Chief of Staff's display name is resolved from the workspace roster — no name is assumed in code.
 
-### 📊 Dashboard Command Center
-Morning briefing in one glance: agent status (live pulsing dots), task summary, project health, recent intel, inbox, and goals — all on one screen.
+### 📊 Work Brief
+One glance: agent status, task summary, project health, intel, calendar, and the decisions waiting on you.
 
 ### 💰 Budget Enforcement
 Set monthly spend limits per agent. Dock checks budgets before activation and warns you when agents approach their limits. No surprise bills.
 
-### 📂 GitHub Projects
+### 🏦 Treasury & Billing
+Wallets across Solana, Ethereum, Base, and Polygon, with Paybox x402 connect for non-custodial signing. Token usage and spend live under Costs.
+
+### ◈ GitHub Projects
 CI status, open PRs, and deploy health for your pinned repos. Color-coded badges update automatically.
 
 ### 🔭 Intel Feed
-Market intelligence reports from your Scout agent. Deploy research runs from the dashboard.
+Market intelligence reports from your Scout agent. Deploy research runs from the command palette.
 
-### 📅 Calendar & Inbox
-Google Calendar events and important emails surfaced automatically. No more tab-switching.
+### 📅 Calendar
+Google Calendar events surfaced on the Work brief and on their own feed.
 
-### 🧠 Agent Memory
-Browse your agents' memory files, daily notes, and long-term context. Everything is transparent.
+### 🧠 Knowledge
+Memory files, daily notes, installed Agent Skills, and research docs — one surface, transparent.
 
-### 💬 Agent Chat
-Talk directly to your agents from the dashboard. Ask questions, give instructions, get status updates.
+### 💬 Conversations
+Persistent threads per task, with run traces underneath. Sessions swap; conversations do not.
 
 ### 📱 Mobile Ready
-Responsive design with bottom navigation. Manage your agent team from your phone.
+Responsive design with a four-item bottom nav. Manage your agent team from your phone.
 
-<br />
+<br>
 
 ## 🚀 Quickstart
-
-### One command:
-
-```bash
-npx create-shipyard-app
-```
-
-This will:
-1. Clone the repo
-2. Install dependencies
-3. Launch the setup wizard
-4. Open your browser
-
-### Or manually:
 
 ```bash
 git clone https://github.com/BiscayneDev/dock.git
@@ -94,6 +101,8 @@ npm run dev
 ```
 
 Open [localhost:3000](http://localhost:3000) — the setup wizard walks you through connecting your agents.
+
+A scaffolder CLI (`create-shipyard-app`) is also shipped in [`cli/`](./cli) for spawning a project directory from a template; `npx create-shipyard-app` only works once that package is published to npm.
 
 ### With Ollama (local models):
 
@@ -108,15 +117,15 @@ In the setup wizard, choose **"Ollama / Local Models"** and point it at your run
 
 ### Demo mode
 
-Don't have agents set up yet? No problem. Click **"Skip — explore without agents"** in the setup wizard to get a feel for the dashboard with sample data.
+Don't have agents set up yet? Click **"Skip — explore without agents"** in the setup wizard to get a feel for the surfaces with sample data.
 
 ### Deploying
 
-This repo deploys itself: **push to `main` → Vercel builds and ships to production automatically** (CI runs typecheck + build on every PR first). No deploy commands, no manual steps — if the build passes, it's live.
+This repo deploys itself: **push to `main` → Vercel builds and ships to production automatically** (CI runs `npm run build` on every push and PR first). No deploy commands, no manual steps — if the build passes, it's live.
 
 To deploy your own instance: import the repo into Vercel, add the env vars from [`.env.example`](./.env.example), and connect a Vercel KV store for durable tasks/conversations in production. Serverless-safe routes gracefully degrade when local CLIs (OpenClaw, gh, gog) aren't available.
 
-<br />
+<br>
 
 ## 🏗 How It Works
 
@@ -147,71 +156,73 @@ To deploy your own instance: import the repo into Vercel, add the env vars from 
 1. **You drag a task** to "In Progress"
 2. **Budget check** runs — does this agent have spend remaining?
 3. **Approval gate** shows you the cost estimate — confirm or cancel
-4. **Agent activates** via OpenClaw gateway
+4. **Agent activates** via the runtime
 5. **Task auto-moves** to "Done" when the agent finishes
 6. **Toast notification** fires — activity logged to the feed
 
 No polling. No manual follow-up. The board is the source of truth.
 
-<br />
+<br>
 
 ## 🧱 Stack
 
 | Layer | Technology |
 |:------|:-----------|
-| Framework | Next.js 16 (App Router) |
+| Framework | Next.js (App Router) |
 | Language | TypeScript (strict mode) |
 | Styling | Tailwind CSS 4 |
 | Drag & Drop | @hello-pangea/dnd |
-| Agent Runtime | OpenClaw, Ollama, or custom |
-| Storage | Vercel KV (prod) / local JSON (dev) |
+| Agent Runtime | OpenClaw, Ollama, Shipyard Inference, or custom |
+| Storage | Postgres/Supabase + RLS (prod), local JSON (dev) |
 | AI SDK | Vercel AI SDK + Anthropic |
 | Icons | Lucide React |
 | Deploy | Vercel |
 
-<br />
+<br>
 
-## 🤖 Default Agent Team
+## 🤖 Agents
 
-| Agent | Role | Color |
-|:------|:-----|:------|
-| 🦞 **Vic** (Chief of Staff) | Orchestrates the team, delegates tasks | Purple |
-| 🔭 **Scout** | Market intelligence, research, signals | Cyan |
-| ⚡ **Builder** | Engineering, shipping code, CI/CD | Emerald |
-| 🤝 **Deal Flow** | Partnerships, opportunities, outreach | Amber |
-| 🏦 **Baron** | Treasury, wallet ops, financial tracking | Pink |
+Agents come from team templates chosen at setup (`lib/agent-templates.ts`), then live in the workspace roster. Each has an emoji, role, accent color, budget, and optional skill set.
 
-Agents are fully customizable — change names, roles, skills, and colors from the Agents page.
+| Role | Typical agent |
+|:------|:-----|
+| Chief of Staff | Orchestrates the team, delegates tasks; the display name is whatever the user chose at setup |
+| Research | Market intelligence, signals, web research |
+| Engineering | Shipping code, CI/CD, automation |
+| Business Development | Partnerships, opportunities, outreach |
+| Finance | Treasury, wallet ops, financial tracking |
 
-<br />
+Agents are fully customizable — change names, roles, skills, and colors from the Agents page. Nothing in the codebase hardcodes a default chief's name.
+
+<br>
 
 ## 📁 Project Structure
 
 ```
 dock/
 ├── app/
-│   ├── dashboard/      # Command center overview
-│   ├── tasks/          # Kanban board with drag-to-activate
-│   ├── agents/         # Agent team management
-│   ├── projects/       # GitHub repos + CI status
-│   ├── intel/          # Scout research reports
-│   ├── calendar/       # Google Calendar integration
-│   ├── chat/           # Direct agent chat
-│   ├── settings/       # Config + reset wizard
-│   ├── setup/          # First-run onboarding wizard
-│   └── api/            # 15+ API routes
+│   ├── work/            # Work surface — brief, board, rails, feeds
+│   ├── inbox/           # Inbox surface (approvals, decisions)
+│   ├── knowledge/       # Knowledge surface (memory, skills, docs)
+│   ├── tasks/           # Missions board (also embedded in Work)
+│   ├── dashboard/       # → redirects to /work
+│   ├── treasury/        # Wallets, balances, Paybox
+│   ├── projects/        # GitHub repos + CI status
+│   ├── intel/           # Scout research reports
+│   ├── calendar/        # Google Calendar integration
+│   ├── agents/          # Agent team management
+│   ├── settings/        # Config, billing, connections
+│   ├── setup/           # First-run onboarding wizard
+│   └── api/             # Route handlers
 ├── components/
-│   └── Sidebar.tsx     # Desktop sidebar + mobile bottom nav
-├── lib/
-│   └── config.ts       # Runtime configuration
-├── data/
-│   ├── tasks.json      # Local task store
-│   ├── agents.json     # Agent definitions
-│   └── goals.json      # Goal tracker
-└── public/
+│   ├── Sidebar.tsx      # Five-surface desktop rail + mobile bottom nav
+│   └── CommandPalette.tsx
+├── lib/                 # Pure modules + data access
+├── db/migrations/       # Supabase schema
+└── data/                # Local JSON stores (dev)
 ```
 
-<br />
+<br>
 
 ## 🗺 Roadmap
 
@@ -223,76 +234,77 @@ dock/
 - [x] Gmail inbox integration
 - [x] Google Calendar integration
 - [x] **Agent runtime abstraction** — plug in OpenClaw, Ollama, or custom runtimes
+- [x] **Five-surface IA** — Inbox, Work, Agents, Knowledge, Settings
+- [ ] **Knowledge loop** — flag → curator → approved, portable markdown
+- [ ] **Event listeners** — condition triggers instead of cron-only wakes
+- [ ] **Per-run scoped credentials** — deny-by-default, task-scoped tokens
+- [ ] **Run economics** — cache-hit rate, coordination tax, liveness expiry
 - [ ] **Agent marketplace** — share and install agent identities
-- [ ] **`Cmd+K` command palette** — quick actions from anywhere
-- [ ] **Webhooks** — real-time updates instead of polling
 - [ ] **Docker image** — `docker run -p 3000:3000 dock`
-- [ ] **Multi-workspace** — manage multiple agent teams
-- [ ] **Mobile app** — native iOS/Android companion
+- [ ] **Native mobile app**
 
-<br />
+See [docs/plans/2026-11-24-dock-agent-platform-transformation.md](./docs/plans/2026-11-24-dock-agent-platform-transformation.md) for the full plan.
+
+<br>
 
 ## 🤝 Contributing
 
-We'd love your help making Dock better. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ```bash
-# Fork the repo, then:
-git clone https://github.com/YOUR_USERNAME/dock.git
+git clone https://github.com/BiscayneDev/dock.git
 cd dock
 npm install
 npm run dev
 ```
 
-<br />
+<br>
 
 ## ❓ FAQ
 
 <details>
 <summary><strong>Do I need OpenClaw to use this?</strong></summary>
-<br />
-No! Dock supports multiple runtimes: OpenClaw for full agent orchestration, Ollama/LM Studio/llama.cpp for local models, or demo mode to explore without any runtime.
+<br>
+No! Dock supports multiple runtimes: OpenClaw for full agent orchestration, Ollama/LM Studio/llama.cpp for local models, Shipyard Inference for cost-routed provider failover, or demo mode to explore without any runtime.
 </details>
 
 <details>
 <summary><strong>Is this just a dashboard?</strong></summary>
-<br />
+<br>
 No — it's an operating system. When you drag a task to "In Progress", it actually fires an agent. Budget gates prevent runaway costs. The board reflects what your agents are doing in real time.
 </details>
 
 <details>
 <summary><strong>Can I use my own agents instead of the defaults?</strong></summary>
-<br />
-Yes. Add, edit, or delete agents from the Agents page. Each agent is a markdown identity file in your workspace — fully customizable roles, skills, and personalities.
+<br>
+Yes. Pick a team template at setup, then add, edit, or delete agents from the Agents page. Roles, skills, budgets, and personalities are all customizable.
 </details>
 
 <details>
 <summary><strong>What about costs?</strong></summary>
-<br />
-Dock tracks per-agent token usage via the Anthropic Admin API. Set monthly budgets per agent, and the system will block activation when limits are reached. No surprise bills.
+<br>
+Dock tracks token usage and enforces monthly per-agent budgets. Activation is blocked when a limit is reached. No surprise bills.
 </details>
 
 <details>
 <summary><strong>Can I self-host this?</strong></summary>
-<br />
-Yes. It's a standard Next.js app. Run it locally, deploy to Vercel, or host anywhere that supports Node.js. Task storage uses local JSON in dev and Vercel KV in production.
+<br>
+Yes. It's a standard Next.js app. Run it locally, deploy to Vercel, or host anywhere that supports Node.js. The schema is plain Postgres with row-level security.
 </details>
 
-<br />
+<br>
 
 ## 📄 License
 
 [MIT](LICENSE) — use it, fork it, ship it.
 
-<br />
+<br>
 
 ## Built by
 
 [Halsey Huth](https://twitter.com/halseyh) — building in public.
 
-Powered by [OpenClaw](https://openclaw.ai).
-
-<br />
+<br>
 
 <div align="center">
 

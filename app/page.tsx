@@ -62,7 +62,7 @@ export default async function Home() {
     .then((c) => currentUser(c))
     .catch(() => null)
   if (user) {
-    redirect("/assistant")
+    redirect("/work")
   }
 
   return (

@@ -156,7 +156,7 @@ export default function ShipwrightPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">How it works</p>
             <h2 className="mt-2 text-2xl font-bold text-white">Three steps from API service to ship</h2>
           </div>
-          <Link href="/dashboard" className="text-sm font-medium text-cyan-300 hover:text-cyan-200">
+          <Link href="/work" className="text-sm font-medium text-cyan-300 hover:text-cyan-200">
             Back to Dock →
           </Link>
         </div>
@@ -209,7 +209,7 @@ export default function ShipwrightPage() {
 
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
-              href="/dashboard"
+              href="/work"
               className="inline-flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900/70 px-4 py-2.5 text-sm font-semibold text-zinc-200 transition hover:border-violet-400/30 hover:text-white"
             >
               Open Dock

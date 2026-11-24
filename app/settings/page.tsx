@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import Link from "next/link"
 import DevicesSection from "@/components/settings/DevicesSection"
 import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 import ConnectDinghyCard from "@/components/settings/ConnectDinghyCard"
@@ -541,8 +542,28 @@ export default function SettingsPage() {
     <div className="max-w-2xl mx-auto space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-white">Settings</h1>
-        <p className="text-sm text-zinc-500 mt-1">Agent configuration, integrations, and preferences</p>
+        <p className="text-sm text-zinc-500 mt-1">Agent configuration, billing, connections, and preferences</p>
       </div>
+
+      {/* Billing & connections quick links — Treasury lives in Work; costs live on the Work rail. */}
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Link
+          href="/treasury"
+          className="rounded-xl p-4 transition-colors hover:bg-[var(--surface-2)]"
+          style={{ backgroundColor: "#111118", border: "1px solid #1a1a2e" }}
+        >
+          <p className="text-sm font-medium text-white">Treasury & billing</p>
+          <p className="mt-1 text-xs text-zinc-500">Wallets, Paybox, balances</p>
+        </Link>
+        <Link
+          href="/costs"
+          className="rounded-xl p-4 transition-colors hover:bg-[var(--surface-2)]"
+          style={{ backgroundColor: "#111118", border: "1px solid #1a1a2e" }}
+        >
+          <p className="text-sm font-medium text-white">Costs</p>
+          <p className="mt-1 text-xs text-zinc-500">Token usage and spend</p>
+        </Link>
+      </section>
 
       <AgentBudgetsSection />
       <DevicesSection />

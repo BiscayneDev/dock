@@ -3,6 +3,12 @@
 Status: draft for review. Written 2026-10-21 from the decisions made in conversation.
 Scope: how the products fit together, what exists today, and the build order.
 
+> **Superseded 2026-11-24.** The product/engineering direction in this document is now governed by
+> [plans/2026-11-24-dock-agent-platform-transformation.md](./plans/2026-11-24-dock-agent-platform-transformation.md),
+> which introduces the five-surface IA (Inbox / Work / Agents / Knowledge / Settings), the knowledge
+> loop, event listeners, per-run credentials, and run economics. This file is kept as history; its
+> build order and open decisions no longer drive the roadmap.
+
 ## 1. Products
 
 **Dinghy** (cloud, standalone, iMessage). Works for anyone with an iPhone, with or without Dock. It runs on hosted infrastructure, so it is always up. Its voice and behaviour do not change for this plan.

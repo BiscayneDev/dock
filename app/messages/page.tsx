@@ -346,8 +346,8 @@ export default function MessagesPage() {
       )}
 
       <div className="pt-2">
-        <Link href="/dashboard" className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">
-          ← Dashboard
+        <Link href="/work" className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">
+          ← Work
         </Link>
       </div>
     </div>
