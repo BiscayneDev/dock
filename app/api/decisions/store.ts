@@ -5,6 +5,7 @@ import {
   artifactHash,
   decisionRefusal,
   isDecisionVerdict,
+  reviewerIsProducer,
   runApprovalArtifact,
   runApprovalTitle,
   type DecisionKind,
@@ -338,6 +339,9 @@ export async function recordRunVerdict(
   )
 
   const decision = await findPendingByRun(client, input.runId)
+  if (decision && reviewerIsProducer(input.userId, decision.producerId)) {
+    return { ok: false, reason: "reviewer_is_producer", httpStatus: 409 }
+  }
   const now = Date.now()
   if (decision) {
     const refusal = decisionRefusal({
