@@ -19,6 +19,7 @@ const PERMISSIONS: Record<RunMode, Record<string, Rule>> = {
     edit: [false, false],
     bash: [false, true],
     diagnostics: [false, false],
+    flag_knowledge: [false, false],
   },
   build: {
     read: [true, false],
@@ -30,6 +31,10 @@ const PERMISSIONS: Record<RunMode, Record<string, Rule>> = {
     webfetch: [true, false],
     diagnostics: [true, false],
     memory: [true, false],
+    // flag_knowledge records an observation about the knowledge base (a write), so it belongs to
+    // the executing mode only. Plan mode forbids mutations and explore mode is read-only research;
+    // both deny it rather than asking, because a flag is never a deliverable decision.
+    flag_knowledge: [true, false],
   },
   explore: {
     read: [true, false],
@@ -41,6 +46,7 @@ const PERMISSIONS: Record<RunMode, Record<string, Rule>> = {
     webfetch: [false, false],
     diagnostics: [false, false],
     memory: [false, false],
+    flag_knowledge: [false, false],
   },
 };
 

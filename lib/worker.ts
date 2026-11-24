@@ -39,12 +39,47 @@ import {
 import { checkpointData, continuationPrompt } from "@/lib/run-resume"
 import { EXPLORE_MODE_INSTRUCTION, PLAN_MODE_INSTRUCTION } from "@/lib/tool-permissions"
 import { resolveRunMode } from "@/lib/agent-mode"
+import { supabaseKnowledgeRepo } from "@/lib/knowledge-store"
+import { recordKnowledgeFlag } from "@/lib/knowledge-runtime"
 import { loadInjectableSkills as loadInjectableSkillList } from "@/lib/injectable-skills"
 import { profile, skillInjectionBlock } from "@/lib/agent-templates"
 import { PLAN_GRAPH_INSTRUCTION } from "@/lib/plan-graph"
 import { topSkills, type ParsedSkill } from "@/lib/skills-skillmd"
 import { readFile } from "fs/promises"
 import { join } from "path"
+
+// ---------------------------------------------------------------------------
+// Knowledge factory tool: flag_knowledge
+// ---------------------------------------------------------------------------
+// The run loop today is a single prompt completion with no tool-calling surface, so this is the
+// seam the agent harness will call: it validates the payload with lib/knowledge-flags.ts and writes
+// straight through the store (no HTTP, no model choice -- the gateway still owns model routing).
+// Registered in lib/tool-permissions.ts: allowed in build mode, denied in plan/explore.
+export const FLAG_KNOWLEDGE_TOOL = {
+  name: "flag_knowledge",
+  description:
+    "Flag missing, wrong, or stale knowledge for human review. kind: missing | wrong | stale. " +
+    "ref names the concept; suggestedFix proposes replacement text; evidence backs the observation.",
+  parameters: {
+    type: "object",
+    properties: {
+      kind: { type: "string", enum: ["missing", "wrong", "stale"] },
+      ref: { type: "string" },
+      suggestedFix: { type: "string" },
+      evidence: {},
+      runId: { type: "string" },
+    },
+    required: ["kind"],
+  },
+} as const
+
+/** Direct store call behind the flag_knowledge tool (service-role client, RLS bypassed by design). */
+export async function callFlagKnowledgeTool(
+  admin: SupabaseClient,
+  input: { workspaceId: string; ownerId: string; payload: unknown; runId?: string | null },
+) {
+  return recordKnowledgeFlag(supabaseKnowledgeRepo(admin), input)
+}
 
 /**
  * Skill descriptions available for prompt injection, loaded from the SKILL.md import
