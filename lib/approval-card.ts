@@ -96,6 +96,10 @@ export interface ApprovalCardView {
   decidedAt: string | null
   canDecide: boolean
   footer: string
+  /** Ledger linkage: the inbox decision this approval was bound to, when one exists. */
+  decisionId?: string | null
+  artifactHash?: string | null
+  decisionStatus?: string | null
 }
 
 export const APPROVAL_FOOTER = "Approving lets the agent continue. Money moves only through the payment step."

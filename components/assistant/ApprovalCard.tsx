@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import { ShieldCheck } from "lucide-react"
 import { APPROVAL_CONFIRM_CENTS, formatCents, needsSecondClick, type ApprovalCardView } from "@/lib/approval-card"
@@ -68,14 +69,26 @@ export function ApprovalCard({ card, onDecided }: { card: ApprovalCardView; onDe
   const [busy, setBusy] = useState<null | "approve" | "reject">(null)
   const [error, setError] = useState<string | null>(null)
   const [previewBroken, setPreviewBroken] = useState(false)
+  const [rejectOpen, setRejectOpen] = useState(false)
+  const [reason, setReason] = useState("")
   const decidable = card.canDecide && card.status === "pending"
 
-  async function decide(decision: "approve" | "reject") {
+  async function decide(
+    decision: "approve" | "reject",
+    payload: { artifactHash?: string | null; reason?: string } = {},
+  ) {
     if (busy) return
     setError(null)
     setBusy(decision)
     try {
-      const res = await fetch(`/api/runs/${encodeURIComponent(card.runId)}/${decision}`, { method: "POST" })
+      const res = await fetch(`/api/runs/${encodeURIComponent(card.runId)}/${decision}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(card.artifactHash ? { artifactHash: card.artifactHash } : {}),
+          ...payload,
+        }),
+      })
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string }
         // already_decided and state_changed mean another click or tab got there first: show the current state.
@@ -86,6 +99,8 @@ export function ApprovalCard({ card, onDecided }: { card: ApprovalCardView; onDe
     } finally {
       setBusy(null)
       setConfirming(false)
+      setRejectOpen(false)
+      setReason("")
       onDecided()
     }
   }
@@ -197,19 +212,56 @@ export function ApprovalCard({ card, onDecided }: { card: ApprovalCardView; onDe
             </button>
             <button
               type="button"
-              onClick={() => (confirming ? setConfirming(false) : decide("reject").catch(() => null))}
+              onClick={() => {
+                if (confirming) {
+                  setConfirming(false)
+                  return
+                }
+                setRejectOpen((open) => !open)
+              }}
               disabled={busy !== null}
               className="min-h-[44px] rounded-[10px] px-4 text-[14px] font-medium disabled:opacity-50"
               style={{ background: "var(--surface-2)", color: "var(--ink)", border: "1px solid var(--line-strong, var(--line))" }}
             >
-              {busy === "reject" ? "Rejecting…" : confirming ? "Back" : "Reject"}
+              {busy === "reject" ? "Rejecting…" : confirming ? "Back" : "Request changes"}
             </button>
           </div>
         </div>
       )}
 
-      <footer className="text-[12px]" style={{ color: "var(--ink-3)" }}>
-        {card.footer}
+      {decidable && rejectOpen && (
+        <div className="flex flex-col gap-2 rounded-[10px] p-3" style={{ background: "var(--surface-0)", border: "1px solid var(--line)" }}>
+          <label htmlFor={`reason-${card.runId}`} className="text-[12px]" style={{ color: "var(--ink-3)" }}>
+            What should change? A reason is required.
+          </label>
+          <textarea
+            id={`reason-${card.runId}`}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            className="w-full rounded-[8px] p-2 text-[13px]"
+            style={{ background: "var(--surface-1)", color: "var(--ink)", border: "1px solid var(--line)" }}
+            placeholder="Describe the change you need"
+          />
+          <button
+            type="button"
+            onClick={() => decide("reject", { reason }).catch(() => null)}
+            disabled={busy !== null || reason.trim().length === 0}
+            className="min-h-[44px] rounded-[10px] px-4 text-[14px] font-medium disabled:opacity-50"
+            style={{ background: "var(--surface-2)", color: "var(--ink)", border: "1px solid var(--line-strong, var(--line))" }}
+          >
+            {busy === "reject" ? "Sending…" : "Send request for changes"}
+          </button>
+        </div>
+      )}
+
+      <footer className="flex flex-wrap items-center justify-between gap-2 text-[12px]" style={{ color: "var(--ink-3)" }}>
+        <span>{card.footer}</span>
+        {card.decisionId && (
+          <Link href="/inbox" className="tabular-nums hover:underline">
+            Ledger decision {card.decisionId.slice(0, 8)}… · artifact {card.artifactHash ? card.artifactHash.slice(0, 12) : "unknown"}
+          </Link>
+        )}
       </footer>
     </section>
   )

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { assistantContext, isUuid } from "@/lib/assistant-store"
-import { decideApproval } from "@/lib/queue"
+import { recordRunVerdict } from "../../../decisions/store"
 
 export const dynamic = "force-dynamic"
 
@@ -8,16 +8,37 @@ interface Context {
   params: Promise<{ id: string }>
 }
 
-/** Owner decision on a money action parked in awaiting_approval. RLS limits this to the owner's runs. */
-export async function POST(_: Request, context: Context) {
+async function readBody(request: Request): Promise<Record<string, unknown>> {
+  try {
+    const parsed: unknown = await request.json()
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>
+  } catch {
+    // No body is allowed for backward compatibility; the inbox always sends a reason.
+  }
+  return {}
+}
+
+/**
+ * Owner rejection of a run parked in awaiting_approval. The ledger requires a reason on the
+ * changes_requested path; this legacy endpoint keeps working without one and records a default.
+ * The run still moves only through decideApproval.
+ */
+export async function POST(request: Request, context: Context) {
   const ctx = await assistantContext()
   if (!ctx) return NextResponse.json({ error: "Sign in required" }, { status: 401 })
   const { id } = await context.params
   if (!isUuid(id)) return NextResponse.json({ error: "Run not found" }, { status: 404 })
-  const result = await decideApproval(ctx.supabase, id, "reject", ctx.userId)
-  if (!result.ok) {
-    const status = result.reason === "not_found" ? 404 : 409
-    return NextResponse.json({ error: result.reason }, { status })
-  }
-  return NextResponse.json({ id: result.run.id, status: result.run.status })
+
+  const body = await readBody(request)
+  const artifactHash = typeof body.artifactHash === "string" && body.artifactHash ? body.artifactHash : null
+  const reason = typeof body.reason === "string" ? body.reason : null
+  const result = await recordRunVerdict(ctx.supabase, {
+    userId: ctx.userId,
+    runId: id,
+    decision: "reject",
+    reason,
+    artifactHash,
+  })
+  if (!result.ok) return NextResponse.json({ error: result.reason }, { status: result.httpStatus })
+  return NextResponse.json({ id, status: result.runStatus, decisionId: result.decisionId })
 }
