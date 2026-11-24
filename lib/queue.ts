@@ -38,6 +38,12 @@ export interface TaskRun {
   updatedAt: string
   startedAt: string | null
   finishedAt: string | null
+  /** Who the run acts as/for. agent_token runs are always null: the token is a credential, not a person. */
+  actingAs?: string | null
+  /** How the run was initiated. */
+  actorKind?: StoredActorKind
+  /** Correlation id for the credential/connection that acted, when one applies. */
+  actorRef?: string | null
 }
 
 export interface RunEvent {
@@ -46,6 +52,41 @@ export interface RunEvent {
   kind: string
   data: Record<string, unknown>
   createdAt: string
+}
+
+/** Who initiated a run. `owner` = the signed-in owner; `agent_token` = machine credential; `connector` = Dinghy connector. */
+export const ACTOR_KINDS = ["owner", "agent_token", "connector"] as const
+export type ActorKind = (typeof ACTOR_KINDS)[number]
+
+/**
+ * Attribution value read back from the DB. `"unknown"` is returned only when the stored
+ * actor_kind is missing or outside ACTOR_KINDS (e.g. a deployment where migration 0015 has
+ * not been applied). It is never resolved to a person: fail closed, never guess.
+ */
+export type StoredActorKind = ActorKind | "unknown"
+
+/** Maps a raw actor_kind column value. Anything unexpected becomes "unknown". */
+export function normalizeActorKind(value: unknown): StoredActorKind {
+  return (ACTOR_KINDS as readonly string[]).includes(value as string) ? (value as ActorKind) : "unknown"
+}
+
+const MAX_ACTOR_REF = 200
+
+/** Trims and length-clips an actor_ref. Null/empty becomes null (no invented correlation id). */
+export function normalizeActorRef(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  return trimmed ? trimmed.slice(0, MAX_ACTOR_REF) : null
+}
+
+function actorKindFor(input: EnqueueInput): ActorKind {
+  // Caller-specified kind wins and is validated. When it is omitted, connector metadata is
+  // authoritative: lib/connector.ts (outside this worktree's edit scope) enqueues through the
+  // connector path, so deriving 'connector' here keeps those runs attributed correctly without
+  // weakening the caller contract. Everything else defaults to 'owner'.
+  const raw = input.actorKind ?? (input.connector ? "connector" : "owner")
+  if (!(ACTOR_KINDS as readonly string[]).includes(raw)) throw new Error(`invalid actor kind: ${String(raw)}`)
+  return raw
 }
 
 export const DEFAULT_LEASE_SECONDS = 180
@@ -74,6 +115,9 @@ function fromRow(r: Record<string, unknown>): TaskRun {
     updatedAt: r.updated_at as string,
     startedAt: (r.started_at as string | null) ?? null,
     finishedAt: (r.finished_at as string | null) ?? null,
+    actingAs: (r.acting_as as string | null) ?? null,
+    actorKind: normalizeActorKind(r.actor_kind),
+    actorRef: normalizeActorRef(r.actor_ref as string | null | undefined),
   }
 }
 
@@ -108,11 +152,24 @@ export interface EnqueueInput {
   explore?: boolean
   /** Set when the run came from a Dinghy connector. Used for run dedupe and for the webhook back to Dinghy. */
   connector?: { connectionId: string; clientMessageId: string } | null
+  // ── Attribution (WS5) ─────────────────────────────────────────────────────────────
+  /** Human the run acts as/for. Defaults to ownerId. Forced null for agent_token runs. */
+  actingAs?: string | null
+  /** How the run was initiated. Defaults to 'owner' ('connector' when connector metadata is present). */
+  actorKind?: ActorKind
+  /** Correlation id (credential/connection). Clipped to 200 chars. */
+  actorRef?: string | null
 }
 
 /** Owner-side insert. RLS requires owner_id = auth.uid() and a workspace the user owns. */
 export async function enqueueRun(supabase: SupabaseClient, input: EnqueueInput): Promise<TaskRun> {
   if (!(RUN_TARGETS as readonly string[]).includes(input.target)) throw new Error("invalid target")
+  const actorKind = actorKindFor(input)
+  // Never invent an owner for agent_token actions: the token identifies the credential,
+  // not a person. Any caller-supplied actingAs is deliberately ignored on this path.
+  const actingAs = actorKind === "agent_token" ? null : input.actingAs ?? input.ownerId
+  const actorRef = normalizeActorRef(input.actorRef)
+
   const payload: Record<string, unknown> = { prompt: input.prompt }
   if (input.proposedAction) payload.proposedAction = input.proposedAction
   if (input.briefId) payload.briefId = input.briefId
@@ -137,6 +194,9 @@ export async function enqueueRun(supabase: SupabaseClient, input: EnqueueInput):
       payload,
       model: input.model,
       budget_cents: input.budgetCents,
+      acting_as: actingAs,
+      actor_kind: actorKind,
+      actor_ref: actorRef,
     })
     .select("*")
     .single()

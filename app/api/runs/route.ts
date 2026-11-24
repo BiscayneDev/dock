@@ -184,7 +184,18 @@ export async function POST(request: Request) {
       modelReason,
       explore: await resolveAgentExplore(agentKey),
     })
-    return NextResponse.json({ id: run.id, status: run.status, budgetCents: run.budgetCents }, { status: 201 })
+    return NextResponse.json(
+      {
+        id: run.id,
+        status: run.status,
+        budgetCents: run.budgetCents,
+        // Attribution (WS5): surfaced so the UI can show who the run acts for and how it started.
+        actingAs: run.actingAs,
+        actorKind: run.actorKind,
+        actorRef: run.actorRef,
+      },
+      { status: 201 },
+    )
   } catch {
     return NextResponse.json({ error: "Failed to queue run" }, { status: 500 })
   }
