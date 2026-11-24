@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { permissionsFor, modeForColumn } from "../lib/tool-permissions.ts";
+import { permissionsFor, modeForColumn, evaluateToolPolicy, DEFAULT_TOOL_DENY } from "../lib/tool-permissions.ts";
 
 const TOOLS = ["read", "write", "edit", "bash", "grep", "glob", "webfetch", "diagnostics", "memory", "flag_knowledge"];
 
@@ -44,4 +44,49 @@ test("EXPLORE_MODE_INSTRUCTION exists and is non-trivial", () => {
   assert.equal(typeof EXPLORE_MODE_INSTRUCTION, "string");
   assert.ok(EXPLORE_MODE_INSTRUCTION.length > 20, "non-trivial length");
   assert.match(EXPLORE_MODE_INSTRUCTION, /READ-ONLY|research/i);
+});
+
+// ── Deny-by-default policy (WS5) ────────────────────────────────────────────────
+
+test("policy ordering: deny beats ask beats allow", () => {
+  const base = { mode: "build", tool: "read" };
+  assert.equal(evaluateToolPolicy({ ...base, deny: ["read"], ask: ["read"], allow: ["read"] }), "deny");
+  assert.equal(evaluateToolPolicy({ ...base, ask: ["read"], allow: ["read"] }), "ask");
+  assert.equal(evaluateToolPolicy({ ...base, allow: ["read"] }), "allow");
+  // bash defaults to ask in plan; allow promotes it, deny still wins.
+  assert.equal(evaluateToolPolicy({ mode: "plan", tool: "bash" }), "ask");
+  assert.equal(evaluateToolPolicy({ mode: "plan", tool: "bash", allow: ["bash"] }), "allow");
+  assert.equal(evaluateToolPolicy({ mode: "plan", tool: "bash", deny: ["bash"], allow: ["bash"] }), "deny");
+});
+
+test("unknown tools are denied in every mode, even when explicitly allowed", () => {
+  for (const mode of ["plan", "build", "explore"]) {
+    assert.equal(evaluateToolPolicy({ mode, tool: "teleport" }), "deny", mode);
+    assert.equal(evaluateToolPolicy({ mode, tool: "teleport", allow: ["teleport"], ask: ["teleport"] }), "deny", mode);
+    assert.equal(evaluateToolPolicy({ mode, tool: "" }), "deny", mode);
+  }
+});
+
+test("default denies are a floor: allow cannot lift them, workspace deny extends them", () => {
+  for (const mode of ["plan", "build", "explore"]) {
+    for (const tool of DEFAULT_TOOL_DENY[mode]) {
+      assert.equal(evaluateToolPolicy({ mode, tool, allow: [tool] }), "deny", `${mode}:${tool}`);
+    }
+  }
+  assert.equal(evaluateToolPolicy({ mode: "build", tool: "write", deny: ["write"] }), "deny");
+  assert.equal(evaluateToolPolicy({ mode: "build", tool: "write" }), "allow");
+});
+
+test("evaluateToolPolicy matches permissionsFor defaults in all three modes", () => {
+  for (const mode of ["plan", "build", "explore"]) {
+    for (const p of permissionsFor(mode)) {
+      const expected = p.allowed ? "allow" : p.ask ? "ask" : "deny";
+      assert.equal(evaluateToolPolicy({ mode, tool: p.tool }), expected, `${mode}:${p.tool}`);
+    }
+  }
+});
+
+test("policy fails closed on malformed input", () => {
+  assert.equal(evaluateToolPolicy({ mode: "nope", tool: "read" }), "deny");
+  assert.equal(evaluateToolPolicy({ mode: "build", tool: 42 }), "deny");
 });
