@@ -2,13 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { permissionsFor, modeForColumn } from "../lib/tool-permissions.ts";
 
-const TOOLS = ["read", "write", "edit", "bash", "grep", "glob", "webfetch", "diagnostics", "memory"];
+const TOOLS = ["read", "write", "edit", "bash", "grep", "glob", "webfetch", "diagnostics", "memory", "flag_knowledge"];
 
 test("plan mode permissions", () => {
   const perms = Object.fromEntries(permissionsFor("plan").map(p => [p.tool, p]));
   assert.deepEqual(TOOLS.sort(), Object.keys(perms).sort());
   for (const t of ["read", "grep", "glob", "webfetch"]) assert.deepEqual(perms[t], { tool: t, allowed: true, ask: false });
-  for (const t of ["write", "edit", "diagnostics"]) assert.deepEqual(perms[t], { tool: t, allowed: false, ask: false });
+  for (const t of ["write", "edit", "diagnostics", "flag_knowledge"]) assert.deepEqual(perms[t], { tool: t, allowed: false, ask: false });
   assert.deepEqual(perms.bash, { tool: "bash", allowed: false, ask: true });
   assert.deepEqual(perms.memory, { tool: "memory", allowed: true, ask: false });
 });
@@ -22,7 +22,7 @@ test("explore mode permissions", () => {
   const perms = Object.fromEntries(permissionsFor("explore").map(p => [p.tool, p]));
   for (const t of ["read", "grep", "glob"]) assert.deepEqual(perms[t], { tool: t, allowed: true, ask: false });
   assert.deepEqual(perms.bash, { tool: "bash", allowed: false, ask: true });
-  for (const t of ["write", "edit", "webfetch", "diagnostics", "memory"]) {
+  for (const t of ["write", "edit", "webfetch", "diagnostics", "memory", "flag_knowledge"]) {
     assert.deepEqual(perms[t], { tool: t, allowed: false, ask: false }, t);
   }
 });
