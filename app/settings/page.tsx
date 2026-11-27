@@ -6,6 +6,7 @@ import DevicesSection from "@/components/settings/DevicesSection"
 import { CHIEF_RUNTIME_KEY } from "@/lib/chief-key"
 import ConnectDinghyCard from "@/components/settings/ConnectDinghyCard"
 import ShipyardConnectCard from "@/components/settings/ShipyardConnectCard"
+import ListenersPanel from "@/components/settings/ListenersPanel"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -570,6 +571,7 @@ export default function SettingsPage() {
       <ConnectDinghyCard />
       <ShipyardConnectCard />
       <CronsSection />
+      <ListenersPanel />
       <ConnectedServicesSection />
       <NotificationsSection />
       <DangerZoneSection />
