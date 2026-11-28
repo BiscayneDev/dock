@@ -481,7 +481,7 @@ function DangerZoneSection() {
     setResetting(true)
     try {
       await fetch("/api/setup/complete", { method: "DELETE" })
-      window.location.href = "/setup"
+      window.location.href = "/onboarding"
     } catch {
       setResetting(false)
       setConfirming(false)

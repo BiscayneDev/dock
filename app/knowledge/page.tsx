@@ -16,22 +16,8 @@ export const metadata: Metadata = {
  * flag → curator → approval loop rather than written once.
  */
 export default async function KnowledgePage() {
-  const setupDone = await isSetupComplete()
-  if (!setupDone) redirect("/setup")
-
   const user = await sessionClient().then((client) => currentUser(client)).catch(() => null)
   if (!user) redirect("/login")
 
   return <KnowledgeClient />
-}
-
-async function isSetupComplete(): Promise<boolean> {
-  try {
-    const { readFile } = await import("fs/promises")
-    const { join } = await import("path")
-    const raw = await readFile(join(process.cwd(), "data", "setup.json"), "utf-8")
-    return (JSON.parse(raw) as { completed?: boolean }).completed === true
-  } catch {
-    return false
-  }
 }

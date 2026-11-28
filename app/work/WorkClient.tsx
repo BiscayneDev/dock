@@ -244,14 +244,12 @@ export default function WorkClient() {
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [inboxLoading, setInboxLoading] = useState(true)
   const [demoMode, setDemoMode] = useState(false)
-  const [setupCompleted, setSetupCompleted] = useState(true)
 
   useEffect(() => {
     fetch("/api/setup/status")
       .then((r) => r.json())
-      .then((d: { demoMode?: boolean; completed?: boolean }) => {
+      .then((d: { demoMode?: boolean }) => {
         if (d.demoMode) setDemoMode(true)
-        if (d.completed === false) setSetupCompleted(false)
       })
       .catch(() => null)
   }, [])
@@ -845,11 +843,6 @@ export default function WorkClient() {
         )}
       </div>
 
-      {!setupCompleted && (
-        <p className="mt-8 text-center font-mono text-[11px]" style={{ color: "var(--ink-3)" }}>
-          Setup incomplete — <Link href="/setup" className="underline">finish setup</Link>.
-        </p>
-      )}
       {demoMode && (
         <p className="mt-8 text-center font-mono text-[11px]" style={{ color: "var(--ink-3)" }}>
           Demo mode — no runtime connected.

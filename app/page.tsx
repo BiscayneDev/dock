@@ -1,24 +1,8 @@
 import Link from "next/link"
 import { DigitalWave } from "@/components/DigitalWave"
 import { redirect } from "next/navigation"
-import { readFile } from "fs/promises"
-import { join } from "path"
 import { currentUser, sessionClient } from "@/lib/tenancy"
 import styles from "./landing.module.css"
-
-interface SetupData {
-  completed?: boolean
-}
-
-async function isSetupComplete(): Promise<boolean> {
-  try {
-    const raw = await readFile(join(process.cwd(), "data", "setup.json"), "utf-8")
-    const data = JSON.parse(raw) as SetupData
-    return data.completed === true
-  } catch {
-    return false
-  }
-}
 
 const FEATURES = [
   {
@@ -54,12 +38,6 @@ const FEATURES = [
 ]
 
 export default async function Home() {
-  // The setup wizard configures a local runtime and records it in data/setup.json, which is kept
-  // out of hosted bundles. A hosted deployment has no such file, so it must not gate the landing on it.
-  const setupDone = process.env.VERCEL ? true : await isSetupComplete()
-  if (!setupDone) {
-    redirect("/setup")
-  }
   // Signed-in visitors go straight to work; the landing is for the not-yet-aboard.
   const user = await sessionClient()
     .then((c) => currentUser(c))
