@@ -120,7 +120,7 @@ function BriefCard({ item, onChanged }: { item: InboxCardItem; onChanged: () => 
   return (
     <li className="flex flex-col gap-2 rounded-[14px] p-4" style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}>
       <header className="flex items-center justify-between gap-2">
-        <span className="text-[11px] uppercase tracking-[0.08em]" style={{ color: "#a78bfa" }}>Brief</span>
+        <span className="text-[11px] uppercase tracking-[0.08em]" style={{ color: "var(--dock-ink-2)" }}>Brief</span>
         <span className="text-[12px] tabular-nums" style={{ color: "var(--ink-3)" }}>{relative(item.updatedAt)}</span>
       </header>
       <p className="text-[14px] font-medium" style={{ color: "var(--ink)" }}>{item.title}</p>
@@ -222,7 +222,7 @@ export function InboxClient() {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5" data-testid="inbox">
       <header className="flex flex-col gap-1">
-        <h1 className="text-[22px] font-semibold" style={{ color: "var(--ink)" }}>Inbox</h1>
+        <h1 className="dock-entry-title" style={{ color: "var(--ink)" }}>Inbox</h1>
         <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>
           Every decision waiting on you, bound to the artifact it was made against.
         </p>

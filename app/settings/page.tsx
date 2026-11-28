@@ -172,7 +172,7 @@ function AgentBudgetsSection() {
                               onBlur={() => saveBudget(agent)}
                               autoFocus
                               className="w-16 text-xs rounded px-1.5 py-0.5 text-white outline-none"
-                              style={{ backgroundColor: "#0a0a0f", border: "1px solid #7c3aed" }}
+                              style={{ backgroundColor: "#0a0a0f", border: "1px solid var(--dock-control-line)" }}
                             />
                           </form>
                         ) : (
@@ -453,7 +453,7 @@ function NotificationsSection() {
                     onClick={() => toggle(key)}
                     disabled={saving === key}
                     className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0"
-                    style={{ backgroundColor: enabled ? "#7c3aed" : "#3f3f46" }}
+                    style={{ backgroundColor: enabled ? "var(--dock-ink-2)" : "#3f3f46" }}
                   >
                     <span
                       className="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform"
@@ -542,7 +542,7 @@ export default function SettingsPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-white">Settings</h1>
+        <h1 className="dock-entry-title">Settings</h1>
         <p className="text-sm text-zinc-500 mt-1">Agent configuration, billing, connections, and preferences</p>
       </div>
 

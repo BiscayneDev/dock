@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { DigitalWave } from "@/components/DigitalWave"
 import { redirect } from "next/navigation"
 import { readFile } from "fs/promises"
 import { join } from "path"
@@ -22,7 +23,7 @@ async function isSetupComplete(): Promise<boolean> {
 const FEATURES = [
   {
     fig: "FIG. 02",
-    title: "The board steers the crew",
+    title: "Manage work from one board",
     body: (
       <>
         Drag a task to <b>In Progress</b> and the agent picks it up. Done work moves itself. No kickoff
@@ -32,7 +33,7 @@ const FEATURES = [
   },
   {
     fig: "FIG. 03",
-    title: "No coin moves without the principal",
+    title: "Review spending before it happens",
     body: (
       <>
         Every agent runs on a budget. Anything that spends is gated behind an <b>approval card</b> —
@@ -68,8 +69,8 @@ export default async function Home() {
   return (
     <div className={styles.wrap}>
       <nav className={styles.nav}>
-        <Link href="/" className={styles.brand}>
-          ⚓ Dock
+        <Link href="/" className="dock-wordmark">
+          <span aria-hidden />Dock
         </Link>
         <div className={styles.navLinks}>
           <a
@@ -91,14 +92,14 @@ export default async function Home() {
           <span className="dot" />
           Dock — the open-source OS for AI agent teams
         </p>
-        <h1 className={styles.headline}>Hire the crew. Keep the log. Set sail.</h1>
+        <h1 className={styles.headline}>One workspace for your agent team.</h1>
         <p className={styles.sub}>
           Dock turns a stack of agent tabs into an operating system: one board, one brief, one bill.
           Your agents work in the open — you decide what ships.
         </p>
         <div className={styles.ctas}>
-          <Link href="/login" className={styles.ctaPrimary}>
-            Launch Dock
+          <Link href="/login" className="dock-action">
+            Sign in to Dock
           </Link>
           <a
             href="https://github.com/BiscayneDev/dock"
@@ -106,7 +107,7 @@ export default async function Home() {
             rel="noreferrer"
             className={styles.ctaGhost}
           >
-            Read the manifest
+            View on GitHub
           </a>
         </div>
       </header>
@@ -124,15 +125,7 @@ export default async function Home() {
             Live
           </span>
         </div>
-        <video
-          className={styles.media}
-          src="/onboarding-wave.mp4"
-          poster="/onboarding-wave-poster.jpg"
-          autoPlay
-          muted
-          loop
-          playsInline
-        />
+        <DigitalWave className={styles.media} />
         <figcaption className={styles.caption}>
           <span>The principal sees everything the crew does.</span>
           <span>FIG. 01 — The Harbor</span>

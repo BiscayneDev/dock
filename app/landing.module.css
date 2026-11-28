@@ -2,7 +2,7 @@
 
 .wrap {
   min-height: 100vh;
-  background: var(--surface-0);
+  background: var(--dock-canvas);
   color: var(--ink);
   display: flex;
   flex-direction: column;
@@ -61,15 +61,14 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--gold);
-  box-shadow: 0 0 8px var(--gold);
+  background: var(--dock-ready);
   margin-right: 8px;
   vertical-align: 1px;
 }
 .headline {
-  font-family: var(--font-serif);
+  font-family: var(--font-geist-sans);
   font-size: clamp(1.75rem, 4vw, 2.75rem);
-  font-weight: 400;
+  font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.08;
   margin: 0 0 10px;
@@ -83,20 +82,6 @@
   max-width: 52ch;
 }
 .ctas { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.ctaPrimary {
-  display: inline-block;
-  background: var(--gold);
-  color: #1a1508;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 11px 18px;
-  border-radius: 10px;
-  text-decoration: none;
-  border: 1px solid var(--gold);
-}
-.ctaPrimary:hover { filter: brightness(1.06); }
 .ctaGhost {
   display: inline-block;
   background: transparent;
@@ -120,7 +105,7 @@
   border: 1px solid var(--line-strong);
   border-radius: 15px;
   overflow: hidden;
-  background: var(--surface-1);
+  background: var(--dock-panel);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
 }
 .chromeBar {
@@ -134,7 +119,7 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-3);
-  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
+  background: var(--dock-panel);
 }
 .dots { display: flex; gap: 5px; }
 .dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); }
@@ -149,8 +134,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--gold);
-  box-shadow: 0 0 8px var(--gold);
+  background: var(--dock-ready);
   animation: pulse 2.4s ease-in-out infinite;
 }
 @keyframes pulse {
@@ -162,7 +146,7 @@
   width: 100%;
   height: max(46vh, 400px);
   object-fit: cover;
-  background: var(--surface-0);
+  background: var(--dock-canvas);
 }
 .caption {
   display: flex;
@@ -194,7 +178,7 @@
 .panel {
   border: 1px solid var(--line);
   border-radius: 15px;
-  background: linear-gradient(180deg, var(--surface-1), var(--surface-0));
+  background: var(--dock-panel);
   padding: 18px 18px 16px;
 }
 .panelBar {
@@ -211,9 +195,9 @@
   margin-bottom: 14px;
 }
 .panelTitle {
-  font-family: var(--font-serif);
+  font-family: var(--font-geist-sans);
   font-size: 19px;
-  font-weight: 400;
+  font-weight: 600;
   letter-spacing: -0.01em;
   margin: 0 0 6px;
 }

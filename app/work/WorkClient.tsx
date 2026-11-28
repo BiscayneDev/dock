@@ -244,15 +244,13 @@ export default function WorkClient() {
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [inboxLoading, setInboxLoading] = useState(true)
   const [demoMode, setDemoMode] = useState(false)
-  const [userName, setUserName] = useState("")
   const [setupCompleted, setSetupCompleted] = useState(true)
 
   useEffect(() => {
     fetch("/api/setup/status")
       .then((r) => r.json())
-      .then((d: { demoMode?: boolean; userName?: string; completed?: boolean }) => {
+      .then((d: { demoMode?: boolean; completed?: boolean }) => {
         if (d.demoMode) setDemoMode(true)
-        if (d.userName) setUserName(d.userName)
         if (d.completed === false) setSetupCompleted(false)
       })
       .catch(() => null)
@@ -363,13 +361,6 @@ export default function WorkClient() {
 
   return (
     <div className="relative mx-auto max-w-[820px] px-5 pb-24 pt-2 lg:px-8">
-      {/* ambient light */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute left-1/4 top-[-220px] h-[420px] w-[420px] rounded-full"
-        style={{ background: "radial-gradient(circle, rgba(139,92,246,.12), transparent 65%)", filter: "blur(30px)" }}
-      />
-
       {/* meta row */}
       <div className="flex items-center justify-between">
         <span
@@ -378,9 +369,9 @@ export default function WorkClient() {
         >
           <span
             className="h-[5px] w-[5px] rounded-full"
-            style={{ backgroundColor: "var(--emerald, #6ee7b7)", boxShadow: "0 0 7px #6ee7b7" }}
+            style={{ backgroundColor: "var(--dock-ready)" }}
           />
-          {loading ? "syncing…" : "fleet nominal"} · {repos.length} projects
+          {loading ? "syncing…" : "Workspace"} · {repos.length} projects
         </span>
         <span className="font-mono text-[10.5px] uppercase tracking-[0.1em]" style={{ color: "var(--ink-3)" }}>
           {getFormattedDate()}
@@ -389,14 +380,13 @@ export default function WorkClient() {
 
       {/* greeting */}
       <h1
-        className="mt-10 font-serif text-[40px] font-normal leading-[1.1] tracking-[-0.01em]"
+        className="dock-entry-title mt-8"
         style={{ color: "var(--ink)" }}
       >
-        Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}
-        {userName ? "," : "."} <em style={{ color: "var(--ink-2)" }}>{userName || "Captain"}</em>
+        Work
       </h1>
       <p className="mt-2.5 text-[14px]" style={{ color: "var(--ink-2)" }}>
-        {loading ? "Reading the fleet…" : (
+        {loading ? "Loading recent work…" : (
           <>
             Your agents moved <b style={{ color: "var(--ink)", fontWeight: 550 }}>{recentActivity.length} things</b> recently ·{" "}
             <b style={{ color: "var(--ink)", fontWeight: 550 }}>
@@ -411,27 +401,12 @@ export default function WorkClient() {
       {/* executive brief */}
       <section
         className="relative mt-8 overflow-hidden rounded-2xl border p-7 pb-6"
-        style={{ borderColor: "var(--line)", background: "linear-gradient(180deg, var(--surface-1), #08080b)" }}
+        style={{ borderColor: "var(--line)", background: "var(--dock-panel)" }}
       >
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-[-1px] rounded-[17px]"
-          style={{
-            padding: "1px",
-            background: "linear-gradient(120deg, rgba(167,139,250,.5), transparent 30%, transparent 65%, rgba(103,232,249,.25))",
-            WebkitMask: "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
-            WebkitMaskComposite: "xor",
-            maskComposite: "exclude",
-          }}
-        />
         <div
           className="mb-4 flex items-center gap-2.5 font-mono text-[9.5px] uppercase tracking-[0.16em]"
           style={{ color: "var(--ink-3)" }}
         >
-          <span
-            className="inline-block h-[7px] w-[7px] rotate-45"
-            style={{ background: "linear-gradient(135deg, #a78bfa, #22d3ee)", boxShadow: "0 0 10px rgba(139,92,246,.6)" }}
-          />
           work brief · {intel?.generatedAt ? relativeTime(intel.generatedAt) : "live"}
         </div>
         <p className="max-w-[62ch] text-[15px] leading-[1.72]" style={{ color: "#c3c6d4" }}>
@@ -454,12 +429,7 @@ export default function WorkClient() {
         <div className="mt-5 flex flex-wrap items-center gap-2.5">
           <button
             onClick={() => openChiefWith("Walk me through today's brief.")}
-            className="rounded-[10px] px-4 py-2 text-[12.5px] font-semibold transition-all duration-200 hover:-translate-y-[1px]"
-            style={{
-              color: "#0b0b10",
-              background: "linear-gradient(135deg, #f2e3b3, #e7c979 60%, #cfa94e)",
-              boxShadow: "0 1px 0 rgba(255,255,255,.4) inset, 0 6px 22px rgba(231,201,121,.25)",
-            }}
+            className="dock-action"
           >
             Discuss with your chief of staff
           </button>
@@ -475,7 +445,7 @@ export default function WorkClient() {
             className="px-2.5 py-2 text-[12.5px] font-normal transition-colors"
             style={{ color: "var(--ink-3)" }}
           >
-            Ask about the fleet →
+            Ask what agents are working on
           </button>
         </div>
       </section>
@@ -671,7 +641,7 @@ export default function WorkClient() {
           >
             <div className="mb-3.5 flex items-center gap-2.5">
               <span
-                className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] border font-serif text-[17px]"
+                className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] border font-medium text-[17px]"
                 style={{ borderColor: "var(--line)", backgroundColor: "var(--surface-3)", color: "var(--ink-2)" }}
               >
                 ◈
@@ -694,7 +664,7 @@ export default function WorkClient() {
               </span>
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="font-serif text-[27px] tabular-nums">{repo.openPRs.length}</span>
+              <span className="text-[20px] font-medium tabular-nums">{repo.openPRs.length}</span>
               <span className="font-mono text-[10.5px] uppercase tracking-[0.08em]" style={{ color: "var(--ink-3)" }}>
                 open PRs
               </span>
