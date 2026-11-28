@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { DigitalWave } from "@/components/DigitalWave"
 import { redirect } from "next/navigation"
 import { readFile } from "fs/promises"
 import { join } from "path"
@@ -124,15 +125,7 @@ export default async function Home() {
             Live
           </span>
         </div>
-        <video
-          className={styles.media}
-          src="/onboarding-wave.mp4"
-          poster="/onboarding-wave-poster.jpg"
-          autoPlay
-          muted
-          loop
-          playsInline
-        />
+        <DigitalWave className={styles.media} />
         <figcaption className={styles.caption}>
           <span>The principal sees everything the crew does.</span>
           <span>FIG. 01 — The Harbor</span>

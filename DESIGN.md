@@ -88,7 +88,7 @@ Left-align questions, actions, values, and documents. On wider screens, a Config
 
 ## Elevation & Depth
 
-The digital wave is Dock’s visual signature. Use the landing page’s wave artwork as a framed image beside sign-in and workspace setup on desktop, and as a short still below the form on mobile. Keep controls on a solid surface, never over the image. Use the still on these entry screens so the form stays calm and works without motion. In venture onboarding, the live brief owns the second column; keep wave artwork out of that workspace and day-to-day tools.
+The digital wave is Dock’s visual signature. Use the approved `public/shipyard-waves.mp4` on the landing page, sign-in, and workspace setup. Frame it beside the form on desktop or below it on mobile. Keep controls on a solid surface, never over the artwork, except for the video’s own pause control. Use a still from the same clip and do not load the video when reduced motion is requested. In venture onboarding and day-to-day tools, keep the brief or the work itself in focus.
 
 Separate layers with spacing, a slightly lighter solid fill, and thin borders. Use motion to explain changes, not as decoration: onboarding steps enter over 260 ms with `cubic-bezier(.22,1,.36,1)` and a 6 px vertical offset; brief values settle over 300 ms. Honor reduced motion for all animations and transitions. A loading indicator must accompany useful status text.
 

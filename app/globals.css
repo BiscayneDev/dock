@@ -575,7 +575,7 @@ input::placeholder {
   margin-top: 32px;
   border: 1px solid var(--dock-line-2);
   border-radius: 8px;
-  background: var(--dock-panel) url('/onboarding-wave-poster.jpg') 35% 55% / cover no-repeat;
+  background: var(--dock-panel);
 }
 @media (min-width: 1024px) {
   .dock-entry {
@@ -587,9 +587,25 @@ input::placeholder {
     height: min(850px, calc(100dvh - 48px));
     aspect-ratio: auto;
     margin-top: 0;
-    background-position: 33% center;
   }
 }
+.dock-wave-media { position: relative; overflow: hidden; }
+.dock-wave-media > :is(video, img) { display: block; width: 100%; height: 100%; object-fit: cover; }
+.dock-entry-wave > :is(video, img) { object-position: 35% 45%; }
+.dock-wave-toggle {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  min-height: 36px;
+  padding: 0 10px;
+  background: var(--dock-canvas);
+  color: var(--dock-ink);
+  border: 1px solid var(--dock-control-line);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.dock-wave-toggle:focus-visible { outline: 2px solid var(--dock-ink); outline-offset: 2px; }
+@media (pointer: coarse) { .dock-wave-toggle { min-height: 44px; } }
 .dock-entry-header { margin-bottom: 32px; }
 .dock-wordmark { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
 .dock-wordmark > span:first-child { width: 14px; height: 14px; border: 1px solid currentColor; border-radius: 3px; }
