@@ -83,7 +83,11 @@ function LoginInner() {
     })
     setBusy(false)
     if (error) {
-      setError("We couldn't send a code to that address. Check it and try again.")
+      setError(
+        inviteToken
+          ? "We couldn't send a code. Your invite link may have expired — ask the owner for a new one."
+          : "Dock is invite-only right now. Open your invitation link to join.",
+      )
       return
     }
     setStep("code")
@@ -123,7 +127,11 @@ function LoginInner() {
       {step === "email" ? (
         <>
           <h1 className="dock-entry-title">Sign in to Dock</h1>
-          <p className="dock-entry-copy">We&apos;ll email you a 6-digit code.</p>
+          <p className="dock-entry-copy">
+            {inviteToken
+              ? "We'll email you a 6-digit code to confirm your invitation."
+              : "Dock is invite-only right now. We'll email you a 6-digit code if your email has access."}
+          </p>
           <form onSubmit={sendCode} className="dock-entry-form">
             <label htmlFor="dock-email">Email address</label>
             <input id="dock-email" name="email" type="email" required autoComplete="email" value={email}
