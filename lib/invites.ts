@@ -85,3 +85,12 @@ export function inviteStatus(row: { used_at?: string | null; expires_at: string 
   const expires = new Date(row.expires_at).getTime()
   return !Number.isFinite(expires) || expires <= nowMs ? "expired" : "pending"
 }
+
+/**
+ * Supabase's admin createUser reports an already-provisioned address as an error.
+ * Invite creation is idempotent on that case: the account existing is the goal.
+ */
+export function isAlreadyRegisteredError(message: string | null | undefined): boolean {
+  if (!message) return false
+  return /already been registered|already exists|user already registered/i.test(message)
+}

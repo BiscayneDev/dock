@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { adminClient, currentUser, hashToken, newInviteToken, sessionClient } from "@/lib/tenancy"
-import { MAX_INVITES_LISTED, inviteShareUrl, inviteTtlMs, normalizeInviteEmail } from "@/lib/invites"
+import { MAX_INVITES_LISTED, inviteShareUrl, inviteTtlMs, isAlreadyRegisteredError, normalizeInviteEmail } from "@/lib/invites"
 
 export const dynamic = "force-dynamic"
 
@@ -99,6 +99,17 @@ export async function POST(request: Request) {
         { error: "An active invite already exists for this email. Wait for it to expire, or send the existing link." },
         { status: 409 },
       )
+    }
+
+    // Supabase Auth has signup disabled instance-wide. The OTP step can only sign in
+    // an EXISTING account, so inviting must provision the auth user first. Idempotent:
+    // an address that is already registered is exactly the desired end state.
+    const { error: provisionError } = await admin.auth.admin.createUser({
+      email: email.value,
+      email_confirm: true,
+    })
+    if (provisionError && !isAlreadyRegisteredError(provisionError.message)) {
+      return NextResponse.json({ error: "Could not provision the invited account." }, { status: 502 })
     }
 
     const { data, error } = await admin

@@ -9,6 +9,7 @@ import {
   inviteShareUrl,
   isInviteTokenShape,
   inviteStatus,
+  isAlreadyRegisteredError,
 } from "../lib/invites.ts";
 
 const TOKEN = "AbCdEf0123456789_abCdEf0123456789_abC-_XYZW"; // 43 base64url chars, like newInviteToken()
@@ -85,6 +86,15 @@ test("share URL rejects unsafe origins and invalid tokens", () => {
   assert.equal(isInviteTokenShape("short"), false);
   assert.equal(isInviteTokenShape("a+b/c?d=e&f"), false);
   assert.equal(isInviteTokenShape(null), false);
+});
+
+test("already-registered errors are idempotent; everything else is not", () => {
+  assert.equal(isAlreadyRegisteredError("A user with this email address has already been registered"), true);
+  assert.equal(isAlreadyRegisteredError("User already registered"), true);
+  assert.equal(isAlreadyRegisteredError("already exists"), true);
+  assert.equal(isAlreadyRegisteredError("Signups not allowed for this instance"), false);
+  assert.equal(isAlreadyRegisteredError(null), false);
+  assert.equal(isAlreadyRegisteredError(undefined), false);
 });
 
 test("invite status prefers used, then expired, then pending", () => {
