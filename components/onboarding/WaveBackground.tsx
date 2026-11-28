@@ -2,20 +2,36 @@
 
 import { useEffect, useRef, useState } from "react"
 
-// Full-viewport wave loop behind the sign-in and onboarding screens. Decorative only.
+// Wave loop behind sign-in, settings pairing, and the desktop onboarding brief pane. Decorative only.
 // - Reduced motion: the poster image is shown and the video is never mounted (no autoplay, no download).
 // - Hidden tab: the video pauses and resumes when the tab is visible again.
-// - A dark scrim sits on top: darkest in the centre (where the form is), lighter at the edges.
+// - A dark scrim sits on top: `center` is darkest in the middle (centred forms); `pane` is darkest along
+//   the left edge where brief copy begins and lighter toward the outer right edge.
 // Put content above it with `relative z-10`.
 
 export const WAVE_VIDEO = "/onboarding-wave.mp4"
 export const WAVE_POSTER = "/onboarding-wave-poster.jpg"
 
 type Motion = "unknown" | "full" | "reduced"
+export type WaveScrim = "center" | "pane"
 
-// `contained` keeps the loop inside the nearest positioned parent (for example a settings panel)
-// instead of covering the viewport. The parent must be `relative` and have `overflow-hidden`.
-export function WaveBackground({ contained = false }: { contained?: boolean } = {}) {
+const CENTER_SCRIM =
+  "radial-gradient(ellipse 55% 65% at 50% 50%, rgba(5,5,7,0.94) 0%, rgba(5,5,7,0.86) 55%, rgba(5,5,7,0.6) 100%), " +
+  "linear-gradient(to bottom, rgba(5,5,7,0.45) 0%, rgba(5,5,7,0.2) 40%, rgba(5,5,7,0.6) 100%)"
+
+const PANE_SCRIM =
+  "linear-gradient(to right, rgba(10,10,11,0.88) 0%, rgba(10,10,11,0.68) 45%, rgba(10,10,11,0.46) 78%, rgba(10,10,11,0.34) 100%), " +
+  "linear-gradient(to bottom, rgba(10,10,11,0.36) 0%, rgba(10,10,11,0.08) 35%, rgba(10,10,11,0.12) 70%, rgba(10,10,11,0.42) 100%)"
+
+// `contained` keeps the loop inside the nearest positioned parent (for example a settings panel or
+// the desktop brief pane) instead of covering the viewport. The parent must be `relative overflow-hidden`.
+export function WaveBackground({
+  contained = false,
+  scrim = "center",
+}: {
+  contained?: boolean
+  scrim?: WaveScrim
+} = {}) {
   const [motion, setMotion] = useState<Motion>("unknown")
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
@@ -42,8 +58,9 @@ export function WaveBackground({ contained = false }: { contained?: boolean } = 
   return (
     <div
       aria-hidden
+      data-wave-bg={scrim}
       className={`pointer-events-none ${contained ? "absolute" : "fixed"} inset-0 z-0 overflow-hidden`}
-      style={{ background: "var(--surface-0)" }}
+      style={{ background: scrim === "pane" ? "var(--ob-bg, var(--surface-0))" : "var(--surface-0)" }}
     >
       {motion === "full" ? (
         <video
@@ -64,10 +81,7 @@ export function WaveBackground({ contained = false }: { contained?: boolean } = 
       )}
       <div
         className="absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 55% 65% at 50% 50%, rgba(5,5,7,0.94) 0%, rgba(5,5,7,0.86) 55%, rgba(5,5,7,0.6) 100%), linear-gradient(to bottom, rgba(5,5,7,0.45) 0%, rgba(5,5,7,0.2) 40%, rgba(5,5,7,0.6) 100%)",
-        }}
+        style={{ background: scrim === "pane" ? PANE_SCRIM : CENTER_SCRIM }}
       />
     </div>
   )

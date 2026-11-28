@@ -4,6 +4,12 @@ import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import TasksBoard from "@/app/tasks/TasksBoard"
+import {
+  LaunchCard,
+  clearLaunchArrival,
+  consumeLaunchArrival,
+  type LaunchArrival,
+} from "@/components/onboarding/LaunchCard"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -242,8 +248,30 @@ export default function WorkClient() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [emails, setEmails] = useState<EmailEntry[]>([])
   const [events, setEvents] = useState<CalendarEvent[]>([])
-  const [inboxLoading, setInboxLoading] = useState(true)
   const [demoMode, setDemoMode] = useState(false)
+  const [arrival, setArrival] = useState<LaunchArrival | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/workspace", { cache: "no-store" })
+      .then((r) => (r.ok ? (r.json() as Promise<{ workspaceId?: string; building?: string; mainGoal?: string }>) : null))
+      .then((ws) => {
+        if (cancelled || !ws?.workspaceId) return
+        const next = consumeLaunchArrival(ws.workspaceId, ws.building || ws.mainGoal || "")
+        if (next) setArrival(next)
+      })
+      .catch(() => null)
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const dismissArrival = useCallback(() => {
+    setArrival((current) => {
+      if (current) clearLaunchArrival(current.workspaceId)
+      return null
+    })
+  }, [])
 
   useEffect(() => {
     fetch("/api/setup/status")
@@ -262,7 +290,6 @@ export default function WorkClient() {
     } catch {
       setEmails([])
     }
-    setInboxLoading(false)
   }, [])
 
   const fetchAll = useCallback(async () => {
@@ -313,11 +340,13 @@ export default function WorkClient() {
   }, [])
 
   useEffect(() => {
-    fetchAll()
-    fetchInbox()
+    const boot = setTimeout(() => {
+      void fetchAll()
+      void fetchInbox()
+    }, 0)
     const interval = setInterval(fetchAll, 30_000)
     const inboxInterval = setInterval(fetchInbox, 60_000)
-    return () => { clearInterval(interval); clearInterval(inboxInterval) }
+    return () => { clearTimeout(boot); clearInterval(interval); clearInterval(inboxInterval) }
   }, [fetchAll, fetchInbox])
 
   const pinnedRepos = PINNED.map((name) => repos.find((r) => r.name === name)).filter(
@@ -395,6 +424,9 @@ export default function WorkClient() {
           </>
         )}
       </p>
+
+      {/* arrival card (one-time post-launch handoff) */}
+      {arrival && <LaunchCard goal={arrival.goal} onDismiss={dismissArrival} />}
 
       {/* executive brief */}
       <section

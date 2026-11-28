@@ -498,16 +498,23 @@ input::placeholder {
   .ob-root .ob-inline { display: none; }
 
   .ob-root .ob-desktop {
+    position: relative;
+    overflow: hidden;
     display: grid;
     align-items: center;
     justify-items: center;
     min-width: 0;
     padding: 32px clamp(28px, 5vw, 72px);
     border-inline-start: 1px solid var(--ob-line);
-    background: var(--ob-panel);
+    background: var(--ob-bg);
   }
 
-  .ob-root .ob-desktop .ob-brief { max-width: 560px; }
+  .ob-root .ob-desktop .ob-brief {
+    position: relative;
+    z-index: 10;
+    max-width: 560px;
+    background: rgba(14, 14, 16, .9);
+  }
   .ob-root .ob-brief-row { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) 3ch; }
   .ob-root :is(.ob-brief-header, .ob-headline, .ob-brief-row) { padding-inline: 22px; }
 }

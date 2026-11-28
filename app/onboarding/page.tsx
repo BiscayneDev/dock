@@ -3,6 +3,8 @@
 import { Suspense, useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Brief, type BriefEntry } from "@/components/onboarding/Brief"
+import { writeLaunchArrival } from "@/components/onboarding/LaunchCard"
+import { WaveBackground } from "@/components/onboarding/WaveBackground"
 import {
   DEFAULT_CHIEF_NAME,
   MAX_CUSTOM_RULES,
@@ -167,8 +169,17 @@ function OnboardingFlow() {
   const [launched, setLaunched] = useState<Launched | null>(null)
   const [launchStage, setLaunchStage] = useState(0)
   const [workspaceId, setWorkspaceId] = useState<string | null>(null)
+  const [desktopPane, setDesktopPane] = useState(false)
 
   const key: StepKey = order[step]
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)")
+    const apply = () => setDesktopPane(mq.matches)
+    apply()
+    mq.addEventListener("change", apply)
+    return () => mq.removeEventListener("change", apply)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -203,9 +214,10 @@ function OnboardingFlow() {
           return
         }
         if (s.chief) {
-          router.replace("/assistant")
+          router.replace("/work")
           return
         }
+        setWorkspaceId(s.workspaceId ?? null)
         setDraft(hydrate(s))
         setLoaded(true)
       })
@@ -213,7 +225,7 @@ function OnboardingFlow() {
     return () => {
       cancelled = true
     }
-  }, [router, venture])
+  }, [router, venture, order.length])
 
   // Venture draft: saved on every change until Confirm (then cleared in confirmVenture).
   useEffect(() => {
@@ -225,17 +237,14 @@ function OnboardingFlow() {
     }
   }, [venture, loaded, workspaceId, launched, draft, step])
 
-  // After a venture is created: show the launch steps, then open its chat (the Chief's introduction).
+  // After a venture is created: show the launch steps, then hand off to Work.
   useEffect(() => {
     if (!launched) return
-    const next = launched.conversationId
-      ? `/assistant?id=${encodeURIComponent(launched.conversationId)}`
-      : `/assistant?prefill=${encodeURIComponent(`Working on ${launched.name}: `)}`
     const timers = [
       setTimeout(() => setLaunchStage(1), 500),
       setTimeout(() => setLaunchStage(2), 1000),
       setTimeout(() => setLaunchStage(3), 1500),
-      setTimeout(() => router.replace(next), 2100),
+      setTimeout(() => router.replace("/work"), 2100),
     ]
     return () => timers.forEach(clearTimeout)
   }, [launched, router])
@@ -308,6 +317,7 @@ function OnboardingFlow() {
     } catch {
       // Nothing to clear if storage is blocked.
     }
+    writeLaunchArrival(workspaceId, draft.goal)
     setLaunched({ projectId: data.projectId, name: data.name, conversationId: data.conversationId ?? null })
   }
 
@@ -325,7 +335,8 @@ function OnboardingFlow() {
           return
         }
         await post({ action: "chief", name: chiefName.trim() })
-        router.replace("/assistant")
+        writeLaunchArrival(workspaceId, draft.goal)
+        router.replace("/work")
         return
       }
       if (key === "goal") {
@@ -671,7 +682,10 @@ function OnboardingFlow() {
 
         {!launched && <footer className="ob-hints"><span><Kbd>↵</Kbd> continue</span>{step > 0 && <span><Kbd>⌫</Kbd> back</span>}{skippable && <span><Kbd>S</Kbd> skip</span>}{(autoChoice || key === "pricing") && <span><Kbd>1–9</Kbd> select</span>}</footer>}
       </div>
-      <aside className="ob-desktop">{brief}</aside>
+      <aside className="ob-desktop">
+        {desktopPane && <WaveBackground contained scrim="pane" />}
+        {brief}
+      </aside>
     </main>
   )
 }
