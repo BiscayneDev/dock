@@ -54,7 +54,9 @@ const FEATURES = [
 ]
 
 export default async function Home() {
-  const setupDone = await isSetupComplete()
+  // The setup wizard configures a local runtime and records it in data/setup.json, which is kept
+  // out of hosted bundles. A hosted deployment has no such file, so it must not gate the landing on it.
+  const setupDone = process.env.VERCEL ? true : await isSetupComplete()
   if (!setupDone) {
     redirect("/setup")
   }
