@@ -1,5 +1,6 @@
 "use client"
 
+import { DockEntry } from "@/components/DockEntry"
 import { Suspense, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
@@ -115,42 +116,40 @@ function LoginInner() {
   }
 
   return (
-    <main className="dock-entry">
-      <div className="dock-entry-inner">
-        <header className="dock-entry-header"><p className="dock-wordmark"><span aria-hidden />Dock</p></header>
-        {step === "email" ? (
-          <>
-            <h1 className="dock-entry-title">Sign in to Dock</h1>
-            <p className="dock-entry-copy">We&apos;ll email you a 6-digit code.</p>
-            <form onSubmit={sendCode} className="dock-entry-form">
-              <label htmlFor="dock-email">Email address</label>
-              <input id="dock-email" name="email" type="email" required autoComplete="email" value={email}
-                onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="dock-entry-input" />
-              <button type="submit" disabled={busy || !email.trim()} className="dock-action self-start justify-self-start">
-                {busy ? "Sending…" : "Send code"}
-              </button>
-            </form>
-          </>
-        ) : (
-          <>
-            <h1 className="dock-entry-title">Enter your code</h1>
-            <p className="dock-entry-copy">Sent to {email}</p>
-            <form className="dock-entry-form" onSubmit={(e) => { e.preventDefault(); verify(code).catch(() => null) }}>
-              <CodeBoxes value={code} disabled={busy} onChange={(v) => {
-                setCode(v)
-                if (v.length === CODE_LENGTH) verify(v).catch(() => null)
-              }} />
-              <div className="flex flex-wrap justify-between gap-x-4 text-[13px]">
-                <button type="button" onClick={() => setStep("email")} disabled={busy} className="underline underline-offset-4">Use a different email</button>
-                <button type="button" onClick={() => sendCode()} disabled={busy} className="underline underline-offset-4">Send a new code</button>
-              </div>
-              {busy && <p role="status" className="dock-entry-copy">Checking code…</p>}
-            </form>
-          </>
-        )}
-        {error && <p role="alert" className="mt-4 text-sm">{error}</p>}
-      </div>
-    </main>
+    <DockEntry>
+      <header className="dock-entry-header"><p className="dock-wordmark"><span aria-hidden />Dock</p></header>
+      {step === "email" ? (
+        <>
+          <h1 className="dock-entry-title">Sign in to Dock</h1>
+          <p className="dock-entry-copy">We&apos;ll email you a 6-digit code.</p>
+          <form onSubmit={sendCode} className="dock-entry-form">
+            <label htmlFor="dock-email">Email address</label>
+            <input id="dock-email" name="email" type="email" required autoComplete="email" value={email}
+              onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="dock-entry-input" />
+            <button type="submit" disabled={busy || !email.trim()} className="dock-action self-start justify-self-start">
+              {busy ? "Sending…" : "Send code"}
+            </button>
+          </form>
+        </>
+      ) : (
+        <>
+          <h1 className="dock-entry-title">Enter your code</h1>
+          <p className="dock-entry-copy">Sent to {email}</p>
+          <form className="dock-entry-form" onSubmit={(e) => { e.preventDefault(); verify(code).catch(() => null) }}>
+            <CodeBoxes value={code} disabled={busy} onChange={(v) => {
+              setCode(v)
+              if (v.length === CODE_LENGTH) verify(v).catch(() => null)
+            }} />
+            <div className="flex flex-wrap justify-between gap-x-4 text-[13px]">
+              <button type="button" onClick={() => setStep("email")} disabled={busy} className="underline underline-offset-4">Use a different email</button>
+              <button type="button" onClick={() => sendCode()} disabled={busy} className="underline underline-offset-4">Send a new code</button>
+            </div>
+            {busy && <p role="status" className="dock-entry-copy">Checking code…</p>}
+          </form>
+        </>
+      )}
+      {error && <p role="alert" className="mt-4 text-sm">{error}</p>}
+    </DockEntry>
   )
 }
 

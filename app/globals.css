@@ -561,6 +561,7 @@ input::placeholder {
   min-height: 100dvh;
   display: grid;
   place-items: center;
+  align-content: center;
   padding: 24px clamp(20px, 5vw, 48px);
   background: var(--dock-canvas);
   color: var(--dock-ink);
@@ -568,6 +569,27 @@ input::placeholder {
   font: 14px/1.5 var(--font-geist-sans), sans-serif;
 }
 .dock-entry-inner { width: min(100%, 460px); min-width: 0; }
+.dock-entry-wave {
+  width: min(100%, 460px);
+  aspect-ratio: 3 / 1;
+  margin-top: 32px;
+  border: 1px solid var(--dock-line-2);
+  border-radius: 8px;
+  background: var(--dock-panel) url('/onboarding-wave-poster.jpg') 35% 55% / cover no-repeat;
+}
+@media (min-width: 1024px) {
+  .dock-entry {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    gap: clamp(32px, 5vw, 80px);
+  }
+  .dock-entry-wave {
+    width: 100%;
+    height: min(850px, calc(100dvh - 48px));
+    aspect-ratio: auto;
+    margin-top: 0;
+    background-position: 33% center;
+  }
+}
 .dock-entry-header { margin-bottom: 32px; }
 .dock-wordmark { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
 .dock-wordmark > span:first-child { width: 14px; height: 14px; border: 1px solid currentColor; border-radius: 3px; }
