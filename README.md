@@ -50,6 +50,8 @@ The IA collapsed ~24 top-level pages into five. Routes never got deleted — boo
 
 Mobile bottom nav carries four: Inbox, Work, Agents, Settings. The "Launch a venture" button stays in the rail.
 
+For new or updated Dock product screens, follow the [Dock design style](DESIGN.md).
+
 Out of the nav but not deleted: `/conversations`, `/messages`, `/alerts`, `/activity`, `/costs`, `/treasury`, `/projects`, `/intel`, `/calendar`, `/docs`, `/memory`, `/schedules`, `/shipwright`, `/setup`, `/onboarding`. Every one is reachable in at most two clicks from Work or Settings, from the ⌘P command palette, or by its old URL.
 
 <br>

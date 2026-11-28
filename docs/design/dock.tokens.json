@@ -1,0 +1,218 @@
+{
+  "$schema": "https://www.designtokens.org/schemas/2025.10/format.json",
+  "$description": "A quiet, document-first workspace for directing agent teams.",
+  "color": {
+    "$type": "color",
+    "primary": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.929,
+          0.929,
+          0.937
+        ],
+        "hex": "#ededef"
+      }
+    },
+    "canvas": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.039,
+          0.039,
+          0.043
+        ],
+        "hex": "#0a0a0b"
+      }
+    },
+    "panel": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.055,
+          0.055,
+          0.063
+        ],
+        "hex": "#0e0e10"
+      }
+    },
+    "secondary-ink": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.631,
+          0.631,
+          0.659
+        ],
+        "hex": "#a1a1a8"
+      }
+    },
+    "quiet-ink": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.42,
+          0.42,
+          0.451
+        ],
+        "hex": "#6b6b73"
+      }
+    },
+    "hairline": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          1,
+          1,
+          1
+        ],
+        "hex": "#ffffff14"
+      }
+    },
+    "strong-line": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          1,
+          1,
+          1
+        ],
+        "hex": "#ffffff24"
+      }
+    },
+    "selection": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          1,
+          1,
+          1
+        ],
+        "hex": "#ffffff0a"
+      }
+    },
+    "ready": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.42,
+          0.847,
+          0.871
+        ],
+        "hex": "#6bd8de"
+      }
+    },
+    "white": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          1,
+          1,
+          1
+        ],
+        "hex": "#ffffff"
+      }
+    }
+  },
+  "spacing": {
+    "$type": "dimension",
+    "xs": {
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      }
+    },
+    "sm": {
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      }
+    },
+    "md": {
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      }
+    },
+    "lg": {
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      }
+    },
+    "xl": {
+      "$value": {
+        "value": 32,
+        "unit": "px"
+      }
+    }
+  },
+  "rounded": {
+    "$type": "dimension",
+    "control": {
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      }
+    }
+  },
+  "typography": {
+    "title": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Geist",
+        "fontSize": {
+          "value": 30,
+          "unit": "px"
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "value": -0.025,
+          "unit": "em"
+        }
+      }
+    },
+    "brief-headline": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Geist",
+        "fontSize": {
+          "value": 22,
+          "unit": "px"
+        },
+        "fontWeight": 500
+      }
+    },
+    "body": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Geist",
+        "fontSize": {
+          "value": 14,
+          "unit": "px"
+        }
+      }
+    },
+    "label": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Geist Mono",
+        "fontSize": {
+          "value": 11,
+          "unit": "px"
+        }
+      }
+    },
+    "action": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Geist",
+        "fontSize": {
+          "value": 13.5,
+          "unit": "px"
+        },
+        "fontWeight": 500
+      }
+    }
+  }
+}
