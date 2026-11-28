@@ -1,8 +1,8 @@
 "use client"
 
-import { Suspense, useEffect, useState, type ReactNode } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { WaveBackground } from "@/components/onboarding/WaveBackground"
+import { Brief, type BriefEntry } from "@/components/onboarding/Brief"
 import {
   DEFAULT_CHIEF_NAME,
   MAX_CUSTOM_RULES,
@@ -84,6 +84,21 @@ const DEFAULT_PAYMENT = "usdc"
 const VENTURE_GOAL_TITLE = "What is the new venture, in one sentence?"
 const LAUNCH_STAGES = ["Goal and answers saved", "Rules set for this venture", "Handing it to your Chief of Staff"]
 
+// Chapters give the 11 steps a shape: a reader can see where they are, not just a number.
+const CHAPTERS: Record<StepKey, string> = {
+  goal: "The venture",
+  source: "The venture",
+  story: "The venture",
+  stage: "Where you stand",
+  direction: "Where you stand",
+  customer: "The market",
+  pricing: "The market",
+  acquisition: "The market",
+  rules: "Working rules",
+  chief: "Chief of Staff",
+  review: "Review",
+}
+
 function ans(a: Answered | undefined, key: string): Ans {
   if (!a) return { choice: DEFAULTS[key] ?? null, other: "", skipped: false }
   if (a.skipped) return { choice: null, other: "", skipped: true }
@@ -116,15 +131,6 @@ function hydrate(s: ServerState): Draft {
 }
 
 const EMPTY_DRAFT = hydrate({ chief: null, profile: null, rules: [] })
-
-const field = {
-  background: "var(--surface-0)",
-  border: "1px solid var(--line-strong)",
-  color: "var(--ink)",
-}
-
-const label = { color: "var(--ink-2)" }
-const hint = { color: "var(--ink-3)" }
 
 function summarizeAns(group: string, a: Ans): string {
   if (a.skipped) return "Skipped: agent decides"
@@ -402,379 +408,308 @@ function OnboardingFlow() {
     moveTo(order.indexOf(k))
   }
 
-  if (!loaded) {
-    return (
-      <div className="relative flex min-h-screen items-center justify-center" style={{ color: "var(--ink-3)" }}>
-        <WaveBackground />
-        <span className="relative z-10">{error ?? "Loading…"}</span>
-      </div>
-    )
+  const skippable = SKIPPABLE.includes(key)
+  const [advanceTick, bumpAdvance] = useState(0)
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const saveRef = useRef<(() => void) | null>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const autoChoice = key === "source" || key === "story" || key === "stage" || key === "direction" || key === "customer" || key === "acquisition"
+
+  function cancelAdvance() {
+    if (advanceTimer.current !== null) clearTimeout(advanceTimer.current)
+    advanceTimer.current = null
   }
 
-  if (launched) {
-    const rulesLine = draft.rulesSkipped
-      ? "Rules skipped: the agent decides"
-      : `${draft.rules.filter((r) => r.enabled).length} active rule${draft.rules.filter((r) => r.enabled).length === 1 ? "" : "s"}`
-    return (
-      <div className="relative flex min-h-screen items-center justify-center p-6">
-        <WaveBackground />
-        <div className="relative z-10 w-full max-w-[600px] rounded-[18px] p-6 sm:p-8" style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}>
-          <p className="text-[12px] uppercase tracking-[0.18em]" style={hint}>
-            Launching
-          </p>
-          <h1 className="mt-3 break-words text-[22px] font-semibold" style={{ color: "var(--ink)" }}>
-            {launched.name}
-          </h1>
-          <ul className="mt-6 space-y-3 text-[14px]" style={{ color: "var(--ink-2)" }}>
-            {LAUNCH_STAGES.map((text, i) => {
-              const done = launchStage > i
-              return (
-                <li key={text} className="flex items-center gap-3" style={{ opacity: done ? 1 : 0.4 }}>
-                  <span aria-hidden className="flex h-5 w-5 items-center justify-center rounded-full text-[11px]" style={{ border: "1px solid var(--line-strong)", color: "var(--ink)" }}>
-                    {done ? "✓" : ""}
-                  </span>
-                  <span>{i === 1 ? `${text}: ${rulesLine}` : text}</span>
-                </li>
-              )
-            })}
-          </ul>
-        </div>
-      </div>
-    )
+  function pick(value: string) {
+    if (!autoChoice && key !== "pricing") return
+    cancelAdvance()
+    setAns(key, { choice: value })
+    if (autoChoice && value !== OTHER) bumpAdvance((tick) => tick + 1)
   }
 
-  const isQuestion = (SKIPPABLE as StepKey[]).includes(key)
+  function continueStep() {
+    cancelAdvance()
+    if (!busy && canContinue()) void saveStep()
+  }
+
+  function goBack() {
+    cancelAdvance()
+    if (editing) {
+      setEditing(false)
+      moveTo(order.indexOf("review"))
+      if (!venture) void refreshFromServer()
+    } else if (step > 0) moveTo(step - 1)
+  }
+
+  function skipCurrent() {
+    cancelAdvance()
+    void skipStep()
+  }
+
+  async function skipRest() {
+    cancelAdvance()
+    setError(null)
+    setBusy(true)
+    try {
+      for (const remaining of order.slice(step)) {
+        if (!SKIPPABLE.includes(remaining)) continue
+        if (!venture) {
+          await post(remaining === "rules"
+            ? { action: "rules", skipped: true }
+            : { action: "answer", step: remaining, skipped: true })
+        }
+        markSkipped(remaining)
+      }
+      const destination = venture ? "review" : "chief"
+      moveTo(order.indexOf(destination))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong. Try again.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    saveRef.current = continueStep
+  })
+
+  useEffect(() => {
+    if (!advanceTick) return
+    advanceTimer.current = setTimeout(() => saveRef.current?.(), 260)
+    return cancelAdvance
+  }, [advanceTick])
+
+  useEffect(() => {
+    if (loaded && key !== "goal") headingRef.current?.focus({ preventScroll: true })
+  }, [key, loaded, launched])
+
+  useEffect(() => {
+    if (!loaded || launched) return
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.isComposing || event.repeat) return
+      const target = event.target instanceof HTMLElement ? event.target : null
+      const textarea = target?.tagName === "TEXTAREA"
+      const typing = textarea || target?.tagName === "INPUT" || target?.isContentEditable
+      if (event.key === "Enter") {
+        if (target?.closest("button, a[href]") || (textarea && event.shiftKey) || target?.isContentEditable) return
+        event.preventDefault()
+        continueStep()
+        return
+      }
+      if (typing || busy) return
+      if (event.key === "Backspace" && (step > 0 || editing)) {
+        event.preventDefault()
+        goBack()
+      } else if (event.key.toLowerCase() === "s" && skippable) {
+        event.preventDefault()
+        skipCurrent()
+      } else if ((autoChoice || key === "pricing") && /^[1-9]$/.test(event.key)) {
+        const option = OPTIONS[key][Number(event.key) - 1]
+        if (option) {
+          event.preventDefault()
+          pick(option.value)
+        }
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  })
+
+  if (!loaded) return <main className="ob-root"><div className="ob-left"><p className="ob-content" role="status">{error ?? "Loading…"}</p></div></main>
+
   const total = order.length
+  const ready = key === "review" || Boolean(launched)
+  const canEdit = key === "review" && !busy && !launched
   const title = venture && key === "goal" ? VENTURE_GOAL_TITLE : STEP_TITLES[key]
+  const activeRules = draft.rules.filter((rule) => rule.enabled).length
+  const answer = (step: "source" | "story" | "stage" | "direction" | "customer" | "pricing" | "acquisition", label: string): BriefEntry => {
+    const a = draft[step]
+    const payment = step === "pricing" && optionLabel("payment", draft.payment)
+    const value = a.choice && (a.choice !== OTHER || a.other.trim()) ? summarizeAns(step, a) : null
+    return { step, label, skipped: a.skipped, value: value && payment ? `${value} · ${payment}` : value }
+  }
+  const entries: BriefEntry[] = [
+    answer("source", "Starting point"), answer("story", "Why"), answer("stage", "Stage"),
+    answer("direction", "Direction"), answer("customer", "First customer"), answer("pricing", "Pricing"),
+    answer("acquisition", "Acquisition"),
+    { step: "rules", label: "Rules", value: `${activeRules} active`, skipped: draft.rulesSkipped },
+    { step: "chief", label: "Chief of Staff", value: venture ? `${chiefName.trim()} · existing` : chiefName.trim(), fixed: venture },
+  ]
+  const brief = <Brief goal={draft.goal.trim()} entries={entries} current={key} order={order} ready={ready} onEdit={canEdit ? editStep : undefined} />
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center p-4 sm:p-6">
-      <WaveBackground />
-      <div className="relative z-10 w-full max-w-[600px] rounded-[18px] p-5 sm:p-8" style={{ background: "var(--surface-1)", border: "1px solid var(--line)" }}>
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-[13px] font-semibold tracking-wide" style={{ color: "var(--ink-2)" }}>
-            ⚓ Dock{venture ? " · Launch a venture" : ""}
-          </p>
-          <p className="shrink-0 text-[12px]" style={{ color: "var(--ink-3)" }}>
-            {step + 1} of {total}
-          </p>
-        </div>
-        <div className="mt-3 flex gap-1" aria-hidden>
-          {order.map((k, i) => (
-            <div key={k} className="h-1 flex-1 rounded-full" style={{ background: i <= step ? "var(--ink)" : "var(--line-strong)" }} />
-          ))}
-        </div>
+    <main className="ob-root">
+      <div className="ob-left">
+        <header className="ob-top">
+          <p className="ob-wordmark"><i aria-hidden /> Dock{venture && <span> · New venture</span>}</p>
+          <ProgressSegments step={step + 1} total={total} />
+        </header>
 
-        {venture && (
-          <p className="mt-7 text-[12px] uppercase tracking-[0.18em]" style={hint}>
-            Launch a venture: new project
-          </p>
-        )}
-        <h1 className={`${venture ? "mt-2" : "mt-7"} text-[22px] font-semibold`} style={{ color: "var(--ink)" }}>
-          {title}
-        </h1>
-
-        <div className="mt-5 space-y-4">
-          {key === "goal" && (
-            <label className="block">
-              <span className="text-[13px]" style={label}>
-                One sentence: what are you building, and for whom?
-              </span>
-              <textarea
-                value={draft.goal}
-                onChange={(e) => setDraft((d) => ({ ...d, goal: e.target.value }))}
-                rows={3}
-                maxLength={300}
-                placeholder="A booking app that fills empty chairs for independent barbers"
-                className="mt-1.5 w-full rounded-[12px] px-4 py-3 text-[14px] outline-none"
-                style={field}
-              />
-            </label>
-          )}
-
-          {key === "source" && (
-            <>
-              <Choice options={OPTIONS.source} value={draft.source.choice} onPick={(v) => setAns("source", { choice: v })} />
-              {draft.source.choice === "github" && (
-                <p className="text-[12px]" style={hint}>
-                  {OPTIONS.source[1].hint}
-                </p>
-              )}
-            </>
-          )}
-
-          {(key === "story" || key === "stage" || key === "direction" || key === "customer" || key === "acquisition") && (
-            <Pick group={key} value={draft[key]} onChange={(patch) => setAns(key, patch)} />
-          )}
-
-          {key === "rules" && (
-            <div className="space-y-3">
-              <p className="text-[13px]" style={hint}>
-                Rules override any request an agent receives. Uncheck a rule to turn it off.
-              </p>
-              {PRESET_RULES.map((preset) => {
-                const rule = draft.rules.find((r) => r.presetKey === preset.key)
-                const checked = rule?.enabled === true
-                return (
-                  <label key={preset.key} className="flex items-start gap-3 rounded-[12px] p-3 text-[14px]" style={{ border: "1px solid var(--line)", color: "var(--ink-2)" }}>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(e) =>
-                        setDraft((d) => ({
-                          ...d,
-                          rulesSkipped: false,
-                          rules: d.rules.map((r) => (r.presetKey === preset.key ? { ...r, enabled: e.target.checked } : r)),
-                        }))
-                      }
-                      className="mt-1"
-                    />
-                    <span>{preset.text}</span>
-                  </label>
-                )
-              })}
-              {draft.rules
-                .map((r, i) => ({ r, i }))
-                .filter(({ r }) => r.presetKey === null)
-                .map(({ r, i }) => (
-                  <div key={i} className="flex items-start gap-3 rounded-[12px] p-3 text-[14px]" style={{ border: "1px solid var(--line)", color: "var(--ink-2)" }}>
-                    <span className="flex-1">{r.text}</span>
-                    <button
-                      type="button"
-                      onClick={() => setDraft((d) => ({ ...d, rules: d.rules.filter((_, j) => j !== i) }))}
-                      className="text-[12px] hover:underline"
-                      style={hint}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              <div className="flex gap-2">
-                <input
-                  value={customRule}
-                  onChange={(e) => setCustomRule(e.target.value)}
-                  maxLength={MAX_RULE_LENGTH}
-                  aria-label="Add your own rule"
-                  placeholder="Add your own rule"
-                  className="min-w-0 flex-1 rounded-[12px] px-4 py-2.5 text-[14px] outline-none"
-                  style={field}
-                />
-                <button
-                  type="button"
-                  onClick={addCustomRule}
-                  disabled={!customRule.trim()}
-                  className="shrink-0 rounded-[12px] px-4 text-[13px] disabled:opacity-40"
-                  style={{ border: "1px solid var(--line-strong)", color: "var(--ink)" }}
-                >
-                  Add
-                </button>
+        <div className="ob-content">
+          {launched ? (
+            <div key="launch" className="ob-step">
+              <p className="ob-kicker">Launching venture</p>
+              <h1 className="ob-title" ref={headingRef} tabIndex={-1}>{launched.name}</h1>
+              <ol className="ob-checklist ob-body" aria-label="Launch progress">
+                {LAUNCH_STAGES.map((text, index) => {
+                  const done = launchStage > index
+                  const current = launchStage === index
+                  return (
+                    <li key={text} data-done={done} aria-current={current ? "step" : undefined}>
+                      <span className={`ob-stage-icon${current ? " ob-spinner" : ""}`} aria-hidden>
+                        {done && <svg viewBox="0 0 16 16" width="12" height="12" fill="none"><path d="m3 8 3 3 7-7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                      </span>
+                      <span>{text}<span className="sr-only">{done ? " (complete)" : current ? " (in progress)" : " (pending)"}</span></span>
+                    </li>
+                  )
+                })}
+              </ol>
+              <div className="ob-inline">{brief}</div>
+            </div>
+          ) : (
+            <div key={key} className="ob-step">
+              <p className="ob-kicker">{String(step + 1).padStart(2, "0")} / {String(total).padStart(2, "0")} <span aria-hidden>·</span> {CHAPTERS[key]}</p>
+              <h1 id="ob-question" className="ob-title" ref={headingRef} tabIndex={-1}>{title}</h1>
+              <div className="ob-body">
+                {key === "goal" && (
+                  <>
+                    <textarea className="ob-goal" aria-labelledby="ob-question" aria-describedby="ob-goal-help" autoFocus rows={3} maxLength={300}
+                      placeholder="A booking app that fills empty chairs for independent barbers" value={draft.goal}
+                      onChange={(e) => setDraft((d) => ({ ...d, goal: e.target.value }))} />
+                    <div className="ob-goal-meta">
+                      <p className="ob-help" id="ob-goal-help">Saved as the venture&apos;s goal.</p>
+                      <span className="ob-counter">{draft.goal.length}/300</span>
+                    </div>
+                  </>
+                )}
+                {autoChoice && (
+                  <>
+                    <Choice options={OPTIONS[key]} value={draft[key].choice} onPick={pick} labelledBy="ob-question" shortcuts disabled={busy} />
+                    {draft[key].choice === OTHER && <OtherInput value={draft[key].other} onChange={(other) => setAns(key, { other })} disabled={busy} />}
+                    {key === "source" && <p className="ob-help">GitHub import is not built yet. You&apos;ll start blank for now.</p>}
+                  </>
+                )}
+                {key === "pricing" && (
+                  <>
+                    <fieldset className="ob-group">
+                      <legend id="ob-charge" className="ob-group-title">How will the product charge?</legend>
+                      <Choice options={OPTIONS.pricing} value={draft.pricing.choice} onPick={pick} labelledBy="ob-charge" shortcuts disabled={busy} />
+                      {draft.pricing.choice === OTHER && <OtherInput value={draft.pricing.other} onChange={(other) => setAns("pricing", { other })} disabled={busy} />}
+                    </fieldset>
+                    <fieldset className="ob-group">
+                      <legend id="ob-payment" className="ob-group-title">How do customers pay?</legend>
+                      <Choice options={OPTIONS.payment} value={draft.payment} labelledBy="ob-payment" disabled={busy}
+                        onPick={(payment) => setDraft((d) => ({ ...d, payment, pricing: { ...d.pricing, skipped: false } }))} />
+                    </fieldset>
+                    {(draft.payment === "usdc" || draft.payment === "both") && <p className="ob-note"><strong>Note</strong> {PAYMENT_NOTE}</p>}
+                  </>
+                )}
+                {key === "rules" && (
+                  <>
+                    <p className="ob-help">Rules override requests an agent receives. Turn off any rule you don&apos;t want to keep.</p>
+                    <div className="ob-rules">
+                      {PRESET_RULES.map((preset) => {
+                        const rule = draft.rules.find((r) => r.presetKey === preset.key)
+                        return (
+                          <div className="ob-rule" key={preset.key}>
+                            <span id={`ob-rule-${preset.key}`}>{preset.text}</span>
+                            <Switch labelledBy={`ob-rule-${preset.key}`} checked={rule?.enabled === true} disabled={busy}
+                              onToggle={() => setDraft((d) => ({ ...d, rulesSkipped: false, rules: rule
+                                ? d.rules.map((r) => r.presetKey === preset.key ? { ...r, enabled: !r.enabled } : r)
+                                : [...d.rules, { presetKey: preset.key, text: preset.text, enabled: true }] }))} />
+                          </div>
+                        )
+                      })}
+                      {draft.rules.map((rule, index) => rule.presetKey === null && (
+                        <div className="ob-rule" key={`${index}-${rule.text}`}>
+                          <span>{rule.text}</span>
+                          <button className="ob-link" type="button" disabled={busy} aria-label={`Remove rule: ${rule.text}`}
+                            onClick={() => setDraft((d) => ({ ...d, rules: d.rules.filter((_, i) => i !== index) }))}>Remove</button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="ob-custom">
+                      <input className="ob-input" aria-label="Add your own rule" placeholder="Add your own rule" maxLength={MAX_RULE_LENGTH}
+                        value={customRule} disabled={busy} onChange={(e) => setCustomRule(e.target.value)} onKeyDown={(e) => {
+                          if (e.key !== "Enter" || e.nativeEvent.isComposing) return
+                          e.preventDefault()
+                          e.stopPropagation()
+                          addCustomRule()
+                        }} />
+                      <button className="ob-button" type="button" onClick={addCustomRule} disabled={busy || !customRule.trim() || draft.rules.filter((r) => r.presetKey === null).length >= MAX_CUSTOM_RULES}>Add</button>
+                    </div>
+                  </>
+                )}
+                {key === "chief" && (
+                  <>
+                    <p className="ob-help">Your Chief of Staff is the one agent you talk to directly. Other agents are reached through them. Names must be unique in your workspace.</p>
+                    <input className="ob-input" aria-label="Chief of Staff name" maxLength={24} value={chiefName} onChange={(e) => setChiefName(e.target.value)} disabled={busy} />
+                    <p className="ob-help">Suggested: {DEFAULT_CHIEF_NAME}. The name is saved when you confirm.</p>
+                  </>
+                )}
+                {key === "review" && (
+                  <>
+                    <p className="ob-help">Select an entry in the brief to change it before you confirm.</p>
+                    <div className="ob-inline">{brief}</div>
+                  </>
+                )}
               </div>
-            </div>
-          )}
-
-          {key === "pricing" && (
-            <>
-              <p className="text-[13px] font-medium" style={label}>
-                How will the product charge?
-              </p>
-              <Choice options={OPTIONS.pricing} value={draft.pricing.choice} onPick={(v) => setAns("pricing", { choice: v })} />
-              {draft.pricing.choice === OTHER && (
-                <OtherInput value={draft.pricing.other} onChange={(v) => setAns("pricing", { other: v })} />
-              )}
-              <p className="pt-2 text-[13px] font-medium" style={label}>
-                How do customers pay?
-              </p>
-              <Choice
-                options={OPTIONS.payment}
-                value={draft.payment}
-                onPick={(v) => setDraft((d) => ({ ...d, payment: v, pricing: { ...d.pricing, skipped: false } }))}
-              />
-              {(draft.payment === "usdc" || draft.payment === "both") && (
-                <p className="rounded-[12px] p-3 text-[12px]" style={{ background: "var(--surface-0)", border: "1px solid var(--line)", color: "var(--ink-3)" }}>
-                  {PAYMENT_NOTE}
-                </p>
-              )}
-            </>
-          )}
-
-          {key === "chief" && (
-            <>
-              <p className="text-[13px]" style={hint}>
-                Your Chief of Staff is the one agent you talk to directly. Other agents are reached through them. Names must be unique in your workspace.
-              </p>
-              <input
-                value={chiefName}
-                onChange={(e) => setChiefName(e.target.value)}
-                maxLength={24}
-                aria-label="Chief of Staff name"
-                className="w-full rounded-[12px] px-4 py-3 text-[15px] outline-none"
-                style={field}
-              />
-              <p className="text-[12px]" style={hint}>
-                Suggested: {DEFAULT_CHIEF_NAME}. Nothing is saved until you confirm on the last step.
-              </p>
-            </>
-          )}
-
-          {key === "review" && (
-            <div className="space-y-2 rounded-[12px] p-4 text-[14px]" style={{ background: "var(--surface-0)", border: "1px solid var(--line)" }}>
-              <ReviewRow title={venture ? "New venture" : STEP_TITLES.goal} value={draft.goal.trim() || "Not set"} onEdit={() => editStep("goal")} />
-              <ReviewRow title="Source" value={summarizeAns("source", draft.source)} onEdit={() => editStep("source")} />
-              <ReviewRow title="Story" value={summarizeAns("story", draft.story)} onEdit={() => editStep("story")} />
-              <ReviewRow title="Stage" value={summarizeAns("stage", draft.stage)} onEdit={() => editStep("stage")} />
-              <ReviewRow title="Direction" value={summarizeAns("direction", draft.direction)} onEdit={() => editStep("direction")} />
-              <ReviewRow title="First customer" value={summarizeAns("customer", draft.customer)} onEdit={() => editStep("customer")} />
-              <ReviewRow
-                title="Pricing and payments"
-                value={
-                  draft.pricing.skipped
-                    ? "Skipped: agent decides"
-                    : `${summarizeAns("pricing", draft.pricing)}; paid by ${optionLabel("payment", draft.payment) ?? "not set"}`
-                }
-                onEdit={() => editStep("pricing")}
-              />
-              <ReviewRow title="Acquisition" value={summarizeAns("acquisition", draft.acquisition)} onEdit={() => editStep("acquisition")} />
-              <ReviewRow
-                title="Rules"
-                value={
-                  draft.rulesSkipped
-                    ? "Skipped: agent decides"
-                    : draft.rules.filter((r) => r.enabled).map((r) => r.text).join("; ") || "None active"
-                }
-                onEdit={() => editStep("rules")}
-              />
-              {venture ? (
-                <ReviewRow title="Chief of Staff (existing)" value={chiefName.trim()} />
-              ) : (
-                <ReviewRow title="Chief of Staff" value={chiefName.trim()} onEdit={() => editStep("chief")} />
-              )}
+              {error && <p className="ob-error" role="alert">{error}</p>}
+              <div className="ob-actions">
+                {((step > 0) || editing) && <button className="ob-button" type="button" onClick={goBack} disabled={busy}>{editing ? "Cancel" : "Back"}</button>}
+                <div className="ob-secondary">
+                  {skippable && <button className="ob-link" type="button" onClick={skipCurrent} disabled={busy}>Skip</button>}
+                  <button className="ob-button" data-primary="true" type="button" onClick={continueStep} disabled={busy || !canContinue()}>
+                    {busy ? "Saving…" : key === "review" ? (venture ? "Confirm and launch venture" : `Confirm and create ${chiefName.trim() || "Chief of Staff"}`) : editing ? "Save and review" : "Continue"}
+                  </button>
+                </div>
+              </div>
+              {skippable && !editing && <button className="ob-link ob-skip-rest" type="button" disabled={busy} onClick={skipRest}>Skip the rest — agent decides</button>}
             </div>
           )}
         </div>
 
-        {error && (
-          <p role="alert" className="mt-4 text-[13px]" style={{ color: "#f59e0b" }}>
-            {error}
-          </p>
-        )}
-
-        <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => moveTo(Math.max(0, step - 1))}
-            disabled={step === 0 || busy}
-            className="text-[13px] hover:underline disabled:opacity-40"
-            style={{ color: "var(--ink-3)" }}
-          >
-            Back
-          </button>
-          <div className="flex flex-wrap items-center justify-end gap-3 sm:gap-4">
-            {isQuestion && (
-              <button
-                type="button"
-                onClick={() => skipStep()}
-                disabled={busy}
-                className="text-[13px] hover:underline disabled:opacity-40"
-                style={{ color: "var(--ink-3)" }}
-              >
-                Skip: agent decides
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => saveStep()}
-              disabled={busy || !canContinue()}
-              className="rounded-[12px] px-5 py-2.5 text-[14px] font-medium disabled:opacity-40"
-              style={{ background: "var(--ink)", color: "var(--surface-0)" }}
-            >
-              {busy
-                ? "Saving…"
-                : key === "review"
-                  ? venture
-                    ? "Confirm and launch venture"
-                    : `Confirm and create ${chiefName.trim() || "Chief of Staff"}`
-                  : editing
-                    ? "Save and review"
-                    : "Continue"}
-            </button>
-          </div>
-        </div>
+        {!launched && <footer className="ob-hints"><span><Kbd>↵</Kbd> continue</span>{step > 0 && <span><Kbd>⌫</Kbd> back</span>}{skippable && <span><Kbd>S</Kbd> skip</span>}{(autoChoice || key === "pricing") && <span><Kbd>1–9</Kbd> select</span>}</footer>}
       </div>
+      <aside className="ob-desktop">{brief}</aside>
+    </main>
+  )
+}
+
+function ProgressSegments({ step, total }: { step: number; total: number }) {
+  return (
+    <div className="ob-progress" role="progressbar" aria-label="Onboarding progress" aria-valuemin={1} aria-valuemax={total} aria-valuenow={step}>
+      {Array.from({ length: total }, (_, i) => <span key={i} data-filled={i < step} />)}
     </div>
   )
 }
 
-function Pick({ group, value, onChange }: { group: string; value: Ans; onChange: (patch: Partial<Ans>) => void }) {
-  return (
-    <>
-      <Choice options={OPTIONS[group]} value={value.choice} onPick={(v) => onChange({ choice: v, skipped: false })} />
-      {value.choice === OTHER && <OtherInput value={value.other} onChange={(v) => onChange({ other: v })} />}
-    </>
-  )
+function Kbd({ children }: { children: string }) {
+  return <kbd className="ob-kbd">{children}</kbd>
 }
 
-function Choice({ options, value, onPick }: { options: Option[]; value: string | null; onPick: (v: string) => void }) {
+function Choice({ options, value, onPick, labelledBy, shortcuts, disabled }: {
+  options: Option[]; value: string | null; onPick: (value: string) => void; labelledBy: string; shortcuts?: boolean; disabled: boolean
+}) {
   return (
-    <div role="radiogroup" className="space-y-2">
-      {options.map((o) => {
-        const active = value === o.value
-        return (
-          <button
-            key={o.value}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            onClick={() => onPick(o.value)}
-            className="flex w-full items-center justify-between gap-3 rounded-[12px] px-4 py-3 text-left text-[14px]"
-            style={{
-              background: active ? "var(--surface-2)" : "var(--surface-0)",
-              border: `1px solid ${active ? "var(--ink-2)" : "var(--line)"}`,
-              color: "var(--ink)",
-            }}
-          >
-            <span>{o.label}</span>
-            {o.recommended && (
-              <span className="shrink-0 text-[11px] uppercase tracking-wide" style={{ color: "var(--ink-3)" }}>
-                Recommended
-              </span>
-            )}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-function OtherInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <input
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      maxLength={300}
-      aria-label="Something else"
-      placeholder="Tell us in a few words"
-      className="w-full rounded-[12px] px-4 py-3 text-[14px] outline-none"
-      style={field}
-    />
-  )
-}
-
-function ReviewRow({ title, value, onEdit }: { title: string; value: string; onEdit?: () => void }): ReactNode {
-  return (
-    <div className="flex items-start justify-between gap-4 py-1">
-      <div className="min-w-0">
-        <p className="text-[12px]" style={hint}>
-          {title}
-        </p>
-        <p className="break-words" style={{ color: "var(--ink-2)" }}>
-          {value}
-        </p>
-      </div>
-      {onEdit && (
-        <button type="button" onClick={onEdit} className="shrink-0 text-[12px] hover:underline" style={{ color: "var(--ink-3)" }}>
-          Edit
+    <div className="ob-options" role="radiogroup" aria-labelledby={labelledBy}>
+      {options.map((option, index) => (
+        <button type="button" role="radio" aria-checked={option.value === value} disabled={disabled} key={option.value}
+          className="ob-choice" onClick={() => onPick(option.value)}>
+          <span className="ob-ring" aria-hidden />
+          <span className="ob-option-label">{option.label}</span>
+          {option.recommended && <span className="ob-recommended">Recommended</span>}
+          {shortcuts && <span aria-hidden><Kbd>{String(index + 1)}</Kbd></span>}
         </button>
-      )}
+      ))}
     </div>
   )
+}
+
+function OtherInput({ value, onChange, disabled }: { value: string; onChange: (value: string) => void; disabled: boolean }) {
+  return <input className="ob-input" aria-label="Something else" placeholder="Tell us in a few words" maxLength={300} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+}
+
+function Switch({ checked, onToggle, labelledBy, disabled }: { checked: boolean; onToggle: () => void; labelledBy: string; disabled: boolean }) {
+  return <button type="button" className="ob-switch" role="switch" aria-checked={checked} aria-labelledby={labelledBy} disabled={disabled} onClick={onToggle}><span aria-hidden /></button>
 }

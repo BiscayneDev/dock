@@ -8,8 +8,9 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isSetup = pathname.startsWith("/setup")
   const isLanding = pathname === "/"
+  const isOnboarding = pathname === "/onboarding"
 
-  if (isSetup || isLanding || pathname === "/login") {
+  if (isSetup || isLanding || isOnboarding || pathname === "/login") {
     return <>{children}</>
   }
 
