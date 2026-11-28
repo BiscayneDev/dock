@@ -89,6 +89,12 @@ export async function proxy(request: NextRequest) {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json({ error: "Not available on this account" }, { status: 403 })
       }
+      if (pathname.startsWith("/work")) {
+        // Onboarding now lands everyone on /work, but tasks/activity are still
+        // single-owner file stores. Send beta members to their own chat instead
+        // of bouncing them back to onboarding in a loop.
+        return NextResponse.redirect(new URL("/assistant", request.url))
+      }
       return NextResponse.redirect(new URL("/onboarding", request.url))
     }
     // Signed in as someone who is not allowed: end that session.
