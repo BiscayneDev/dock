@@ -67,7 +67,9 @@ function LoginInner() {
   const [email, setEmail] = useState("")
   const [code, setCode] = useState("")
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(
+    params.get("denied") ? "That email isn't on this workspace's access list. Ask the owner for an invite." : null,
+  )
 
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 

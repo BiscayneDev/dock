@@ -100,6 +100,7 @@ export async function proxy(request: NextRequest) {
   }
   const login = new URL("/login", request.url)
   login.searchParams.set("next", `${pathname}${search}`)
+  if (user) login.searchParams.set("denied", "1")
   return NextResponse.redirect(login)
 }
 
