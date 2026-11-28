@@ -3,7 +3,6 @@
 import { Suspense, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { WaveBackground } from "@/components/onboarding/WaveBackground"
 
 const CODE_LENGTH = 6
 
@@ -24,7 +23,7 @@ function CodeBoxes({ value, onChange, disabled }: { value: string; onChange: (v:
   }
 
   return (
-    <div className="flex justify-center gap-2">
+    <div className="grid grid-cols-6 gap-2">
       {digits.map((d, i) => (
         <input
           key={i}
@@ -50,13 +49,7 @@ function CodeBoxes({ value, onChange, disabled }: { value: string; onChange: (v:
           onKeyDown={(e) => {
             if (e.key === "Backspace" && !digits[i] && i > 0) refs.current[i - 1]?.focus()
           }}
-          className="h-14 w-11 rounded-[12px] text-center text-[22px] outline-none focus:ring-2"
-          style={{
-            background: "var(--surface-0)",
-            border: "1px solid var(--line-strong)",
-            color: "var(--ink)",
-            fontFamily: "var(--font-mono, ui-monospace, monospace)",
-          }}
+          className="dock-entry-input px-0 text-center font-mono tabular-nums"
         />
       ))}
     </div>
@@ -121,126 +114,43 @@ function LoginInner() {
     router.refresh()
   }
 
-  const chromeBar = (
-    <div
-      className="flex items-center gap-2 px-4 py-[9px]"
-      style={{ borderBottom: "1px solid var(--line)", background: "linear-gradient(180deg, var(--surface-2), var(--surface-1))" }}
-    >
-      <span className="flex gap-[5px]">
-        {[0, 1, 2].map((i) => (
-          <span key={i} className="h-2 w-2 rounded-full" style={{ background: "var(--line-strong)" }} />
-        ))}
-      </span>
-      <span
-        className="flex-1 text-center font-mono text-[9.5px] uppercase tracking-[0.12em]"
-        style={{ color: "var(--ink-3)" }}
-      >
-        ⚓ dock — sign in
-      </span>
-      <span className="flex items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.12em]" style={{ color: "var(--ink-2)" }}>
-        <span
-          className="h-[6px] w-[6px] rounded-full"
-          style={{ background: "var(--gold)", boxShadow: "0 0 8px var(--gold)", animation: "pulse 2.4s ease-in-out infinite" }}
-        />
-        Live
-      </span>
-    </div>
-  )
-
   return (
-    <div className="relative flex min-h-screen items-center justify-center p-6">
-      <WaveBackground />
-      <div
-        className="relative z-10 w-full max-w-sm overflow-hidden rounded-[15px]"
-        style={{
-          border: "1px solid var(--line-strong)",
-          background: "var(--surface-1)",
-          boxShadow: "0 24px 80px rgba(0, 0, 0, 0.55)",
-        }}
-      >
-        {chromeBar}
-        <div className="p-8">
-          {step === "email" ? (
-            <form onSubmit={sendCode} className="space-y-4">
-              <p className="font-mono text-[9.5px] uppercase tracking-[0.16em]" style={{ color: "var(--ink-3)" }}>
-                The crew&apos;s entrance
-              </p>
-              <h1
-                className="text-[26px] tracking-[-0.01em]"
-                style={{ color: "var(--ink)", fontFamily: "var(--font-serif)", fontWeight: 400 }}
-              >
-                Come aboard
-              </h1>
-              <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>
-                We&apos;ll email you a 6-digit code.
-              </p>
-              <input
-                type="email"
-                required
-                autoFocus
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full rounded-[10px] px-4 py-3 text-[15px] outline-none"
-                style={{ background: "var(--surface-0)", border: "1px solid var(--line-strong)", color: "var(--ink)" }}
-              />
-              <button
-                type="submit"
-                disabled={busy || !email.trim()}
-                className="w-full rounded-[10px] py-3 font-mono text-[11px] uppercase tracking-[0.08em] disabled:opacity-40"
-                style={{ background: "var(--gold)", color: "#1a1508", border: "1px solid var(--gold)" }}
-              >
+    <main className="dock-entry">
+      <div className="dock-entry-inner">
+        <header className="dock-entry-header"><p className="dock-wordmark"><span aria-hidden />Dock</p></header>
+        {step === "email" ? (
+          <>
+            <h1 className="dock-entry-title">Sign in to Dock</h1>
+            <p className="dock-entry-copy">We&apos;ll email you a 6-digit code.</p>
+            <form onSubmit={sendCode} className="dock-entry-form">
+              <label htmlFor="dock-email">Email address</label>
+              <input id="dock-email" name="email" type="email" required autoComplete="email" value={email}
+                onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="dock-entry-input" />
+              <button type="submit" disabled={busy || !email.trim()} className="dock-action self-start justify-self-start">
                 {busy ? "Sending…" : "Send code"}
               </button>
             </form>
-          ) : (
-            <form
-              className="space-y-5"
-              onSubmit={(e) => {
-                e.preventDefault()
-                verify(code).catch(() => null)
-              }}
-            >
-              <p className="font-mono text-[9.5px] uppercase tracking-[0.16em]" style={{ color: "var(--ink-3)" }}>
-                Prove it&apos;s you
-              </p>
-              <h1
-                className="text-[26px] tracking-[-0.01em]"
-                style={{ color: "var(--ink)", fontFamily: "var(--font-serif)", fontWeight: 400 }}
-              >
-                Enter your code
-              </h1>
-              <p className="text-[13px]" style={{ color: "var(--ink-3)" }}>
-                Sent to <span style={{ color: "var(--ink-2)" }}>{email}</span>
-              </p>
-              <CodeBoxes
-                value={code}
-                disabled={busy}
-                onChange={(v) => {
-                  setCode(v)
-                  if (v.length === CODE_LENGTH) verify(v).catch(() => null)
-                }}
-              />
-              <div className="flex items-center justify-between text-[13px]" style={{ color: "var(--ink-3)" }}>
-                <button type="button" onClick={() => setStep("email")} className="hover:underline">
-                  Use a different email
-                </button>
-                <button type="button" onClick={() => sendCode()} disabled={busy} className="hover:underline disabled:opacity-40">
-                  Send a new code
-                </button>
+          </>
+        ) : (
+          <>
+            <h1 className="dock-entry-title">Enter your code</h1>
+            <p className="dock-entry-copy">Sent to {email}</p>
+            <form className="dock-entry-form" onSubmit={(e) => { e.preventDefault(); verify(code).catch(() => null) }}>
+              <CodeBoxes value={code} disabled={busy} onChange={(v) => {
+                setCode(v)
+                if (v.length === CODE_LENGTH) verify(v).catch(() => null)
+              }} />
+              <div className="flex flex-wrap justify-between gap-x-4 text-[13px]">
+                <button type="button" onClick={() => setStep("email")} disabled={busy} className="underline underline-offset-4">Use a different email</button>
+                <button type="button" onClick={() => sendCode()} disabled={busy} className="underline underline-offset-4">Send a new code</button>
               </div>
+              {busy && <p role="status" className="dock-entry-copy">Checking code…</p>}
             </form>
-          )}
-
-          {error && (
-            <p role="alert" className="mt-4 text-[13px]" style={{ color: "#f59e0b" }}>
-              {error}
-            </p>
-          )}
-        </div>
+          </>
+        )}
+        {error && <p role="alert" className="mt-4 text-sm">{error}</p>}
       </div>
-    </div>
+    </main>
   )
 }
 

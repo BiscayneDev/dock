@@ -61,7 +61,7 @@ export function DocViewer({ doc }: { doc: KnowledgeDocument | null }) {
             updated {relativeTime(doc.updatedAt)}
           </span>
         </div>
-        <h2 className="font-serif text-[22px] leading-tight" style={{ color: "var(--ink)" }}>
+        <h2 className="text-[22px] font-medium leading-tight" style={{ color: "var(--ink)" }}>
           {doc.title || "Untitled document"}
         </h2>
         {doc.description ? (

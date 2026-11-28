@@ -293,7 +293,7 @@ export function KnowledgeClient() {
       <header className="flex flex-col gap-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="font-serif text-[34px] leading-none" style={{ color: "var(--ink)" }}>
+            <h1 className="dock-entry-title" style={{ color: "var(--ink)" }}>
               Knowledge
             </h1>
             <p className="mt-2 max-w-[70ch] text-[13.5px] leading-relaxed" style={{ color: "var(--ink-2)" }}>
@@ -458,7 +458,6 @@ export function KnowledgeClient() {
                         style={{
                           borderColor: "var(--line)",
                           background: selected ? "var(--surface-2)" : "transparent",
-                          borderLeft: selected ? "2px solid var(--gold)" : "2px solid transparent",
                         }}
                         aria-pressed={selected}
                       >

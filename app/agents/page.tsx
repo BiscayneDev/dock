@@ -111,7 +111,7 @@ function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+      style={{ backgroundColor: "rgba(0,0,0,0.7)" }}
     >
       <div
         className="w-full max-w-md space-y-5 rounded-[17px] p-7"
@@ -280,7 +280,7 @@ function DeleteDialog({ agent, onClose, onConfirm }: DeleteDialogProps) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+      style={{ backgroundColor: "rgba(0,0,0,0.7)" }}
     >
       <div
         className="w-full max-w-sm space-y-5 rounded-[17px] p-7"
@@ -434,7 +434,7 @@ export default function AgentsPage() {
         >
           <span
             className="h-[5px] w-[5px] rounded-full"
-            style={{ backgroundColor: "var(--gold)", boxShadow: "0 0 7px var(--gold)" }}
+            style={{ backgroundColor: "var(--dock-ready)" }}
           />
           {agentsLoading ? "syncing…" : `${agents.length} agents · ${sessions.length} live`}
         </span>
@@ -445,23 +445,13 @@ export default function AgentsPage() {
 
       {/* title */}
       <h1
-        className="mt-10 font-serif text-[40px] font-normal leading-[1.1] tracking-[-0.01em]"
+        className="dock-entry-title mt-8"
         style={{ color: "var(--ink)" }}
       >
-        The <em style={{ color: "var(--ink-2)" }}>fleet</em>
+        Agents
       </h1>
       <p className="mt-2.5 max-w-[62ch] text-[14px] leading-[1.6]" style={{ color: "var(--ink-2)" }}>
-        The chief of staff orchestrates; the specialists execute. Everything below runs itself —
-        you are here for exceptions and direction.
-      </p>
-
-      {/* mission */}
-      <p
-        className="mt-6 border-l-2 pl-4 font-serif text-[14.5px] italic leading-[1.72]"
-        style={{ borderColor: "var(--gold)", color: "var(--ink-2)" }}
-      >
-        Build an unfair advantage at the AI &times; crypto frontier — staying ahead of deals,
-        protocols, and agent economies while automating everything that does not need me in it.
+        Manage your Chief of Staff, specialists, and active sessions.
       </p>
 
       {/* Chief of staff hero */}
@@ -475,15 +465,15 @@ export default function AgentsPage() {
       ) : chiefAgent ? (
         <section
           className="relative mt-10 overflow-hidden rounded-[17px] border p-6"
-          style={{ borderColor: "var(--line)", background: "linear-gradient(180deg, var(--surface-1), #08080b)" }}
+          style={{ borderColor: "var(--line)", background: "var(--dock-panel)" }}
         >
           <div className="flex items-center gap-3.5">
             <span className="text-[22px]">{chiefAgent.emoji}</span>
             <span
               className="h-[7px] w-[7px] shrink-0 rounded-full"
-              style={{ backgroundColor: chiefAgent.accent, boxShadow: `0 0 8px ${chiefAgent.accent}` }}
+              style={{ backgroundColor: chiefAgent.accent }}
             />
-            <span className="font-serif text-[20px]" style={{ color: "var(--ink)" }}>
+            <span className="text-[20px] font-medium" style={{ color: "var(--ink)" }}>
               {chiefAgent.name}
             </span>
             <span className="font-mono text-[9.5px] uppercase tracking-[0.16em]" style={{ color: "var(--ink-3)" }}>

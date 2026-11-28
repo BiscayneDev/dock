@@ -195,7 +195,7 @@ export function CommandPalette() {
       onClick={() => setOpen(false)}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0" style={{ backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
+      <div className="absolute inset-0" style={{ backgroundColor: "rgba(0,0,0,0.6)" }} />
 
       {/* Palette */}
       <div
